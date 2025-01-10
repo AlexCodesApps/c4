@@ -1,0 +1,9 @@
+fn foo(): int {
+    return 10;
+    return 20;
+}
+
+fn main(a: int, b: int): int {
+    return a;
+    return b;
+}

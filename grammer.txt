@@ -1,0 +1,7 @@
+program = (';' | function)*
+function = "fn" IDEN "(" (IDEN ":" type ("," IDEN ":" type)*)? ")" ":" type "{" statement "}";
+statement = return | assignment;
+assignment = IDEN "=" expr;
+return = "return" expr;
+type = IDEN;
+expr = INTEGER;
