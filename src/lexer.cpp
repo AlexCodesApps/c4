@@ -1,6 +1,7 @@
 #include "include/lexer.hpp"
 #include "include/utils.hpp"
 #include <print>
+#include <utility>
 
 std::string_view token_type_to_string(TokenType type) {
     switch (type) {
@@ -33,9 +34,12 @@ std::string_view token_type_to_string(TokenType type) {
         return "EQ";
     case STAR:
         return "STAR";
+    case DOT:
+        return "DOT";
     case _EOF:
         return "EOF";
     }
+    std::unreachable();
 }
 
 auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
@@ -163,6 +167,14 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
             });
             advance();
             break;
+        case '.':
+            output.push_back(Token{
+                .type = TokenType::DOT,
+                .source_location = {row, col},
+                .source_string = "."
+            });
+            advance();
+        break;
         case ' ':
         case '\n':
         case '\t':

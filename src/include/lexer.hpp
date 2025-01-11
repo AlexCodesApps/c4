@@ -18,6 +18,7 @@ enum class TokenType {
     IDENTIFIER,
     AMPERSAND,
     STAR,
+    DOT,
     EQ,
     _EOF,
 };

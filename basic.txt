@@ -4,6 +4,5 @@ fn foo(): int {
 }
 
 fn main(a: int, b: int): int {
-    return a;
-    return b;
+    return (&a).*;
 }

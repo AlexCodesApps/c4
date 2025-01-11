@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <print>
+#include <variant>
 #include "lexer.hpp"
 #include "try.hpp"
 #include "token_parser.hpp"
@@ -13,14 +14,20 @@ namespace ast {
         struct Pointer {
             std::unique_ptr<Type> next;
         };
+        struct Reference {
+            std::unique_ptr<Type> next;
+        };
     }
     struct Type {
-        std::variant<type::Identifier, type::Pointer> variant;
-        bool has_identifier() const {
+        std::variant<type::Identifier, type::Pointer, type::Reference> variant;
+        bool is_identifier() const {
             return std::holds_alternative<type::Identifier>(variant);
         }
-        bool has_pointer() const {
+        bool is_pointer() const {
             return std::holds_alternative<type::Pointer>(variant);
+        }
+        bool is_reference() const {
+            return std::holds_alternative<type::Reference>(variant);
         }
         type::Identifier& get_identifier() {
             return std::get<type::Identifier>(variant);
@@ -34,6 +41,12 @@ namespace ast {
         const type::Pointer& get_pointer() const {
             return std::get<type::Pointer>(variant);
         }
+        type::Reference& get_reference() {
+            return std::get<type::Reference>(variant);
+        }
+        const type::Reference& get_reference() const {
+            return std::get<type::Reference>(variant);
+        }
     };
     struct Expression;
     namespace expr {
@@ -44,18 +57,24 @@ namespace ast {
         struct AddrOf {
             std::unique_ptr<Expression> next;
         };
+        struct Deref {
+            std::unique_ptr<Expression> next;
+        };
         using Identifier = ast::Identifier;
     }
     struct Expression {
-        std::variant<expr::Literal, expr::Identifier, expr::AddrOf> variant;
-        bool has_literal() const {
+        std::variant<expr::Literal, expr::Identifier, expr::AddrOf, expr::Deref> variant;
+        bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
         }
-        bool has_identifier() const {
+        bool is_identifier() const {
             return std::holds_alternative<expr::Identifier>(variant);
         }
-        bool has_addr_of() const {
+        bool is_addr_of() const {
             return std::holds_alternative<expr::AddrOf>(variant);
+        }
+        bool is_deref() const {
+            return std::holds_alternative<expr::Deref>(variant);
         }
         expr::Literal& get_literal() {
             return std::get<expr::Literal>(variant);
@@ -75,20 +94,48 @@ namespace ast {
         const expr::AddrOf& get_addr_of() const {
             return std::get<expr::AddrOf>(variant);
         }
-    };
-    namespace stmt {
-        struct Return {
-            std::optional<Expression> value;
-        };
-    }
-    struct Statement {
-        enum { RETURN } type;
-        std::optional<Expression> value;
+        expr::Deref& get_deref() {
+            return std::get<expr::Deref>(variant);
+        }
+        const expr::Deref& get_deref() const {
+            return std::get<expr::Deref>(variant);
+        }
     };
     struct Variable {
         Identifier iden;
         Type type;
         std::optional<Expression> value;
+    };
+    namespace stmt {
+        using VariableDecl = ast::Variable;
+        struct Return {
+            std::optional<Expression> value;
+        };
+        struct Assignment {
+            Expression target;
+            Expression value;
+        };
+    }
+    struct Statement {
+        std::variant<stmt::Return, stmt::VariableDecl> variant;
+        bool is_return() const {
+            return std::holds_alternative<stmt::Return>(variant);
+        }
+        bool is_variable_decl() const {
+            return std::holds_alternative<stmt::VariableDecl>(variant);
+        }
+        stmt::Return& get_return() {
+            return std::get<stmt::Return>(variant);
+        }
+        const stmt::Return& get_return() const {
+            return std::get<stmt::Return>(variant);
+        }
+        stmt::VariableDecl& get_variable_decl() {
+            return std::get<stmt::VariableDecl>(variant);
+        }
+        const stmt::VariableDecl& get_variable_decl() const {
+            return std::get<stmt::VariableDecl>(variant);
+        }
     };
     struct FunctionParameter {
         std::optional<Identifier> iden;

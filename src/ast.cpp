@@ -1,4 +1,6 @@
 #include "include/ast.hpp"
+#include "include/lexer.hpp"
+#include <memory>
 
 namespace ast {
 
@@ -10,7 +12,12 @@ auto parse_identifier(TokenParser& parser) -> std::optional<Identifier> {
     return iden.source_string;
 }
 
-auto parse_expresison(TokenParser& parser) -> std::optional<Expression> {
+auto parse_expression2(TokenParser& parser) -> std::optional<Expression> {
+    if (parser.advance_if_match(TokenType::LPAREN)) {
+        auto expr = TRY(parse_expresison(parser));
+        TRY(parser.expect(TokenType::RPAREN));
+        return std::move(expr);
+    }
     if (parser.match(TokenType::INTEGER)) {
         auto& tok = parser.peek_advance();
         return Expression {
@@ -26,12 +33,37 @@ auto parse_expresison(TokenParser& parser) -> std::optional<Expression> {
                 tok.source_string
             }
         };
+    } else if (parser.advance_if_match(TokenType::AMPERSAND)) {
+        return Expression {
+            .variant = expr::AddrOf {
+                .next = std::make_unique<Expression>(TRY(parse_expresison(parser)))
+            }
+        };
     }
     return std::nullopt;
 }
 
+auto parse_expresison(TokenParser& parser) -> std::optional<Expression> {
+    auto expr = TRY(parse_expression2(parser));
+    while (parser.match(TokenType::DOT) && parser.match(TokenType::STAR, 1)) {
+        parser.advance(2);
+        expr = Expression {
+            .variant = expr::Deref {
+                .next = std::make_unique<Expression>(std::move(expr))
+            }
+        };
+    }
+    return expr;
+}
+
 auto parse_type(TokenParser& parser) -> std::optional<Type> {
-    if (parser.advance_if_match(TokenType::STAR)) {
+    if (parser.advance_if_match(TokenType::AMPERSAND)) {
+        return Type {
+            .variant = type::Reference {
+                .next = std::make_unique<Type>(TRY(parse_type(parser)))
+            }
+        };
+    } else if (parser.advance_if_match(TokenType::STAR)) {
         return Type {
             .variant = type::Pointer {
                 .next = std::make_unique<Type>(TRY(parse_type(parser)))
@@ -83,8 +115,9 @@ auto parse_function_param(TokenParser& parser) -> std::optional<FunctionParamete
 auto parse_statement(TokenParser& parser) -> std::optional<Statement> {
     if (parser.advance_if_match(TokenType::RETURN)) {
         auto statement = Statement {
-            .type = Statement::RETURN,
-            .value = parse_maybe(parser, parse_expresison)
+            .variant = stmt::Return {
+                .value = parse_maybe(parser, parse_expresison)
+            }
         };
         TRY(parser.expect(TokenType::SEMICOLON));
         return std::move(statement);

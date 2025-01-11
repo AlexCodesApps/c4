@@ -1,3 +1,4 @@
+#pragma once
 #include "numbers.hpp"
 #include <concepts>
 
@@ -63,8 +64,8 @@ public:
     operator ref<const T>() const {
         return ref(*m_ptr);
     }
-    auto operator<=>(const ref& other) const = default;
-    auto operator<=>(const T * other) const {
-        return m_ptr <=> other;
-    }
+    // auto operator<=>(const ref& other) const = default;
+    // auto operator<=>(const T * other) const {
+    //     return m_ptr <=> other;
+    // }
 };

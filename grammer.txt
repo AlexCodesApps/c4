@@ -4,4 +4,8 @@ statement = return | assignment;
 assignment = IDEN "=" expr;
 return = "return" expr;
 type = IDEN;
-expr = INTEGER;
+expr = INTEGER
+    | IDEN
+    | "&" expr
+    | expr (".*")*;
+    | "(" expr ")"
