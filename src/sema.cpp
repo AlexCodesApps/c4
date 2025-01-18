@@ -33,7 +33,7 @@ namespace sema {
             return get_pointer_to(*type.get_lvalue().next);
         }
         for (auto& [_, otype] : types_database) {
-            if (otype->is_pointer() && *otype->get_pointer().next == type) {
+            if (otype->is_pointer() && Type::equal(*otype->get_pointer().next, type)) {
                 return *otype;
             }
         }
@@ -52,7 +52,7 @@ namespace sema {
             return get_reference_to(*type.get_lvalue().next);
         }
         for (auto& [_, otype] : types_database) {
-            if (otype->is_reference() && *otype->get_reference().next == type) {
+            if (otype->is_reference() && Type::equal(*otype->get_reference().next, type)) {
                 return *otype;
             }
         }
@@ -71,7 +71,7 @@ namespace sema {
             return type;
         }
         for (auto& [_, otype] : types_database) {
-            if (otype->is_lvalue() && *otype->get_lvalue().next == type) {
+            if (otype->is_lvalue() && Type::equal(*otype->get_lvalue().next, type)) {
                 return *otype;
             }
         }
@@ -102,9 +102,14 @@ namespace sema {
     }
 
     Variable * Frame::lookup(const ast::Identifier& iden) {
+        for (auto& var : parameters) {
+            if (var->iden == iden) {
+                return var.get();
+            }
+        }
         for (auto& var : variables) {
-            if (var.iden == iden) {
-                return &var;
+            if (var->iden == iden) {
+                return var.get();
             }
         }
         if (type == SCOPED) {
@@ -117,19 +122,11 @@ namespace sema {
     }
 
     Variable& Frame::push_variable(Variable new_var, TypeTable& table) {
-        isize align = new_var.type->alignment();
-        isize size = new_var.type->size();
-        new_var.type = ref(table.get_lvalue_to(*new_var.type));
-        isize base =  align_mul_of_two(offset + base_offset, align);
-        offset = base + size - base_offset;
-        new_var.offset = base;
-        return variables.emplace_back(std::move(new_var));
+        return *variables.emplace_back(std::make_unique<Variable>(std::move(new_var)));
     }
 
     Frame Frame::new_child() {
         return Frame {
-            .base_offset = offset,
-            .offset = 0,
             .type = SCOPED,
             .parent = this,
         };
@@ -149,24 +146,14 @@ namespace sema {
     // | rbp : size 8  |
     // |               |
     // |~~~~~~~~~~~~~~~|
-    void Frame::push_function_stack_frame(const FunctionType& function, const ast::Function& ast, TypeTable& table) {
+
+    void Frame::push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table) {
         for (auto [type, ast] : std::views::zip(function.parameters, ast.args)) {
-            push_variable(Variable {
+            parameters.push_back(std::make_unique<Variable>(Variable {
                 .iden = ast.iden.value_or(""),
-                .type = type,
-            }, table);
+                .type = ref(table.get_lvalue_to(*type)),
+            }));
         }
-        push_variable(Variable {
-            .iden = "return",
-            .type = function.return_type
-        }, table);
-        align_offset(8);
-        offset += 16; // simulate return address and rbp saved state
-        align_offset(16); // maximum needed alignment in x86 i think
-        for (auto& var : variables) {
-            var.offset -= offset; // all of this is below the rbp value
-        }
-        offset = 0;
     }
 
     auto parse_expression(ast::Expression& expr, TypeTable& table, Frame& frame) -> std::optional<Expression> {
@@ -192,10 +179,7 @@ namespace sema {
         }
         if (expr.is_addr_of()) {
             auto& next_ast = *expr.get_addr_of().next;
-            if (next_ast.is_deref()) {
-                return TRY(parse_expression(*next_ast.get_deref().next, table, frame));
-            }
-            auto next = TRY(parse_expression(*expr.get_addr_of().next, table, frame));
+            auto next = TRY(parse_expression(next_ast, table, frame));
             if (!next.type->is_lvalue()) {
                 std::println(stderr, "invalid addr of");
                 return std::nullopt;
@@ -204,12 +188,12 @@ namespace sema {
                 .variant = expr::AddrOf {
                     .next = std::make_unique<Expression>(std::move(next))
                 },
-                .type = ref(table.get_reference_to(next.type.get()))
+                .type = ref(table.get_reference_to(*next.type))
             };
         }
         if (expr.is_deref()) {
             auto next = TRY(parse_expression(*expr.get_deref().next, table, frame));
-            if (!next.type->can_be_deref()) {
+            if (!next.type->deref_lvalue().can_be_deref()) {
                 std::println(stderr, "tried to deref a non-pointer type");
                 return std::nullopt;
             }
@@ -217,7 +201,7 @@ namespace sema {
                 .variant = expr::Deref {
                     .next = std::make_unique<Expression>(std::move(next)),
                 },
-                .type = ref(next.type->deref())
+                .type = ref(next.type->deref_lvalue().deref())
             };
         }
         std::unreachable();
@@ -228,13 +212,29 @@ namespace sema {
             auto& return_stmt = statement.get_return();
             if (return_stmt.value) {
                 return Statement {
-                    .type = Statement::RETURN,
-                    .value = TRY(parse_expression(*return_stmt.value, table, frame))
+                    .variant = stmt::Return {
+                        .value = TRY(parse_expression(*return_stmt.value, table, frame))
+                    },
                 };
             }
             return Statement {
-                .type = Statement::RETURN,
-                .value = std::nullopt
+                .variant = stmt::Return {
+                    .value = std::nullopt
+                }
+            };
+        } else if (statement.is_assignment()) {
+            auto& assignment = statement.get_assignment();
+            auto expr1 = TRY(parse_expression(assignment.target, table, frame));
+            auto expr2 = TRY(parse_expression(assignment.value, table, frame));
+            if (!expr1.type->is_lvalue() || !Type::equal(expr1.type->deref_lvalue(), expr2.type->deref_lvalue())) {
+                std::println(stderr, "invalid assignment");
+                return std::nullopt;
+            }
+            return Statement {
+                .variant = stmt::Assignment {
+                    .target = std::move(expr1),
+                    .value = std::move(expr2),
+                }
             };
         } else if (statement.is_variable_decl()) {
             auto& var_decl = statement.get_variable_decl();
@@ -251,11 +251,16 @@ namespace sema {
         std::vector<Statement> output;
         for (auto& statement : statements) {
             auto new_statement = TRY(parse_statement(statement, type_table, frame));
-            if (*new_statement.value
+            if (new_statement.is_return()) {
+
+                auto& stmt_type = *new_statement.get_return().value
                     .transform([](Expression& ex) { return ex.type; })
-                    .value_or(ref(type_table.get_void())) != *function_type.return_type) {
-                std::println(stderr, "mismatched types");
-                return std::nullopt;
+                    .value_or(ref(type_table.get_void()));
+
+                if (!Type::equal(stmt_type.deref_lvalue(), *function_type.return_type)) {
+                    std::println(stderr, "mismatched types");
+                    return std::nullopt;
+                }
             }
             output.push_back(std::move(new_statement));
         }
@@ -270,12 +275,10 @@ namespace sema {
             type.parameters.push_back(ref(TRY(type_table.lookup(arg.type))));
         }
         Frame new_frame {
-            .base_offset = 0,
-            .offset = 0,
             .type = Frame::FUNCTION_BASE,
             .parent = nullptr
         };
-        new_frame.push_function_stack_frame(type, function, type_table);
+        new_frame.push_function_args(type, function, type_table);
         new_frame.statements = TRY(parse_statements(function.body, type_table, type, new_frame));
         return Function {
             .type = std::move(type),

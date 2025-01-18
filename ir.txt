@@ -1,0 +1,17 @@
+FN foo
+PARAM $, 4, 4
+PUSH 4, 4
+STO [0], 10, 4
+RET
+
+FN main
+PARAM a, 4, 4
+PARAM b, 8, 8
+PARAM $, 4, 4
+PUSH 4, 4
+DEREF [0], b, 4
+TRANSFER a, [0], 4
+POP
+PUSH 4, 4
+DEREF [0], a, 4
+RET

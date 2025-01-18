@@ -14,7 +14,7 @@ auto parse_identifier(TokenParser& parser) -> std::optional<Identifier> {
 
 auto parse_expression2(TokenParser& parser) -> std::optional<Expression> {
     if (parser.advance_if_match(TokenType::LPAREN)) {
-        auto expr = TRY(parse_expresison(parser));
+        auto expr = TRY(parse_expression(parser));
         TRY(parser.expect(TokenType::RPAREN));
         return std::move(expr);
     }
@@ -36,14 +36,14 @@ auto parse_expression2(TokenParser& parser) -> std::optional<Expression> {
     } else if (parser.advance_if_match(TokenType::AMPERSAND)) {
         return Expression {
             .variant = expr::AddrOf {
-                .next = std::make_unique<Expression>(TRY(parse_expresison(parser)))
+                .next = std::make_unique<Expression>(TRY(parse_expression(parser)))
             }
         };
     }
     return std::nullopt;
 }
 
-auto parse_expresison(TokenParser& parser) -> std::optional<Expression> {
+auto parse_expression(TokenParser& parser) -> std::optional<Expression> {
     auto expr = TRY(parse_expression2(parser));
     while (parser.match(TokenType::DOT) && parser.match(TokenType::STAR, 1)) {
         parser.advance(2);
@@ -84,7 +84,7 @@ auto parse_variable_declaration(TokenParser& parser) -> std::optional<Variable> 
     auto type = TRY(parse_type(parser));
     std::optional<Expression> expr;
     if (parser.advance_if_match(TokenType::EQ)) {
-        expr = TRY(parse_expresison(parser));
+        expr = TRY(parse_expression(parser));
     }
     return Variable {
         .iden = std::move(iden),
@@ -116,15 +116,22 @@ auto parse_statement(TokenParser& parser) -> std::optional<Statement> {
     if (parser.advance_if_match(TokenType::RETURN)) {
         auto statement = Statement {
             .variant = stmt::Return {
-                .value = parse_maybe(parser, parse_expresison)
+                .value = parse_maybe(parser, parse_expression)
             }
         };
         TRY(parser.expect(TokenType::SEMICOLON));
         return std::move(statement);
     } else {
-        auto iden = TRY(parse_identifier(parser));
+        auto expr = TRY(parse_expression(parser));
         TRY(parser.expect(TokenType::EQ));
-        auto expr = TRY(parse_expresison(parser));
+        auto expr2 = TRY(parse_expression(parser));
+        TRY(parser.expect(TokenType::SEMICOLON));
+        return Statement {
+            .variant = stmt::Assignment {
+                .target = std::move(expr),
+                .value = std::move(expr2)
+            }
+        };
     }
     return std::nullopt;
 }
@@ -135,14 +142,7 @@ auto parse_function(TokenParser& parser) -> std::optional<Function> {
     TRY(parser.expect(TokenType::LPAREN));
     auto parse_comma = [](TokenParser& parser) { return parser.expect(TokenType::COMMA); };
     auto args = TRY(parse_with_sep(parser, parse_function_param, parse_comma, false));
-    try_impl_collapse_lvalue(({
-      auto &&_opt_ = parser.expect(TokenType ::RPAREN);
-      using type = decltype(_opt_);
-      if (!_opt_) {
-        return try_impl_castable_error<type>{std ::forward<type>(_opt_)};
-      }
-      try_impl_propagate_lvalue<type>(*_opt_);
-    }));
+    TRY(parser.expect(TokenType::RPAREN));
     TRY(parser.expect(TokenType::COLON));
     auto return_type = TRY(parse_type(parser));
     TRY(parser.expect(TokenType::LBRACE));

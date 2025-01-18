@@ -117,12 +117,15 @@ namespace ast {
         };
     }
     struct Statement {
-        std::variant<stmt::Return, stmt::VariableDecl> variant;
+        std::variant<stmt::Return, stmt::VariableDecl, stmt::Assignment> variant;
         bool is_return() const {
             return std::holds_alternative<stmt::Return>(variant);
         }
         bool is_variable_decl() const {
             return std::holds_alternative<stmt::VariableDecl>(variant);
+        }
+        bool is_assignment() const {
+            return std::holds_alternative<stmt::Assignment>(variant);
         }
         stmt::Return& get_return() {
             return std::get<stmt::Return>(variant);
@@ -135,6 +138,12 @@ namespace ast {
         }
         const stmt::VariableDecl& get_variable_decl() const {
             return std::get<stmt::VariableDecl>(variant);
+        }
+        stmt::Assignment& get_assignment() {
+            return std::get<stmt::Assignment>(variant);
+        }
+        const stmt::Assignment& get_assignment() const {
+            return std::get<stmt::Assignment>(variant);
         }
     };
     struct FunctionParameter {
@@ -240,7 +249,7 @@ namespace ast {
         return std::optional(std::move(output));
     }
     std::optional<Identifier> parse_identifier(TokenParser& parser);
-    std::optional<Expression> parse_expresison(TokenParser& parser);
+    std::optional<Expression> parse_expression(TokenParser& parser);
     std::optional<Type> parse_type(TokenParser& parser);
     std::optional<Variable> parse_variable_declaration(TokenParser& parser);
     std::optional<FunctionParameter> parse_function_param(TokenParser& parser);

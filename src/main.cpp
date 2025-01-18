@@ -1,10 +1,11 @@
 #include <fstream>
-#include <optional>
+#include <iostream>
+#include <sstream>
 #include <print>
+#include "include/ir.hpp"
 #include "include/lexer.hpp"
 #include "include/ast.hpp"
 #include "include/sema.hpp"
-#include "include/gen.hpp"
 
 int main(int argc, char ** argv) {
     if (argc != 2) {
@@ -44,5 +45,5 @@ int main(int argc, char ** argv) {
         }
         std::move(*result);
     });
-    std::println("{}", gen::generate(symbol_table));
+    ir::gen(std::cout, symbol_table.functions);
 }

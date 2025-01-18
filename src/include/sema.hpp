@@ -1,9 +1,11 @@
 #pragma once
 #include "ast.hpp"
 #include "utils.hpp"
+#include <cassert>
 #include <cmath>
 #include <memory>
 #include <variant>
+#include <vector>
 
 namespace sema {
     struct Type;
@@ -45,6 +47,16 @@ namespace sema {
             *get_pointer().next
             : *get_reference().next;
         }
+        Type& deref_lvalue() {
+            return is_lvalue() ?
+                *get_lvalue().next
+                : *this;
+        }
+        const Type& deref_lvalue() const {
+            return is_lvalue() ?
+                *get_lvalue().next
+                : *this;
+        }
         type::Pointer& get_pointer() {
             return std::get<type::Pointer>(variant);
         }
@@ -68,7 +80,7 @@ namespace sema {
                 [](const type::Void&) { return 0UL; },
                 [](const type::Pointer&) { return sizeof(void *); },
                 [](const type::Reference&) { return sizeof(void *); },
-                [](const type::LValue& lvalue) { return sizeof(void *); },
+                [](const type::LValue& lvalue) -> usize { assert(false && "invalid operation"); },
                 [](const type::Integer&) { return sizeof(int); },
             }, variant);
         }
@@ -77,21 +89,14 @@ namespace sema {
                 [](const type::Void&) { return 0UL; },
                 [](const type::Pointer&) { return alignof(void *); },
                 [](const type::Reference&) { return alignof(void *); },
-                [](const type::LValue& lvalue) { return alignof(void *); },
+                [](const type::LValue& lvalue) -> usize { assert(false && "invalid operation"); },
                 [](const type::Integer&) { return alignof(int); },
             }, variant);
         }
-        friend bool operator==(const Type& a, const Type& b) {
-            if (a.is_lvalue()) {
-                return b == *a.get_lvalue().next;
-            } else if (b.is_lvalue()) {
-                return *b.get_lvalue().next == a;
-            } else {
-                return &a == &b;
-            }
+        static bool equal(const Type& a, const Type& b) {
+            return &a == &b;
         }
     };
-    using namespace std::string_view_literals;
     struct TypeTable {
         using pair = std::pair<std::vector<ast::Identifier>, std::unique_ptr<Type>>;
         std::vector<pair> types_database;
@@ -122,7 +127,6 @@ namespace sema {
     };
     struct Variable {
         ast::Identifier iden;
-        isize offset;
         ref<Type> type;
     };
     struct Expression;
@@ -184,24 +188,46 @@ namespace sema {
     struct Statement;
     struct Function;
     struct Frame {
-        isize base_offset = 0;
-        isize offset = 0;
-        std::vector<Variable> variables;
+        std::vector<std::unique_ptr<Variable>> parameters;
+        std::vector<std::unique_ptr<Variable>> variables;
         std::vector<Statement> statements;
         enum { GLOBAL, FUNCTION_BASE, SCOPED } type;
         Frame * parent;
         Variable * lookup(const ast::Identifier& iden);
         Variable& push_variable(Variable new_var, TypeTable& table);
         Frame new_child();
-        void push_function_stack_frame(const FunctionType& function, const ast::Function& ast, TypeTable& table);
-        void align_offset(isize alignment) {
-            offset = align_mul_of_two(offset, alignment);
-        }
+        void push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table);
     };
 
+    namespace stmt {
+        struct Return {
+            std::optional<Expression> value;
+        };
+        struct Assignment {
+            Expression target;
+            Expression value;
+        };
+    }
     struct Statement {
-        enum { RETURN } type;
-        std::optional<Expression> value;
+        std::variant<stmt::Return, stmt::Assignment> variant;
+        bool is_return() const {
+            return std::holds_alternative<stmt::Return>(variant);
+        }
+        bool is_assignment() const {
+            return std::holds_alternative<stmt::Assignment>(variant);
+        }
+        stmt::Return& get_return() {
+            return std::get<stmt::Return>(variant);
+        }
+        const stmt::Return& get_return() const {
+            return std::get<stmt::Return>(variant);
+        }
+        stmt::Assignment& get_assignment() {
+            return std::get<stmt::Assignment>(variant);
+        }
+        const stmt::Assignment& get_assignment() const {
+            return std::get<stmt::Assignment>(variant);
+        }
     };
 
     struct Function {

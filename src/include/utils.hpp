@@ -2,33 +2,33 @@
 #include "numbers.hpp"
 #include <concepts>
 
-inline bool is_alpha(char c) {
+constexpr inline bool is_alpha(char c) {
     return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z');
 }
 
-inline bool is_digit(char c) {
+constexpr inline bool is_digit(char c) {
     return '0' <= c && c <= '9';
 }
 
-inline bool is_alphanumeric(char c) {
+constexpr inline bool is_alphanumeric(char c) {
     return is_digit(c) || is_alpha(c);
 }
 
-inline bool part_of_iden(char c) {
+constexpr inline bool part_of_iden(char c) {
     return is_alphanumeric(c) || c == '_';
 }
 
-inline bool is_printable_char(char c) {
+constexpr inline bool is_printable_char(char c) {
     return (u16)c-0x20 < 0x5f;
 }
 
 template <std::integral I>
-bool is_multiple_of_two(I i) {
-    return !(i & (i - 1));
+constexpr bool is_multiple_of_two(I i) {
+    return !(i & (i - 1)) && i != 0;
 }
 
 template <std::integral I>
-I align_mul_of_two(I i, I align) {
+constexpr I align_mul_of_two(I i, I align) {
     assert(is_multiple_of_two(align));
     return (i + (align - 1)) & ~(align - 1);
 }

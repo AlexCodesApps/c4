@@ -1,0 +1,26 @@
+export function w $foo () {
+@start
+%.r0 =w copy 10
+ret %.r0
+}
+export function l $forward_ref (l %.pa, ) {
+@start
+%a =l alloc8 8
+storel %.pa, %a
+%.r0 =l loadl %a
+ret %.r0
+}
+export function w $main (w %.pa, l %.pb, ) {
+@start
+%a =l alloc4 4
+storew %.pa, %a
+%b =l alloc8 8
+storel %.pb, %b
+%.r0 =l copy %a
+%.r2 =l loadl %b
+%.r1 =w loadw %.r2
+storew %.r1, %.r0
+%.r4 =l copy %a
+%.r3 =w loadw %.r4
+ret %.r3
+}

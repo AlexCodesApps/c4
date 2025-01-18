@@ -3,6 +3,11 @@ fn foo(): int {
     return 20;
 }
 
-fn main(a: int, b: int): int {
+fn forward_ref(a: &int): &int {
+    return a;
+}
+
+fn main(a: int, b: &int): int {
+    a = b.*;
     return (&a).*;
 }
