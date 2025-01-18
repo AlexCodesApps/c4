@@ -121,6 +121,12 @@ auto parse_statement(TokenParser& parser) -> std::optional<Statement> {
         };
         TRY(parser.expect(TokenType::SEMICOLON));
         return std::move(statement);
+    } else if (parser.advance_if_match(TokenType::LET)) {
+        auto stmt = Statement {
+            .variant = TRY(parse_variable_declaration(parser))
+        };
+        TRY(parser.expect(TokenType::SEMICOLON));
+        return std::move(stmt);
     } else {
         auto expr = TRY(parse_expression(parser));
         TRY(parser.expect(TokenType::EQ));

@@ -9,5 +9,6 @@ fn forward_ref(a: &int): &int {
 
 fn main(a: int, b: &int): int {
     a = b.*;
-    return (&a).*;
+    let c: i32 = (&a).*;
+    return c;
 }

@@ -244,8 +244,8 @@ namespace sema {
     std::optional<Expression>
     parse_expression(ast::Expression& expr, TypeTable& table, Frame& frame);
 
-    std::optional<Statement>
-    parse_statement(ast::Statement& statement, TypeTable& type_table, Frame& frame);
+    std::optional<std::monostate>
+    parse_statement(std::vector<Statement>& output, ast::Statement& statement, TypeTable& type_table, Frame& frame);
 
     std::optional<std::vector<Statement>>
     parse_statements(

@@ -10,6 +10,8 @@ std::string_view token_type_to_string(TokenType type) {
         return "FUNCTION";
     case RETURN:
         return "RETURN";
+    case LET:
+        return "LET";
     case INTEGER:
         return "INTEGER";
     case LPAREN:
@@ -196,8 +198,13 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
                     .source_location = {srow, scol},
                     .source_string = "return",
                 });
-            }
-            else if (is_digit(c)) {
+            } else if (iden("let")) {
+                output.push_back(Token{
+                    .type = TokenType::LET,
+                    .source_location = {srow, scol},
+                    .source_string = "let",
+                });
+            } else if (is_digit(c)) {
                 usize start = index;
                 usize count = 0;
                 usize value = 0;

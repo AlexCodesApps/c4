@@ -16,11 +16,15 @@ export function w $main (w %.pa, l %.pb, ) {
 storew %.pa, %a
 %b =l alloc8 8
 storel %.pb, %b
+%c =l alloc4 4
 %.r0 =l copy %a
 %.r2 =l loadl %b
 %.r1 =w loadw %.r2
 storew %.r1, %.r0
-%.r4 =l copy %a
-%.r3 =w loadw %.r4
-ret %.r3
+%.r3 =l copy %c
+%.r5 =l copy %a
+%.r4 =w loadw %.r5
+storew %.r4, %.r3
+%.r7 =w loadw %c
+ret %.r7
 }

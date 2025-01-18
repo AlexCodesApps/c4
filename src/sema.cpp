@@ -4,6 +4,7 @@
 #include <memory>
 #include <ranges>
 #include <utility>
+#include <variant>
 
 namespace sema {
 
@@ -207,41 +208,64 @@ namespace sema {
         std::unreachable();
     }
 
-    auto parse_statement(ast::Statement& statement, TypeTable& table, Frame& frame) -> std::optional<Statement> {
-        if (statement.is_return()) {
-            auto& return_stmt = statement.get_return();
-            if (return_stmt.value) {
-                return Statement {
-                    .variant = stmt::Return {
-                        .value = TRY(parse_expression(*return_stmt.value, table, frame))
-                    },
-                };
-            }
-            return Statement {
-                .variant = stmt::Return {
-                    .value = std::nullopt
-                }
-            };
-        } else if (statement.is_assignment()) {
-            auto& assignment = statement.get_assignment();
-            auto expr1 = TRY(parse_expression(assignment.target, table, frame));
-            auto expr2 = TRY(parse_expression(assignment.value, table, frame));
+    auto parse_statement(std::vector<Statement>& output, ast::Statement& statement, TypeTable& table, Frame& frame)
+    -> std::optional<std::monostate>
+    {
+        auto parse_assignment = [&](ast::Expression& target, ast::Expression& value) -> std::optional<std::monostate> {
+            auto expr1 = TRY(parse_expression(target, table, frame));
+            auto expr2 = TRY(parse_expression(value, table, frame));
             if (!expr1.type->is_lvalue() || !Type::equal(expr1.type->deref_lvalue(), expr2.type->deref_lvalue())) {
                 std::println(stderr, "invalid assignment");
                 return std::nullopt;
             }
-            return Statement {
+            output.push_back(Statement {
                 .variant = stmt::Assignment {
                     .target = std::move(expr1),
                     .value = std::move(expr2),
                 }
-            };
+            });
+            return std::monostate{};
+        };
+
+        if (statement.is_return()) {
+            auto& return_stmt = statement.get_return();
+            if (return_stmt.value) {
+                output.push_back(Statement {
+                    .variant = stmt::Return {
+                        .value = TRY(parse_expression(*return_stmt.value, table, frame))
+                    },
+                });
+                return std::monostate{};
+            }
+            output.push_back(Statement {
+                .variant = stmt::Return {
+                    .value = std::nullopt
+                }
+            });
+            return std::monostate{};
+        } else if (statement.is_assignment()) {
+            auto& assignment = statement.get_assignment();
+            return parse_assignment(assignment.target, assignment.value);
         } else if (statement.is_variable_decl()) {
             auto& var_decl = statement.get_variable_decl();
-            frame.push_variable(Variable{
+            auto& var = frame.push_variable(Variable{
                 .iden = var_decl.iden,
                 .type = ref(TRY(table.lookup(var_decl.type)))
             }, table);
+            if (var_decl.value) {
+                output.push_back(Statement {
+                    .variant = stmt::Assignment {
+                            .target = Expression {
+                                .variant = expr::Variable {
+                                .var = ref(var)
+                            },
+                            .type = var.type,
+                        },
+                        .value = TRY(parse_expression(*var_decl.value, table, frame))
+                    }
+                });
+            }
+            return std::monostate{};
         }
         std::unreachable();
     }
@@ -250,7 +274,12 @@ namespace sema {
     -> std::optional<std::vector<Statement>> {
         std::vector<Statement> output;
         for (auto& statement : statements) {
-            auto new_statement = TRY(parse_statement(statement, type_table, frame));
+            usize size = output.size();
+            TRY(parse_statement(output, statement, type_table, frame));
+            if (size == output.size()) {
+                continue;
+            }
+            auto& new_statement = output.back();
             if (new_statement.is_return()) {
 
                 auto& stmt_type = *new_statement.get_return().value
@@ -262,7 +291,6 @@ namespace sema {
                     return std::nullopt;
                 }
             }
-            output.push_back(std::move(new_statement));
         }
         return output;
     }

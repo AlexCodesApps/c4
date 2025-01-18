@@ -7,6 +7,7 @@
 enum class TokenType {
     FUNCTION,
     RETURN,
+    LET,
     INTEGER,
     LPAREN,
     RPAREN,
