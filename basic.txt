@@ -1,14 +1,10 @@
-fn foo(): int {
-    return 10;
-    return 20;
+fn nothing(): void {
+	return;
 }
 
-fn forward_ref(a: &int): &int {
-    return a;
-}
-
-fn main(a: int, b: &int): int {
-    a = b.*;
-    let c: i32 = (&a).*;
-    return c;
+fn main(argc: int, argv: &&int): int {
+    let d: *i32 = &argc;
+    let c: &i32 = d as &i32;
+    argc = argv.*.*;
+    return argc;
 }

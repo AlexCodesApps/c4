@@ -75,6 +75,7 @@ void gen_expression(std::ostream& output, sema::Expression& expr, Context& conte
     } else if (expr.is_deref()) {
         auto& derefed = *expr.get_deref().next;
         if (intent == ExpressionIntent::VALUE) {
+
             store([&](std::string_view var) {
                 auto letter = get_type_letter(*expr.type);
                 auto var2 = context.generate_temp_name();
@@ -85,6 +86,7 @@ void gen_expression(std::ostream& output, sema::Expression& expr, Context& conte
                 }, ExpressionIntent::VALUE);
                 std::println(output, "{} ={} load{} {}", var, letter, letter, var2);
             });
+
         } else if (intent == ExpressionIntent::ADDRESS) {
             // take address
             store([&](std::string_view var) {
@@ -112,14 +114,21 @@ void gen_expression(std::ostream& output, sema::Expression& expr, Context& conte
         auto& sema_var = *expr.get_variable().var;
         store([&](std::string_view var) {
             if (intent == ExpressionIntent::ADDRESS) {
-                std::println("{} =l copy %{}", var, sema_var.iden);
+                std::println(output, "{} =l copy %.v{}{}", var, sema_var.scope_level, sema_var.iden);
             } else if (intent == ExpressionIntent::VALUE) {
                 auto letter = get_type_letter(sema_var.type->deref_lvalue());
-                std::println(output, "{} ={} load{} %{}", var, letter, letter, sema_var.iden);
+                std::println(output, "{} ={} load{} %.v{}{}", var, letter, letter, sema_var.scope_level, sema_var.iden);
             } else {
                 std::unreachable();
             }
         });
+    } else if (expr.is_conversion()) {
+        auto& conv_expr = expr.get_conversion();
+        if (conv_expr.conversion_type->type == sema::Conversion::BITCAST) {
+            return gen_expression(output, *conv_expr.next, context, target, intent);
+        } else {
+            std::unreachable();
+        }
     } else {
         std::unreachable();
     }
@@ -146,12 +155,17 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
         gen_expression(output, assign_stmt.target, context, Target{
             .type = Target::REGISTER,
             .name = var,
-            .type_ref = type }, ExpressionIntent::ADDRESS);
+            .type_ref = type
+        }, ExpressionIntent::ADDRESS);
         gen_expression(output, assign_stmt.value, context, Target{
             .type = Target::DEREFED_POINTER,
             .name = var,
             .type_ref = type,
         }, ExpressionIntent::VALUE);
+    } else if (statement.is_block()) {
+        for (auto& statement : statement.get_block()) {
+            gen_statement(output, statement, context);
+        }
     } else {
         std::unreachable();
     }
@@ -170,15 +184,15 @@ void gen_function(std::ostream& output, sema::Function& function) {
         }
         auto& type = var->type->deref_lvalue();
         auto letter = get_type_letter(type);
-        std::println(output, "%{} =l alloc{} {}", var->iden, type.alignment(), type.size());
-        std::println(output, "store{} %.p{}, %{}", letter, var->iden, var->iden);
+        std::println(output, "%.v{}{} =l alloc{} {}", var->scope_level, var->iden, type.alignment(), type.size());
+        std::println(output, "store{} %.p{}, %.v{}{}", letter, var->iden, var->scope_level, var->iden);
     }
     for (auto& var : function.frame.variables) {
         if (var->iden.empty()) {
             continue;
         }
         auto& type = var->type->deref_lvalue();
-        std::println(output, "%{} =l alloc{} {}", var->iden, type.alignment(), type.size());
+        std::println(output, "%.v{}{} =l alloc{} {}", var->scope_level, var->iden, type.alignment(), type.size());
     }
     Context context;
     for (auto& statement : function.frame.statements) {

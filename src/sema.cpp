@@ -1,12 +1,70 @@
 #include "include/sema.hpp"
 #include "include/ast.hpp"
 #include <algorithm>
+#include <array>
+#include <cassert>
 #include <memory>
 #include <ranges>
 #include <utility>
 #include <variant>
 
 namespace sema {
+    auto conversion_array = std::to_array({
+        Conversion {
+            .type = Conversion::BITCAST,
+            .implicit = true,
+            /* A cast to itself... */
+            .validate = [](Type& from, Type& to) {
+                return Type::equal(from, to);
+            }
+        },
+        Conversion {
+            .type = Conversion::BITCAST,
+            .implicit = true,
+            /*
+                references can safely be implicitly casted to pointer,
+                but pointers have an invariant in the nullptr, so they must be
+                explicitly cast to references
+            */
+            .validate = [](Type& from, Type& to) {
+                return from.is_reference() && to.is_pointer()
+                    && Type::equal(from.deref(), to.deref());
+            }
+        },
+        Conversion {
+            .type = Conversion::BITCAST,
+            .implicit = false, // not implicit because of unsafe pointer cast
+            .validate = [](Type& from, Type& to) {
+                return from.can_be_deref() && to.can_be_deref();
+            }
+        },
+    });
+    ConversionTable conversion_table = {
+        .conversions = conversion_array
+    };
+
+    Conversion * ConversionTable::validate(Type& a, Type& b, bool implicit) {
+        for (auto [index, conversion] : std::views::enumerate(conversions)) {
+            if (implicit) {
+                /* When in implicit mode,
+                    only implicit conversions are allowed.
+                    when in explicit mode,
+                    all conversions are allowed.
+                */
+                if (!conversion.implicit) {
+                    std::println(stderr, "skipped {}", index);
+                    continue;
+                }
+            }
+            if (conversion.validate(a, b)) {
+                std::println(stderr, "passed {}", index);
+                return &conversion;
+            } else {
+                std::println(stderr, "failed {}", index);
+            }
+        }
+        return nullptr;
+    }
 
     Type * TypeTable::lookup(const ast::Type& type) {
         if (type.is_identifier()) {
@@ -123,14 +181,18 @@ namespace sema {
     }
 
     Variable& Frame::push_variable(Variable new_var, TypeTable& table) {
+        new_var.type = ref(table.get_lvalue_to(*new_var.type));
+        new_var.scope_level = scope_level;
         return *variables.emplace_back(std::make_unique<Variable>(std::move(new_var)));
     }
 
-    Frame Frame::new_child() {
-        return Frame {
+    Frame& Frame::new_child() {
+        auto new_frame = std::make_unique<Frame>(Frame {
             .type = SCOPED,
             .parent = this,
-        };
+            .scope_level = scope_level + 1,
+        });
+        return *frames.emplace_back(std::move(new_frame));
     }
 
     // fn(i32): i32
@@ -205,23 +267,58 @@ namespace sema {
                 .type = ref(next.type->deref_lvalue().deref())
             };
         }
+        if (expr.is_as()) {
+            auto& as_ast = expr.get_as();
+            auto expr = TRY(parse_expression(*as_ast.next, table, frame));
+            auto& to = TRY(table.lookup(as_ast.type));
+            auto& conversion = TRY(conversion_table.validate_explicit(expr.type->deref_lvalue(), to));
+            return Expression {
+                .variant = expr::Conversion {
+                    .next = std::make_unique<Expression>(std::move(expr)),
+                    .conversion_type = ref(conversion),
+                },
+                .type = ref(to),
+            };
+        }
         std::unreachable();
     }
 
-    auto parse_statement(std::vector<Statement>& output, ast::Statement& statement, TypeTable& table, Frame& frame)
+    auto type_coerce(Expression target, Type& type)
+    -> std::optional<Expression> {
+        auto& target_type_deref = target.type->deref_lvalue();
+        auto& type_deref = type.deref_lvalue();
+        if (Type::equal(target_type_deref, type_deref)) {
+            return std::move(target);
+        }
+        auto& conversion = TRY(conversion_table.validate_implicit(target_type_deref, type_deref));
+        return Expression {
+            .variant = expr::Conversion {
+                .next = std::make_unique<Expression>(std::move(target)),
+                .conversion_type = ref(conversion),
+            },
+            .type = ref(type_deref)
+        };
+    }
+
+    auto
+    parse_statement(std::vector<Statement>& output,
+        ast::Statement& statement, TypeTable& table,
+        FunctionType& function_type, Frame& frame)
     -> std::optional<std::monostate>
     {
         auto parse_assignment = [&](ast::Expression& target, ast::Expression& value) -> std::optional<std::monostate> {
             auto expr1 = TRY(parse_expression(target, table, frame));
             auto expr2 = TRY(parse_expression(value, table, frame));
-            if (!expr1.type->is_lvalue() || !Type::equal(expr1.type->deref_lvalue(), expr2.type->deref_lvalue())) {
+            auto& type1_deref = expr1.type->deref_lvalue();
+            auto& type2_deref = expr2.type->deref_lvalue();
+            if (!expr1.type->is_lvalue()) {
                 std::println(stderr, "invalid assignment");
                 return std::nullopt;
             }
             output.push_back(Statement {
                 .variant = stmt::Assignment {
                     .target = std::move(expr1),
-                    .value = std::move(expr2),
+                    .value = TRY(type_coerce(std::move(expr2), *expr1.type)),
                 }
             });
             return std::monostate{};
@@ -232,7 +329,11 @@ namespace sema {
             if (return_stmt.value) {
                 output.push_back(Statement {
                     .variant = stmt::Return {
-                        .value = TRY(parse_expression(*return_stmt.value, table, frame))
+                        .value =
+                        TRY(parse_expression(*return_stmt.value, table, frame)
+                            .and_then([&](Expression expr) {
+                                return type_coerce(std::move(expr), *function_type.return_type);
+                            }))
                     },
                 });
                 return std::monostate{};
@@ -261,10 +362,20 @@ namespace sema {
                             },
                             .type = var.type,
                         },
-                        .value = TRY(parse_expression(*var_decl.value, table, frame))
+                        .value = TRY(parse_expression(*var_decl.value, table, frame)
+                            .and_then([&](Expression expr) {
+                                return type_coerce(std::move(expr), var.type->deref_lvalue());
+                            }))
                     }
                 });
             }
+            return std::monostate{};
+        } else if (statement.is_block()) {
+            auto& sub_frame = frame.new_child();
+            auto block = TRY(parse_statements(statement.get_block(), table, function_type, sub_frame));
+            output.push_back(Statement {
+                .variant = std::move(block)
+            });
             return std::monostate{};
         }
         std::unreachable();
@@ -275,22 +386,7 @@ namespace sema {
         std::vector<Statement> output;
         for (auto& statement : statements) {
             usize size = output.size();
-            TRY(parse_statement(output, statement, type_table, frame));
-            if (size == output.size()) {
-                continue;
-            }
-            auto& new_statement = output.back();
-            if (new_statement.is_return()) {
-
-                auto& stmt_type = *new_statement.get_return().value
-                    .transform([](Expression& ex) { return ex.type; })
-                    .value_or(ref(type_table.get_void()));
-
-                if (!Type::equal(stmt_type.deref_lvalue(), *function_type.return_type)) {
-                    std::println(stderr, "mismatched types");
-                    return std::nullopt;
-                }
-            }
+            TRY(parse_statement(output, statement, type_table, function_type, frame));
         }
         return output;
     }
@@ -304,7 +400,8 @@ namespace sema {
         }
         Frame new_frame {
             .type = Frame::FUNCTION_BASE,
-            .parent = nullptr
+            .parent = nullptr,
+            .scope_level = 1,
         };
         new_frame.push_function_args(type, function, type_table);
         new_frame.statements = TRY(parse_statements(function.body, type_table, type, new_frame));

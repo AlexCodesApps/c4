@@ -121,6 +121,27 @@ namespace sema {
         Type& get_void_pointer();
         Type& get_void();
     };
+    struct Conversion {
+        enum {
+            BITCAST, // same representation in memory
+            SIGN_EXTEND, // signed extension of smaller integer
+            ZERO_EXTEND, // unsigned extension of smaller integer
+            TRUNCATE // truncation of larger integer
+        } type;
+        bool implicit; // whether the conversion has to be done with the 'as' keyword
+        bool(*validate)(Type& from, Type& to); // virtual polymorphic check for compatability
+    };
+    struct ConversionTable {
+        std::span<Conversion> conversions;
+        Conversion * validate(Type& a, Type& b, bool implicit);
+        Conversion * validate_explicit(Type& a, Type& b) {
+            return validate(a, b, false);
+        }
+        Conversion * validate_implicit(Type& a, Type& b) {
+            return validate(a, b, true);
+        }
+    };
+    extern ConversionTable conversion_table;
     struct FunctionType {
         std::vector<ref<Type>> parameters;
         ref<Type> return_type;
@@ -128,6 +149,7 @@ namespace sema {
     struct Variable {
         ast::Identifier iden;
         ref<Type> type;
+        usize scope_level;
     };
     struct Expression;
     namespace expr {
@@ -144,9 +166,13 @@ namespace sema {
         struct AddrOf {
             std::unique_ptr<Expression> next;
         };
+        struct Conversion {
+            std::unique_ptr<Expression> next;
+            ref<sema::Conversion> conversion_type;
+        };
     }
     struct Expression {
-        std::variant<expr::Literal, expr::Variable, expr::AddrOf, expr::Deref> variant;
+        std::variant<expr::Literal, expr::Variable, expr::AddrOf, expr::Deref, expr::Conversion> variant;
         ref<Type> type;
         bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
@@ -159,6 +185,9 @@ namespace sema {
         }
         bool is_deref() const {
             return std::holds_alternative<expr::Deref>(variant);
+        }
+        bool is_conversion() const {
+            return std::holds_alternative<expr::Conversion>(variant);
         }
         expr::Literal& get_literal() {
             return std::get<expr::Literal>(variant);
@@ -184,18 +213,26 @@ namespace sema {
         const expr::Deref& get_deref() const {
             return std::get<expr::Deref>(variant);
         }
+        expr::Conversion& get_conversion() {
+            return std::get<expr::Conversion>(variant);
+        }
+        const expr::Conversion& get_conversion() const {
+            return std::get<expr::Conversion>(variant);
+        }
     };
     struct Statement;
     struct Function;
     struct Frame {
+        std::vector<std::unique_ptr<Frame>> frames;
         std::vector<std::unique_ptr<Variable>> parameters;
         std::vector<std::unique_ptr<Variable>> variables;
         std::vector<Statement> statements;
         enum { GLOBAL, FUNCTION_BASE, SCOPED } type;
         Frame * parent;
+        usize scope_level;
         Variable * lookup(const ast::Identifier& iden);
         Variable& push_variable(Variable new_var, TypeTable& table);
-        Frame new_child();
+        Frame& new_child();
         void push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table);
     };
 
@@ -207,14 +244,18 @@ namespace sema {
             Expression target;
             Expression value;
         };
+        using Block = std::vector<Statement>;
     }
     struct Statement {
-        std::variant<stmt::Return, stmt::Assignment> variant;
+        std::variant<stmt::Return, stmt::Assignment, stmt::Block> variant;
         bool is_return() const {
             return std::holds_alternative<stmt::Return>(variant);
         }
         bool is_assignment() const {
             return std::holds_alternative<stmt::Assignment>(variant);
+        }
+        bool is_block() const {
+            return std::holds_alternative<stmt::Block>(variant);
         }
         stmt::Return& get_return() {
             return std::get<stmt::Return>(variant);
@@ -227,6 +268,12 @@ namespace sema {
         }
         const stmt::Assignment& get_assignment() const {
             return std::get<stmt::Assignment>(variant);
+        }
+        stmt::Block& get_block() {
+            return std::get<stmt::Block>(variant);
+        }
+        const stmt::Block& get_block() const {
+            return std::get<stmt::Block>(variant);
         }
     };
 
@@ -245,7 +292,7 @@ namespace sema {
     parse_expression(ast::Expression& expr, TypeTable& table, Frame& frame);
 
     std::optional<std::monostate>
-    parse_statement(std::vector<Statement>& output, ast::Statement& statement, TypeTable& type_table, Frame& frame);
+    parse_statement(std::vector<Statement>& output, ast::Statement& statement, TypeTable& type_table, FunctionType& function_type, Frame& frame);
 
     std::optional<std::vector<Statement>>
     parse_statements(

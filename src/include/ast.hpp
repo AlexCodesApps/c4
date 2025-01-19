@@ -2,6 +2,7 @@
 #include <memory>
 #include <print>
 #include <variant>
+#include <vector>
 #include "lexer.hpp"
 #include "try.hpp"
 #include "token_parser.hpp"
@@ -49,6 +50,35 @@ namespace ast {
         }
     };
     struct Expression;
+    namespace lit {
+        struct Nullptr {};
+        struct Integer {
+            usize value;
+        };
+        struct True {};
+        struct False {};
+    }
+    struct Literal {
+        std::variant<lit::Nullptr, lit::Integer, lit::True, lit::False> variant;
+        bool is_nullptr() const {
+            return std::holds_alternative<lit::Nullptr>(variant);
+        }
+        bool is_integer() const {
+            return std::holds_alternative<lit::Integer>(variant);
+        }
+        bool is_true() const {
+            return std::holds_alternative<lit::True>(variant);
+        }
+        bool is_false() const {
+            return std::holds_alternative<lit::False>(variant);
+        }
+        lit::Integer& get_integer() {
+            return std::get<lit::Integer>(variant);
+        }
+        const lit::Integer& get_integer() const {
+            return std::get<lit::Integer>(variant);
+        }
+    };
     namespace expr {
         struct Literal {
             enum { INTEGER, NULLPTR } type;
@@ -60,10 +90,14 @@ namespace ast {
         struct Deref {
             std::unique_ptr<Expression> next;
         };
+        struct As {
+            std::unique_ptr<Expression> next;
+            Type type;
+        };
         using Identifier = ast::Identifier;
     }
     struct Expression {
-        std::variant<expr::Literal, expr::Identifier, expr::AddrOf, expr::Deref> variant;
+        std::variant<expr::Literal, expr::Identifier, expr::AddrOf, expr::Deref, expr::As> variant;
         bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
         }
@@ -75,6 +109,9 @@ namespace ast {
         }
         bool is_deref() const {
             return std::holds_alternative<expr::Deref>(variant);
+        }
+        bool is_as() const {
+            return std::holds_alternative<expr::As>(variant);
         }
         expr::Literal& get_literal() {
             return std::get<expr::Literal>(variant);
@@ -100,12 +137,19 @@ namespace ast {
         const expr::Deref& get_deref() const {
             return std::get<expr::Deref>(variant);
         }
+        expr::As& get_as() {
+            return std::get<expr::As>(variant);
+        }
+        const expr::As& get_as() const {
+            return std::get<expr::As>(variant);
+        }
     };
     struct Variable {
         Identifier iden;
         Type type;
         std::optional<Expression> value;
     };
+    struct Statement;
     namespace stmt {
         using VariableDecl = ast::Variable;
         struct Return {
@@ -115,9 +159,10 @@ namespace ast {
             Expression target;
             Expression value;
         };
+        using Block = std::vector<Statement>;
     }
     struct Statement {
-        std::variant<stmt::Return, stmt::VariableDecl, stmt::Assignment> variant;
+        std::variant<stmt::Return, stmt::VariableDecl, stmt::Assignment, stmt::Block> variant;
         bool is_return() const {
             return std::holds_alternative<stmt::Return>(variant);
         }
@@ -126,6 +171,9 @@ namespace ast {
         }
         bool is_assignment() const {
             return std::holds_alternative<stmt::Assignment>(variant);
+        }
+        bool is_block() const {
+            return std::holds_alternative<stmt::Block>(variant);
         }
         stmt::Return& get_return() {
             return std::get<stmt::Return>(variant);
@@ -144,6 +192,12 @@ namespace ast {
         }
         const stmt::Assignment& get_assignment() const {
             return std::get<stmt::Assignment>(variant);
+        }
+        stmt::Block& get_block() {
+            return std::get<stmt::Block>(variant);
+        }
+        const stmt::Block& get_block() const {
+            return std::get<stmt::Block>(variant);
         }
     };
     struct FunctionParameter {

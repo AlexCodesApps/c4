@@ -12,6 +12,14 @@ std::string_view token_type_to_string(TokenType type) {
         return "RETURN";
     case LET:
         return "LET";
+    case AS:
+        return "AS";
+    case TRUE:
+        return "TRUE";
+    case FALSE:
+        return "FALSE";
+    case NULLPTR:
+        return "NULLPTR";
     case INTEGER:
         return "INTEGER";
     case LPAREN:
@@ -203,6 +211,30 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
                     .type = TokenType::LET,
                     .source_location = {srow, scol},
                     .source_string = "let",
+                });
+            } else if (iden("as")) {
+                output.push_back(Token{
+                    .type = TokenType::AS,
+                    .source_location = {srow, scol},
+                    .source_string = "as",
+                });
+            } else if (iden("true")) {
+                output.push_back(Token{
+                    .type = TokenType::TRUE,
+                    .source_location = {srow, scol},
+                    .source_string = "true",
+                });
+            } else if (iden("false")) {
+                output.push_back(Token{
+                    .type = TokenType::FALSE,
+                    .source_location = {srow, scol},
+                    .source_string = "false",
+                });
+            } else if (iden("nullptr")) {
+                output.push_back(Token{
+                    .type = TokenType::TRUE,
+                    .source_location = {srow, scol},
+                    .source_string = "nullptr",
                 });
             } else if (is_digit(c)) {
                 usize start = index;

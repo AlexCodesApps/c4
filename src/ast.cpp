@@ -53,6 +53,14 @@ auto parse_expression(TokenParser& parser) -> std::optional<Expression> {
             }
         };
     }
+    while (parser.advance_if_match(TokenType::AS)) {
+        expr = Expression {
+            .variant = expr::As {
+                .next = std::make_unique<Expression>(std::move(expr)),
+                .type = TRY(parse_type(parser))
+            }
+        };
+    }
     return expr;
 }
 
@@ -113,7 +121,13 @@ auto parse_function_param(TokenParser& parser) -> std::optional<FunctionParamete
 }
 
 auto parse_statement(TokenParser& parser) -> std::optional<Statement> {
-    if (parser.advance_if_match(TokenType::RETURN)) {
+    if (parser.advance_if_match(TokenType::LBRACE)) {
+        return Statement {
+            .variant = TRY(parse_until(parser, parse_statement, [](auto& parser) {
+                return parser.advance_if_match(TokenType::RBRACE);
+            }))
+        };
+    } else if (parser.advance_if_match(TokenType::RETURN)) {
         auto statement = Statement {
             .variant = stmt::Return {
                 .value = parse_maybe(parser, parse_expression)
