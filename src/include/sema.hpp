@@ -12,6 +12,7 @@ namespace sema {
     namespace type {
         struct Void {};
         struct Integer {};
+        struct Bool {};
         struct Pointer {
             ref<Type> next;
         };
@@ -23,7 +24,7 @@ namespace sema {
         };
     }
     struct Type {
-        std::variant<type::Void, type::Integer, type::Pointer, type::Reference, type::LValue> variant;
+        std::variant<type::Void, type::Integer, type::Bool, type::Pointer, type::Reference, type::LValue> variant;
         bool is_void() const {
             return std::holds_alternative<type::Void>(variant);
         }
@@ -38,6 +39,9 @@ namespace sema {
         }
         bool is_lvalue() const {
             return std::holds_alternative<type::LValue>(variant);
+        }
+        bool is_bool() const {
+            return std::holds_alternative<type::Bool>(variant);
         }
         bool can_be_deref() const {
             return is_pointer() || is_reference();
@@ -82,6 +86,7 @@ namespace sema {
                 [](const type::Reference&) { return sizeof(void *); },
                 [](const type::LValue& lvalue) -> usize { assert(false && "invalid operation"); },
                 [](const type::Integer&) { return sizeof(int); },
+                [](const type::Bool&) { return sizeof(bool); },
             }, variant);
         }
         usize alignment() const {
@@ -91,6 +96,7 @@ namespace sema {
                 [](const type::Reference&) { return alignof(void *); },
                 [](const type::LValue& lvalue) -> usize { assert(false && "invalid operation"); },
                 [](const type::Integer&) { return alignof(int); },
+                [](const type::Bool&) { return alignof(bool); },
             }, variant);
         }
         static bool equal(const Type& a, const Type& b) {
@@ -107,6 +113,11 @@ namespace sema {
                 })
             );
             types_database.emplace_back(
+                std::vector<std::string_view>({"bool"}), std::make_unique<Type>(Type{
+                    .variant = type::Bool{}
+                })
+            );
+            types_database.emplace_back(
                 std::vector<std::string_view>({"void"}), std::make_unique<Type>(Type{
                     .variant = type::Void{}
                 })
@@ -120,6 +131,7 @@ namespace sema {
         Type& get_integer();
         Type& get_void_pointer();
         Type& get_void();
+        Type& get_bool();
     };
     struct Conversion {
         enum {
@@ -151,12 +163,42 @@ namespace sema {
         ref<Type> type;
         usize scope_level;
     };
+    namespace lit {
+        struct Bool {
+            bool value;
+        };
+        struct Nullptr {};
+        struct Integer {
+            usize value;
+        };
+    }
+    struct Literal {
+        std::variant<lit::Bool, lit::Nullptr, lit::Integer> variant;
+        bool is_bool() const {
+            return std::holds_alternative<lit::Bool>(variant);
+        }
+        bool is_nullptr() const {
+            return std::holds_alternative<lit::Nullptr>(variant);
+        }
+        bool is_integer() const {
+            return std::holds_alternative<lit::Integer>(variant);
+        }
+        lit::Bool& get_bool() {
+            return std::get<lit::Bool>(variant);
+        }
+        const lit::Bool& get_bool() const {
+            return std::get<lit::Bool>(variant);
+        }
+        lit::Integer& get_integer() {
+            return std::get<lit::Integer>(variant);
+        }
+        const lit::Integer& get_integer() const {
+            return std::get<lit::Integer>(variant);
+        }
+    };
     struct Expression;
     namespace expr {
-        struct Literal {
-            enum { INTEGER, NULLPTR } type;
-            usize integer;
-        };
+        using Literal = sema::Literal;
         struct Variable {
             ref<sema::Variable> var;
         };

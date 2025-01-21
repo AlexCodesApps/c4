@@ -1,15 +1,21 @@
 #include "include/ir.hpp"
 #include "include/sema.hpp"
 #include "include/utils.hpp"
+#include <cassert>
 #include <ostream>
 #include <string>
 #include <string_view>
 #include <utility>
+
+int foo() {
+    return 0;
+}
+
 namespace ir {
 
 /*
 
-    generating QBE Intermediate Language
+    Generating QBE intermediate language
     for the time being.
 
 */
@@ -31,15 +37,71 @@ struct Target {
     ref<sema::Type> type_ref;
 };
 
-std::string get_type_letter(sema::Type& type) {
+enum class ValueType {
+    UNSIGNED_BYTE,
+    SIGNED_BYTE,
+    UNSIGNED_SHORT,
+    SIGNED_SHORT,
+    WORD,
+    LONG,
+};
+
+enum class VariableType {
+    WORD,
+    LONG,
+};
+
+ValueType get_type(sema::Type& type) {
+    if (type.is_lvalue()) {
+        return get_type(type.get_lvalue().next.get());
+    }
+    assert(!type.is_void());
     if (type.can_be_deref()) {
-        return "l";
-    } else if (type.is_void()) {
-        return  "";
+        return ValueType::LONG;
     } else if (type.is_integer()) {
-        return "w";
+        return ValueType::WORD;
+    } else if (type.is_bool()) {
+        return ValueType::UNSIGNED_BYTE;
     } else {
         std::unreachable();
+    }
+}
+
+VariableType get_var_type(sema::Type& type) {
+    if (type.is_lvalue()) {
+        return get_var_type(type.get_lvalue().next.get());
+    }
+    assert(!type.is_void());
+    if (type.can_be_deref()) {
+        return VariableType::LONG;
+    } else {
+        return VariableType::WORD;
+    }
+}
+
+std::string_view to_string(ValueType type) {
+    switch (type) {
+    case ValueType::UNSIGNED_BYTE:
+        return "b";
+    case ValueType::SIGNED_BYTE:
+        return "b";
+    case ValueType::UNSIGNED_SHORT:
+        return "h";
+    case ValueType::SIGNED_SHORT:
+        return "h";
+    case ValueType::WORD:
+        return "w";
+    case ValueType::LONG:
+        return "l";
+    }
+}
+
+std::string_view to_string(VariableType type) {
+    switch (type) {
+    case VariableType::WORD:
+        return "w";
+    case VariableType::LONG:
+        return "l";
     }
 }
 
@@ -49,13 +111,48 @@ enum class ExpressionIntent {
     VALUE
 };
 
-void gen_expression(std::ostream& output, sema::Expression& expr, Context& context, Target target, ExpressionIntent intent) {
-    auto& type = *target.type_ref;
+void gen_load_literal(std::ostream& output, Target target, sema::expr::Literal& literal, sema::Type& type, Context& context) {
+    auto v_type = get_type(type);
     auto store = [&](auto&& callback){
         if (target.type == Target::DEREFED_POINTER) {
             auto var = context.generate_temp_name();
             callback(var);
-            std::println(output, "store{} {}, {}", get_type_letter(type), var, target.name);
+            std::println(output, "store{} {}, {}", to_string(v_type), var, target.name);
+        } else  if (target.type == Target::REGISTER) {
+            callback(target.name);
+        } else {
+            std::unreachable();
+        }
+    };
+    if (literal.is_bool()) {
+        store([&](std::string_view var) {
+            std::println("{} =w copy {}", var, (u8)literal.get_bool().value);
+        });
+    } else if (literal.is_integer()) {
+        store([&](std::string_view var) {
+            std::println("{} =w copy {}", var, literal.get_integer().value);
+        });
+    } else if (literal.is_nullptr()) {
+        store([&](std::string_view var) {
+            std::println("{} =l copy 0", var);
+        });
+    } else {
+        std::unreachable();
+    }
+}
+
+void gen_load(std::ostream& output, Target target, Target src, ExpressionIntent intent, Context& context) {
+    auto inter_reg = context;
+}
+
+void gen_expression(std::ostream& output, sema::Expression& expr, Context& context, Target target, ExpressionIntent intent) {
+    auto& type = *target.type_ref;
+    auto v_type = get_type(type);
+    auto store = [&](auto&& callback){
+        if (target.type == Target::DEREFED_POINTER) {
+            auto var = context.generate_temp_name();
+            callback(var);
+            std::println(output, "store{} {}, {}", to_string(v_type), var, target.name);
         } else  if (target.type == Target::REGISTER) {
             callback(target.name);
         } else {
@@ -77,14 +174,15 @@ void gen_expression(std::ostream& output, sema::Expression& expr, Context& conte
         if (intent == ExpressionIntent::VALUE) {
 
             store([&](std::string_view var) {
-                auto letter = get_type_letter(*expr.type);
+                auto var_letter = to_string(get_var_type(*expr.type));
+                auto letter = to_string(get_type(*expr.type));
                 auto var2 = context.generate_temp_name();
                 gen_expression(output, derefed, context, Target{
                     .type = Target::REGISTER,
                     .name = var2,
                     .type_ref = derefed.type
                 }, ExpressionIntent::VALUE);
-                std::println(output, "{} ={} load{} {}", var, letter, letter, var2);
+                std::println(output, "{} ={} load{} {}", var, var_letter, letter, var2);
             });
 
         } else if (intent == ExpressionIntent::ADDRESS) {
@@ -100,24 +198,15 @@ void gen_expression(std::ostream& output, sema::Expression& expr, Context& conte
             std::unreachable();
         }
     } else if (expr.is_literal()) {
-        auto& literal = expr.get_literal();
-        store([&](std::string_view var) {
-            if (literal.type == sema::expr::Literal::INTEGER) {
-                std::println(output, "{} =w copy {}", var, literal.integer);
-            } else if (literal.type == sema::expr::Literal::NULLPTR) {
-                std::println(output, "{} =l copy 0", var);
-            } else {
-                std::unreachable();
-            }
-        });
+        return gen_load_literal(output, target, expr.get_literal(), *expr.type, context);
     } else if (expr.is_variable()) {
         auto& sema_var = *expr.get_variable().var;
         store([&](std::string_view var) {
             if (intent == ExpressionIntent::ADDRESS) {
                 std::println(output, "{} =l copy %.v{}{}", var, sema_var.scope_level, sema_var.iden);
             } else if (intent == ExpressionIntent::VALUE) {
-                auto letter = get_type_letter(sema_var.type->deref_lvalue());
-                std::println(output, "{} ={} load{} %.v{}{}", var, letter, letter, sema_var.scope_level, sema_var.iden);
+                auto& type = sema_var.type->deref_lvalue();
+                std::println(output, "{} ={} load{} %.v{}{}", var, to_string(get_type(type)), to_string(get_var_type(type)), sema_var.scope_level, sema_var.iden);
             } else {
                 std::unreachable();
             }
@@ -172,9 +261,13 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
 }
 
 void gen_function(std::ostream& output, sema::Function& function) {
-    std::print(output, "export function {} ${} (", get_type_letter(*function.type.return_type), function.identifier);
+    std::print(output, "export function");
+    if (!function.type.return_type->is_void()) {
+        std::print(output, " {}", to_string(get_var_type(*function.type.return_type)));
+    }
+    std::print(output, " ${} (", function.identifier);
     for (auto& param : function.frame.parameters) {
-        std::print(output, "{} %.p{}, ", get_type_letter(param->type->deref_lvalue()), param->iden);
+        std::print(output, "{} %.p{}, ", to_string(get_var_type(param->type->deref_lvalue())), param->iden);
     }
     std::println(output, ") {{\n"
                        "@start");
@@ -183,7 +276,7 @@ void gen_function(std::ostream& output, sema::Function& function) {
             continue;
         }
         auto& type = var->type->deref_lvalue();
-        auto letter = get_type_letter(type);
+        auto letter = to_string(get_var_type(type));
         std::println(output, "%.v{}{} =l alloc{} {}", var->scope_level, var->iden, type.alignment(), type.size());
         std::println(output, "store{} %.p{}, %.v{}{}", letter, var->iden, var->scope_level, var->iden);
     }

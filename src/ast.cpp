@@ -22,8 +22,27 @@ auto parse_expression2(TokenParser& parser) -> std::optional<Expression> {
         auto& tok = parser.peek_advance();
         return Expression {
             .variant = expr::Literal {
-                .type = expr::Literal::INTEGER,
-                .integer = tok.integer,
+                .variant = lit::Integer {
+                    .value = tok.integer
+                }
+            }
+        };
+    } else if (parser.advance_if_match(TokenType::TRUE)) {
+        return Expression {
+            .variant = expr::Literal {
+                .variant = lit::True{}
+            }
+        };
+    } else if (parser.advance_if_match(TokenType::FALSE)) {
+        return Expression {
+            .variant = expr::Literal {
+                .variant = lit::False{}
+            }
+        };
+    } else if (parser.advance_if_match(TokenType::NULLPTR)) {
+        return Expression {
+            .variant = expr::Literal {
+                .variant = lit::Nullptr{}
             }
         };
     } else if (parser.match(TokenType::IDENTIFIER)) {

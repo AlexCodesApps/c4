@@ -2,7 +2,16 @@ fn nothing(): void {
 	return;
 }
 
+fn return_true(): bool {
+    return true;
+}
+
+fn return_false(): bool {
+    return false;
+}
+
 fn main(argc: int, argv: &&int): int {
+    let a: bool = true;
     let d: *i32 = &argc;
     let c: &i32 = d as &i32;
     argc = argv.*.*;

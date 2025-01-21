@@ -80,10 +80,7 @@ namespace ast {
         }
     };
     namespace expr {
-        struct Literal {
-            enum { INTEGER, NULLPTR } type;
-            usize integer;
-        };
+        using Literal = ast::Literal;
         struct AddrOf {
             std::unique_ptr<Expression> next;
         };

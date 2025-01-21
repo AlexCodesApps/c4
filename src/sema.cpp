@@ -156,6 +156,12 @@ namespace sema {
         return *t;
     }
 
+    Type& TypeTable::get_bool() {
+        Type * t = lookup_identifier("bool");
+        assert(t);
+        return *t;
+    }
+
     Type& TypeTable::get_void_pointer() {
         return get_pointer_to(get_void());
     }
@@ -221,15 +227,44 @@ namespace sema {
 
     auto parse_expression(ast::Expression& expr, TypeTable& table, Frame& frame) -> std::optional<Expression> {
         if (expr.is_literal()) {
-            return Expression {
-                .variant = expr::Literal {
-                    .type = expr.get_literal().type == ast::expr::Literal::NULLPTR ?
-                    expr::Literal::NULLPTR : expr::Literal::INTEGER,
-                    .integer = expr.get_literal().integer,
-                },
-                .type = ref(expr.get_literal().type == ast::expr::Literal::INTEGER ?
-                            table.get_integer() : table.get_void_pointer())
-            };
+            auto& lit = expr.get_literal();
+            if (lit.is_integer()) {
+                return Expression {
+                    .variant = expr::Literal {
+                        .variant = lit::Integer {
+                            .value = lit.get_integer().value
+                        }
+                    },
+                    .type = ref(table.get_integer())
+                };
+            } else if (lit.is_nullptr()) {
+                return Expression {
+                    .variant = expr::Literal {
+                        .variant = lit::Nullptr {}
+                    },
+                    .type = ref(table.get_pointer_to(table.get_void()))
+                };
+            } else if (lit.is_true()) {
+                return Expression {
+                    .variant = expr::Literal {
+                        .variant = lit::Bool {
+                            .value = true
+                        }
+                    },
+                    .type = ref(table.get_bool())
+                };
+            } else if (lit.is_false()) {
+                return Expression {
+                    .variant = expr::Literal {
+                        .variant = lit::Bool {
+                            .value = false
+                        }
+                    },
+                    .type = ref(table.get_bool())
+                };
+            } else {
+                std::unreachable();
+            }
         }
         if (expr.is_identifier()) {
             auto& var = TRY(frame.lookup(expr.get_identifier()));
