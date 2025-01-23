@@ -213,6 +213,34 @@ void gen_expression(std::ostream& output, sema::Expression& expr, Context& conte
         } else {
             std::unreachable();
         }
+    } else if (expr.is_unary()) {
+        auto& unary_expr = expr.get_unary();
+        store([&](std::string_view var) {
+            auto var2 = context.generate_temp_name();
+            gen_expression(output, *unary_expr.next, context, Target {
+                .type = Target::REGISTER,
+                .name = var2,
+                .type_ref = unary_expr.next->type
+            }, ExpressionIntent::VALUE);
+            assign(output, var, std::format("neg {}", var2), sema_type_to_type(*expr.type));
+        });
+    } else if (expr.is_binary()) {
+        auto& binary_expr = expr.get_binary();
+        store([&](std::string_view var) {
+            auto a = context.generate_temp_name();
+            auto b = context.generate_temp_name();
+            gen_expression(output, *binary_expr.a, context, Target {
+                .type = Target::REGISTER,
+                .name = a,
+                .type_ref = binary_expr.a->type
+            }, ExpressionIntent::VALUE);
+            gen_expression(output, *binary_expr.b, context, Target {
+                .type = Target::REGISTER,
+                .name = b,
+                .type_ref = binary_expr.b->type
+            }, ExpressionIntent::VALUE);
+            assign(output, var, std::format("sub {}, {}", a, b), sema_type_to_type(*expr.type));
+        });
     } else {
         std::unreachable();
     }

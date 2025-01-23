@@ -36,6 +36,8 @@ std::string_view token_type_to_string(TokenType type) {
         return "IDENTIFIER";
     case COMMA:
         return "COMMA";
+    case MINUS:
+        return "MINUS";
     case SEMICOLON:
         return "SEMICOLON";
     case AMPERSAND:
@@ -184,7 +186,15 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
                 .source_string = "."
             });
             advance();
-        break;
+            break;
+        case '-':
+            output.push_back(Token{
+                .type = TokenType::MINUS,
+                .source_location = {row, col},
+                .source_string = "-",
+            });
+            advance();
+            break;
         case ' ':
         case '\n':
         case '\t':

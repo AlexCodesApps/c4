@@ -91,10 +91,19 @@ namespace ast {
             std::unique_ptr<Expression> next;
             Type type;
         };
+        struct Unary {
+            std::unique_ptr<Expression> next;
+            enum { MINUS } type;
+        };
+        struct Binary {
+            std::unique_ptr<Expression> a;
+            std::unique_ptr<Expression> b;
+            enum { SUB } type;
+        };
         using Identifier = ast::Identifier;
     }
     struct Expression {
-        std::variant<expr::Literal, expr::Identifier, expr::AddrOf, expr::Deref, expr::As> variant;
+        std::variant<expr::Literal, expr::Identifier, expr::AddrOf, expr::Deref, expr::As, expr::Unary, expr::Binary> variant;
         bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
         }
@@ -109,6 +118,12 @@ namespace ast {
         }
         bool is_as() const {
             return std::holds_alternative<expr::As>(variant);
+        }
+        bool is_unary() const {
+            return std::holds_alternative<expr::Unary>(variant);
+        }
+        bool is_binary() const {
+            return std::holds_alternative<expr::Binary>(variant);
         }
         expr::Literal& get_literal() {
             return std::get<expr::Literal>(variant);
@@ -139,6 +154,18 @@ namespace ast {
         }
         const expr::As& get_as() const {
             return std::get<expr::As>(variant);
+        }
+        expr::Unary& get_unary() {
+            return std::get<expr::Unary>(variant);
+        }
+        const expr::Unary& get_unary() const {
+            return std::get<expr::Unary>(variant);
+        }
+        expr::Binary& get_binary() {
+            return std::get<expr::Binary>(variant);
+        }
+        const expr::Binary& get_binary() const {
+            return std::get<expr::Binary>(variant);
         }
     };
     struct Variable {

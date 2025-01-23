@@ -212,9 +212,18 @@ namespace sema {
             std::unique_ptr<Expression> next;
             ref<sema::Conversion> conversion_type;
         };
+        struct Unary {
+            std::unique_ptr<Expression> next;
+            enum { MINUS } type;
+        };
+        struct Binary {
+            std::unique_ptr<Expression> a;
+            std::unique_ptr<Expression> b;
+            enum { SUB } type;
+        };
     }
     struct Expression {
-        std::variant<expr::Literal, expr::Variable, expr::AddrOf, expr::Deref, expr::Conversion> variant;
+        std::variant<expr::Literal, expr::Variable, expr::AddrOf, expr::Deref, expr::Conversion, expr::Unary, expr::Binary> variant;
         ref<Type> type;
         bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
@@ -230,6 +239,12 @@ namespace sema {
         }
         bool is_conversion() const {
             return std::holds_alternative<expr::Conversion>(variant);
+        }
+        bool is_unary() const {
+            return std::holds_alternative<expr::Unary>(variant);
+        }
+        bool is_binary() const {
+            return std::holds_alternative<expr::Binary>(variant);
         }
         expr::Literal& get_literal() {
             return std::get<expr::Literal>(variant);
@@ -260,6 +275,18 @@ namespace sema {
         }
         const expr::Conversion& get_conversion() const {
             return std::get<expr::Conversion>(variant);
+        }
+        expr::Unary& get_unary() {
+            return std::get<expr::Unary>(variant);
+        }
+        const expr::Unary& get_unary() const {
+            return std::get<expr::Unary>(variant);
+        }
+        expr::Binary& get_binary() {
+            return std::get<expr::Binary>(variant);
+        }
+        const expr::Binary& get_binary() const {
+            return std::get<expr::Binary>(variant);
         }
     };
     struct Statement;

@@ -315,6 +315,43 @@ namespace sema {
                 .type = ref(to),
             };
         }
+        if (expr.is_unary()) {
+            auto& unary = expr.get_unary();
+            auto next = TRY(parse_expression(*unary.next, table, frame));
+            if (next.type->is_void()) {
+                std::println(stderr, "invalid type in unary operation");
+                return std::nullopt;
+            }
+            auto type = ref(next.type->deref_lvalue());
+            return Expression {
+                .variant = expr::Unary {
+                    .next = std::make_unique<Expression>(std::move(next)),
+                    .type = expr::Unary::MINUS,
+                },
+                .type = type
+            };
+        }
+        if (expr.is_binary()) {
+            auto& binary = expr.get_binary();
+            auto a = TRY(parse_expression(*binary.a, table, frame));
+            auto b = TRY(parse_expression(*binary.b, table, frame));
+            if (!Type::equal(a.type->deref_lvalue(), b.type->deref_lvalue())) {
+                std::println(stderr, "mismatched types in binary operation");
+                return std::nullopt;
+            }
+            if (a.type->deref_lvalue().is_void()) {
+                std::println(stderr, "invalid type in unary operation");
+                return std::nullopt;
+            }
+            return Expression {
+                .variant = expr::Binary {
+                    .a = std::make_unique<Expression>(std::move(a)),
+                    .b = std::make_unique<Expression>(std::move(b)),
+                    .type = expr::Binary::SUB
+                },
+                .type = ref(a.type->deref_lvalue())
+            };
+        }
         std::unreachable();
     }
 

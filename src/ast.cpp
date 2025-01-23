@@ -1,5 +1,7 @@
 #include "include/ast.hpp"
 #include "include/lexer.hpp"
+#include "include/token_parser.hpp"
+#include "include/try.hpp"
 #include <memory>
 
 namespace ast {
@@ -12,13 +14,12 @@ auto parse_identifier(TokenParser& parser) -> std::optional<Identifier> {
     return iden.source_string;
 }
 
-auto parse_expression2(TokenParser& parser) -> std::optional<Expression> {
+auto parse_expression_primary(TokenParser& parser) -> std::optional<Expression> {
     if (parser.advance_if_match(TokenType::LPAREN)) {
         auto expr = TRY(parse_expression(parser));
-        TRY(parser.expect(TokenType::RPAREN));
+        parser.expect(TokenType::RPAREN);
         return std::move(expr);
-    }
-    if (parser.match(TokenType::INTEGER)) {
+    } else if (parser.match(TokenType::INTEGER)) {
         auto& tok = parser.peek_advance();
         return Expression {
             .variant = expr::Literal {
@@ -52,18 +53,12 @@ auto parse_expression2(TokenParser& parser) -> std::optional<Expression> {
                 tok.source_string
             }
         };
-    } else if (parser.advance_if_match(TokenType::AMPERSAND)) {
-        return Expression {
-            .variant = expr::AddrOf {
-                .next = std::make_unique<Expression>(TRY(parse_expression(parser)))
-            }
-        };
     }
     return std::nullopt;
 }
 
-auto parse_expression(TokenParser& parser) -> std::optional<Expression> {
-    auto expr = TRY(parse_expression2(parser));
+auto parse_expression_deref(TokenParser& parser) -> std::optional<Expression> {
+    auto expr = TRY(parse_expression_primary(parser));
     while (parser.match(TokenType::DOT) && parser.match(TokenType::STAR, 1)) {
         parser.advance(2);
         expr = Expression {
@@ -72,6 +67,44 @@ auto parse_expression(TokenParser& parser) -> std::optional<Expression> {
             }
         };
     }
+    return expr;
+}
+
+auto parse_expression_unary(TokenParser& parser) -> std::optional<Expression> {
+    if (parser.advance_if_match(TokenType::AMPERSAND)) {
+        return Expression {
+            .variant = expr::AddrOf {
+                .next = std::make_unique<Expression>(TRY(parse_expression_unary(parser)))
+            }
+        };
+    } else if (parser.advance_if_match(TokenType::MINUS)) {
+        return Expression {
+            .variant = expr::Unary {
+                .next = std::make_unique<Expression>(TRY(parse_expression_unary(parser))),
+                .type = expr::Unary::MINUS
+            }
+        };
+    } else {
+        return parse_expression_deref(parser);
+    }
+}
+
+auto parse_expression_term(TokenParser& parser) -> std::optional<Expression> {
+    auto expr = TRY(parse_expression_unary(parser));
+    while (parser.advance_if_match(TokenType::MINUS)) {
+        expr = Expression {
+            .variant = expr::Binary {
+                .a = std::make_unique<Expression>(std::move(expr)),
+                .b = std::make_unique<Expression>(TRY(parse_expression_unary(parser))),
+                .type = expr::Binary::SUB
+            }
+        };
+    }
+    return expr;
+}
+
+auto parse_expression_as(TokenParser& parser) -> std::optional<Expression> {
+    auto expr = TRY(parse_expression_term(parser));
     while (parser.advance_if_match(TokenType::AS)) {
         expr = Expression {
             .variant = expr::As {
@@ -80,7 +113,11 @@ auto parse_expression(TokenParser& parser) -> std::optional<Expression> {
             }
         };
     }
-    return expr;
+    return std::move(expr);
+}
+
+auto parse_expression(TokenParser& parser) -> std::optional<Expression> {
+    return parse_expression_as(parser);
 }
 
 auto parse_type(TokenParser& parser) -> std::optional<Type> {
