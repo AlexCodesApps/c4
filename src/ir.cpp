@@ -239,7 +239,9 @@ void gen_expression(std::ostream& output, sema::Expression& expr, Context& conte
                 .name = b,
                 .type_ref = binary_expr.b->type
             }, ExpressionIntent::VALUE);
-            assign(output, var, std::format("sub {}, {}", a, b), sema_type_to_type(*expr.type));
+            assign(output, var,
+                std::format("{} {}, {}", binary_expr.type == sema::expr::Binary::ADD ? "add" : "sub", a, b),
+                sema_type_to_type(*expr.type));
         });
     } else {
         std::unreachable();

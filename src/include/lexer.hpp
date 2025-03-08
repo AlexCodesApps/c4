@@ -18,6 +18,7 @@ enum class TokenType {
     COLON,
     COMMA,
     SEMICOLON,
+    PLUS,
     MINUS,
     LBRACE,
     RBRACE,

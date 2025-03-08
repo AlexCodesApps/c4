@@ -1,6 +1,8 @@
 #include "include/lexer.hpp"
 #include "include/utils.hpp"
 #include <print>
+#include <string_view>
+#include <sys/types.h>
 #include <utility>
 
 std::string_view token_type_to_string(TokenType type) {
@@ -36,6 +38,8 @@ std::string_view token_type_to_string(TokenType type) {
         return "IDENTIFIER";
     case COMMA:
         return "COMMA";
+    case PLUS:
+        return "PLUS";
     case MINUS:
         return "MINUS";
     case SEMICOLON:
@@ -96,103 +100,66 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
         }
         return true;
     };
+    auto push_token = [&](TokenType type, std::string_view source_string) {
+        output.push_back(Token{
+            .type = type,
+            .source_location = {row, col},
+            .source_string = source_string
+        });
+    };
     while (!eof()) {
         char c = peek();
         switch (c) {
         case '(':
-            output.push_back(Token{
-                .type = TokenType::LPAREN,
-                .source_location = {row, col},
-                .source_string = "("
-            });
+            push_token(TokenType::LPAREN, "(");
             advance();
             break;
         case ')':
-            output.push_back(Token{
-                .type = TokenType::RPAREN,
-                .source_location = {row, col},
-                .source_string = ")"
-            });
+            push_token(TokenType::RPAREN, ")");
             advance();
             break;
         case '{':
-            output.push_back(Token{
-                .type = TokenType::LBRACE,
-                .source_location = {row, col},
-                .source_string = "{"
-            });
+            push_token(TokenType::LBRACE, "{");
             advance();
             break;
         case '}':
-            output.push_back(Token{
-                .type = TokenType::RBRACE,
-                .source_location = {row, col},
-                .source_string = "}"
-            });
+            push_token(TokenType::RBRACE, "}");
             advance();
             break;
         case ',':
-            output.push_back(Token{
-                .type = TokenType::COMMA,
-                .source_location = {row, col},
-                .source_string = ","
-            });
+            push_token(TokenType::COMMA, ",");
             advance();
             break;
         case ';':
-            output.push_back(Token{
-                .type = TokenType::SEMICOLON,
-                .source_location = {row, col},
-                .source_string = ";"
-            });
+            push_token(TokenType::SEMICOLON, ";");
             advance();
             break;
         case ':':
-            output.push_back(Token{
-                .type = TokenType::COLON,
-                .source_location = {row, col},
-                .source_string = ":"
-            });
+            push_token(TokenType::COLON, ":");
             advance();
             break;
         case '=':
-            output.push_back(Token{
-                .type = TokenType::EQ,
-                .source_location = {row, col},
-                .source_string = "="
-            });
+            push_token(TokenType::EQ, "=");
             advance();
             break;
         case '&':
-            output.push_back(Token{
-                .type = TokenType::AMPERSAND,
-                .source_location = {row, col},
-                .source_string = "&"
-            });
+            push_token(TokenType::AMPERSAND, "&");
             advance();
             break;
         case '*':
-            output.push_back(Token{
-                .type = TokenType::STAR,
-                .source_location = {row, col},
-                .source_string = "*"
-            });
+            push_token(TokenType::STAR, "*");
             advance();
             break;
         case '.':
-            output.push_back(Token{
-                .type = TokenType::DOT,
-                .source_location = {row, col},
-                .source_string = "."
-            });
+            push_token(TokenType::DOT, ".");
+            advance();
+            break;
+        case '+':
+            push_token(TokenType::PLUS, "+");
             advance();
             break;
         case '-':
-            output.push_back(Token{
-                .type = TokenType::MINUS,
-                .source_location = {row, col},
-                .source_string = "-",
-            });
+            push_token(TokenType::MINUS, "-");
             advance();
             break;
         case ' ':
@@ -205,47 +172,19 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
             usize srow = row;
             usize scol = col;
             if (iden("fn")) {
-                output.push_back(Token{
-                    .type = TokenType::FUNCTION,
-                    .source_location = {srow, scol},
-                    .source_string = "fn",
-                });
+                push_token(TokenType::FUNCTION, "fn");
             } else if (iden("return")) {
-                output.push_back(Token{
-                    .type = TokenType::RETURN,
-                    .source_location = {srow, scol},
-                    .source_string = "return",
-                });
+                push_token(TokenType::RETURN, "return");
             } else if (iden("let")) {
-                output.push_back(Token{
-                    .type = TokenType::LET,
-                    .source_location = {srow, scol},
-                    .source_string = "let",
-                });
+                push_token(TokenType::LET, "let");
             } else if (iden("as")) {
-                output.push_back(Token{
-                    .type = TokenType::AS,
-                    .source_location = {srow, scol},
-                    .source_string = "as",
-                });
+                push_token(TokenType::AS, "as");
             } else if (iden("true")) {
-                output.push_back(Token{
-                    .type = TokenType::TRUE,
-                    .source_location = {srow, scol},
-                    .source_string = "true",
-                });
+                push_token(TokenType::TRUE, "true");
             } else if (iden("false")) {
-                output.push_back(Token{
-                    .type = TokenType::FALSE,
-                    .source_location = {srow, scol},
-                    .source_string = "false",
-                });
+                push_token(TokenType::FALSE, "false");
             } else if (iden("nullptr")) {
-                output.push_back(Token{
-                    .type = TokenType::TRUE,
-                    .source_location = {srow, scol},
-                    .source_string = "nullptr",
-                });
+                push_token(TokenType::NULLPTR, "nullptr");
             } else if (is_digit(c)) {
                 usize start = index;
                 usize count = 0;

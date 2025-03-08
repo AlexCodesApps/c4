@@ -91,15 +91,20 @@ auto parse_expression_unary(TokenParser& parser) -> std::optional<Expression> {
 
 auto parse_expression_term(TokenParser& parser) -> std::optional<Expression> {
     auto expr = TRY(parse_expression_unary(parser));
-    while (parser.advance_if_match(TokenType::MINUS)) {
+    while (parser.match(TokenType::MINUS) || parser.match(TokenType::PLUS)) {
+        auto& tok = parser.peek_advance();
+        auto bin_type =
+            tok.type == TokenType::PLUS ?
+            expr::Binary::ADD : expr::Binary::SUB;
         expr = Expression {
             .variant = expr::Binary {
                 .a = std::make_unique<Expression>(std::move(expr)),
                 .b = std::make_unique<Expression>(TRY(parse_expression_unary(parser))),
-                .type = expr::Binary::SUB
+                .type = bin_type
             }
         };
     }
+
     return expr;
 }
 

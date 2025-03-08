@@ -2,10 +2,12 @@
 #include <iostream>
 #include <sstream>
 #include <print>
+#include <utility>
 #include "include/ir.hpp"
 #include "include/lexer.hpp"
 #include "include/ast.hpp"
 #include "include/sema.hpp"
+#include "include/debug.hpp"
 
 int main(int argc, char ** argv) {
     if (argc != 2) {
@@ -26,13 +28,14 @@ int main(int argc, char ** argv) {
         std::move(*result);
     });
     for (auto& tok : tokens) {
-        std::println(stderr, "tok {{ {}, source: \"{}\", loc: {} {}, int: {} }}", token_type_to_string(tok.type),
-            tok.source_string, tok.source_location.first, tok.source_location.second, tok.integer);
+        DEBUG_LOG("tok {{ {}, source: \"{}\", loc: {} {}, int: {} }}",
+            token_type_to_string(tok.type), tok.source_string,
+            tok.source_location.first, tok.source_location.second, tok.integer);
     }
     auto ast = ({
         auto result = ast::parse(tokens);
         if (!result) {
-            std::println(stderr, "parsing error");
+            DEBUG_LOG("parsing error");
             return -4;
         }
         std::move(*result);
@@ -40,7 +43,7 @@ int main(int argc, char ** argv) {
     auto symbol_table = ({
         auto result = sema::parse(ast);
         if (!result) {
-            std::println(stderr, "semantic error");
+            DEBUG_LOG("semantic error");
             return -5;
         }
         std::move(*result);

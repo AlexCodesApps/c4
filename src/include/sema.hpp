@@ -219,7 +219,7 @@ namespace sema {
         struct Binary {
             std::unique_ptr<Expression> a;
             std::unique_ptr<Expression> b;
-            enum { SUB } type;
+            enum { ADD, SUB } type;
         };
     }
     struct Expression {

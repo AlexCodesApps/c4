@@ -347,7 +347,7 @@ namespace sema {
                 .variant = expr::Binary {
                     .a = std::make_unique<Expression>(std::move(a)),
                     .b = std::make_unique<Expression>(std::move(b)),
-                    .type = expr::Binary::SUB
+                    .type = binary.type == ast::expr::Binary::ADD ? expr::Binary::ADD : expr::Binary::SUB
                 },
                 .type = ref(a.type->deref_lvalue())
             };
