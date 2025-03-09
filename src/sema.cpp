@@ -352,6 +352,18 @@ namespace sema {
                 .type = ref(a.type->deref_lvalue())
             };
         }
+        if (expr.is_funcall()) {
+            auto& funcall = expr.get_funcall();
+            auto fun = TRY(parse_expression(*funcall.fun, table, frame));
+            assert(false && "need to flesh out the function type");
+            std::vector<std::unique_ptr<Expression>> out{};
+            for (auto& arg : funcall.args) {
+                out.push_back(
+                    std::make_unique<Expression>(TRY(
+                        parse_expression(arg, table, frame))));
+            }
+
+        }
         std::unreachable();
     }
 

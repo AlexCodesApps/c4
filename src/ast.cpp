@@ -57,15 +57,46 @@ auto parse_expression_primary(TokenParser& parser) -> std::optional<Expression> 
     return std::nullopt;
 }
 
-auto parse_expression_deref(TokenParser& parser) -> std::optional<Expression> {
-    auto expr = TRY(parse_expression_primary(parser));
-    while (parser.match(TokenType::DOT) && parser.match(TokenType::STAR, 1)) {
+auto parse_expression_funcall(Expression& expr, TokenParser& parser) -> bool {
+    if (parser.advance_if_match(TokenType::LPAREN)) {
+        auto parse_comma = [](TokenParser& parser) { return parser.expect(TokenType::COMMA); };
+        auto args = TRY(parse_with_sep(parser, parse_expression, parse_comma, false));
+        TRY(parser.expect(TokenType::RPAREN));
+        expr = Expression {
+            .variant = expr::FunctionCall {
+                .fun = std::make_unique<Expression>(std::move(expr)),
+                .args = std::move(args),
+            }
+        };
+    }
+    return false;
+}
+
+auto parse_expression_deref(Expression& expr, TokenParser& parser) -> bool {
+    if (parser.match(TokenType::DOT) && parser.match(TokenType::STAR, 1)) {
         parser.advance(2);
         expr = Expression {
             .variant = expr::Deref {
                 .next = std::make_unique<Expression>(std::move(expr))
             }
         };
+        return true;
+    }
+    return false;
+}
+
+auto parse_expression_postfix(TokenParser& parser) -> std::optional<Expression> {
+    auto expr = TRY(parse_expression_primary(parser));
+    auto helper = [&](auto fun) {
+        auto pos = parser.get_position();
+        if (!fun(expr, parser)) {
+            parser.set_position(pos);
+            return false;
+        }
+        return true;
+    };
+    while (helper(parse_expression_funcall) || helper(parse_expression_deref)) {
+        // keep iterating until no more postfix expressions are recognized
     }
     return expr;
 }
@@ -85,7 +116,7 @@ auto parse_expression_unary(TokenParser& parser) -> std::optional<Expression> {
             }
         };
     } else {
-        return parse_expression_deref(parser);
+        return parse_expression_postfix(parser);
     }
 }
 

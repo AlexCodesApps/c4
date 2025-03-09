@@ -221,9 +221,15 @@ namespace sema {
             std::unique_ptr<Expression> b;
             enum { ADD, SUB } type;
         };
+        struct FunctionCall {
+            std::unique_ptr<Expression> function;
+            std::vector<std::unique_ptr<Expression>> args;
+        };
     }
     struct Expression {
-        std::variant<expr::Literal, expr::Variable, expr::AddrOf, expr::Deref, expr::Conversion, expr::Unary, expr::Binary> variant;
+        std::variant<
+            expr::Literal, expr::Variable, expr::AddrOf, expr::Deref,
+            expr::Conversion, expr::Unary, expr::Binary, expr::FunctionCall> variant;
         ref<Type> type;
         bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
@@ -245,6 +251,9 @@ namespace sema {
         }
         bool is_binary() const {
             return std::holds_alternative<expr::Binary>(variant);
+        }
+        bool is_funcall() const {
+            return std::holds_alternative<expr::FunctionCall>(variant);
         }
         expr::Literal& get_literal() {
             return std::get<expr::Literal>(variant);
@@ -287,6 +296,12 @@ namespace sema {
         }
         const expr::Binary& get_binary() const {
             return std::get<expr::Binary>(variant);
+        }
+        expr::FunctionCall& get_funcall() {
+            return std::get<expr::FunctionCall>(variant);
+        }
+        const expr::FunctionCall& get_funcall() const {
+            return std::get<expr::FunctionCall>(variant);
         }
     };
     struct Statement;

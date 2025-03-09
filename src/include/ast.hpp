@@ -100,10 +100,16 @@ namespace ast {
             std::unique_ptr<Expression> b;
             enum { ADD, SUB } type;
         };
+        struct FunctionCall {
+            std::unique_ptr<Expression> fun;
+            std::vector<Expression> args;
+        };
         using Identifier = ast::Identifier;
     }
     struct Expression {
-        std::variant<expr::Literal, expr::Identifier, expr::AddrOf, expr::Deref, expr::As, expr::Unary, expr::Binary> variant;
+        std::variant<
+            expr::Literal, expr::Identifier, expr::AddrOf, expr::Deref,
+            expr::As, expr::Unary, expr::Binary, expr::FunctionCall> variant;
         bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
         }
@@ -124,6 +130,9 @@ namespace ast {
         }
         bool is_binary() const {
             return std::holds_alternative<expr::Binary>(variant);
+        }
+        bool is_funcall() const {
+            return std::holds_alternative<expr::FunctionCall>(variant);
         }
         expr::Literal& get_literal() {
             return std::get<expr::Literal>(variant);
@@ -166,6 +175,12 @@ namespace ast {
         }
         const expr::Binary& get_binary() const {
             return std::get<expr::Binary>(variant);
+        }
+        expr::FunctionCall& get_funcall() {
+            return std::get<expr::FunctionCall>(variant);
+        }
+        const expr::FunctionCall& get_funcall() const {
+            return std::get<expr::FunctionCall>(variant);
         }
     };
     struct Variable {
