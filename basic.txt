@@ -21,3 +21,9 @@ fn sub(a: int, b: int): int {
 fn add(a: int, b: int): int {
     return a + b;
 }
+
+fn useless(): void {
+	1;
+	2 + 4;
+	return;
+}

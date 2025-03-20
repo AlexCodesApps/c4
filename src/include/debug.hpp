@@ -45,7 +45,10 @@ DEBUG (
     }
 )
 #define DEBUG_LOG_BASE(type, msg, ...) do { DEBUG( \
-    _detail::base_debug(type, std::source_location::current(), msg __VA_OPT__(, __VA_ARGS__))) } while(0)
+    _detail::base_debug(type, std::source_location::current(), msg __VA_OPT__(, __VA_ARGS__))); } while(0)
 #define DEBUG_LOG(msg, ...) DEBUG_LOG_BASE(_detail::debug_log_type::NORMAL, msg, __VA_ARGS__)
 #define DEBUG_WARN(msg, ...) DEBUG_LOG_BASE(_detail::debug_log_type::WARNING, msg, __VA_ARGS__)
-#define DEBUG_ERROR(msg, ...) DEBUG_LOG_BASE(_detail::debug_log_type::ERROR, msg, __VA_ARGS__)
+#define DEBUG_ERROR(msg, ...) do { \
+    DEBUG_LOG_BASE(_detail::debug_log_type::ERROR, msg, __VA_ARGS__); \
+    std::unreachable(); \
+} while (0)

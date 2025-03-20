@@ -1,9 +1,11 @@
 #pragma once
 #include "ast.hpp"
+#include "debug.hpp"
 #include "utils.hpp"
 #include <cassert>
 #include <cmath>
 #include <memory>
+#include <span>
 #include <variant>
 #include <vector>
 
@@ -14,7 +16,7 @@ namespace sema {
         struct Integer {};
         struct Bool {};
         struct Function {
-            std::vector<ref<Type>> args;
+            std::vector<ref<Type>> parameters;
             ref<Type> return_type;
         };
         struct Pointer {
@@ -28,7 +30,8 @@ namespace sema {
         };
     }
     struct Type {
-        std::variant<type::Void, type::Integer, type::Bool, type::Pointer, type::Reference, type::LValue> variant;
+        std::variant<type::Void, type::Integer, type::Bool,
+            type::Pointer, type::Reference, type::LValue, type::Function> variant;
         bool is_void() const {
             return std::holds_alternative<type::Void>(variant);
         }
@@ -47,8 +50,14 @@ namespace sema {
         bool is_bool() const {
             return std::holds_alternative<type::Bool>(variant);
         }
+        bool is_function() const {
+            return std::holds_alternative<type::Function>(variant);
+        }
         bool can_be_deref() const {
             return is_pointer() || is_reference();
+        }
+        bool is_complete() const {
+            return !is_function() && !is_void();
         }
         Type& deref() const {
             return is_pointer() ?
@@ -83,12 +92,19 @@ namespace sema {
         const type::LValue& get_lvalue() const {
             return std::get<type::LValue>(variant);
         }
+        type::Function& get_function() {
+            return std::get<type::Function>(variant);
+        }
+        const type::Function& get_function() const {
+            return std::get<type::Function>(variant);
+        }
         usize size() const {
             return std::visit(Overload{
                 [](const type::Void&) { return 0UL; },
                 [](const type::Pointer&) { return sizeof(void *); },
                 [](const type::Reference&) { return sizeof(void *); },
-                [](const type::LValue& lvalue) -> usize { assert(false && "invalid operation"); },
+                [](const type::LValue&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
+                [](const type::Function&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
                 [](const type::Integer&) { return sizeof(int); },
                 [](const type::Bool&) { return sizeof(bool); },
             }, variant);
@@ -98,7 +114,8 @@ namespace sema {
                 [](const type::Void&) { return 0UL; },
                 [](const type::Pointer&) { return alignof(void *); },
                 [](const type::Reference&) { return alignof(void *); },
-                [](const type::LValue& lvalue) -> usize { assert(false && "invalid operation"); },
+                [](const type::LValue&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
+                [](const type::Function&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
                 [](const type::Integer&) { return alignof(int); },
                 [](const type::Bool&) { return alignof(bool); },
             }, variant);
@@ -132,6 +149,7 @@ namespace sema {
         Type& get_pointer_to(Type& type);
         Type& get_reference_to(Type& type);
         Type& get_lvalue_to(Type& type);
+        Type& get_function_to(Type& ret, std::span<ref<Type>> types);
         Type& get_integer();
         Type& get_void_pointer();
         Type& get_void();
@@ -158,10 +176,7 @@ namespace sema {
         }
     };
     extern ConversionTable conversion_table;
-    struct FunctionType {
-        std::vector<ref<Type>> parameters;
-        ref<Type> return_type;
-    };
+    using FunctionType = type::Function;
     struct Variable {
         ast::Identifier iden;
         ref<Type> type;

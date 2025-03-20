@@ -1,6 +1,7 @@
 #include "include/sema.hpp"
 #include "include/ast.hpp"
 #include "include/debug.hpp"
+#include "include/utils.hpp"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -8,6 +9,7 @@
 #include <ranges>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace sema {
     auto conversion_array = std::to_array({
@@ -74,6 +76,14 @@ namespace sema {
             return &get_pointer_to(TRY(lookup(*type.get_pointer().next)));
         } else if (type.is_reference()) {
             return &get_reference_to(TRY(lookup(*type.get_reference().next)));
+        } else if (type.is_function()) {
+            auto& fun = type.get_function();
+            auto& ret_type = TRY(lookup(*fun.return_type));
+            std::vector<ref<Type>> params{};
+            for (auto& type : fun.parameter_types) {
+                params.push_back(ref(TRY(lookup(type))));
+            }
+            return &get_function_to(ret_type, params);
         } else {
             std::unreachable();
         }
@@ -140,6 +150,37 @@ namespace sema {
             std::make_unique<Type>(Type {
                 .variant = type::LValue {
                     .next = ref(type)
+                }
+            })
+        }).second;
+    }
+
+    Type& TypeTable::get_function_to(Type& ret, std::span<ref<Type>> types) {
+        for (auto& [_, otype] : types_database) {
+            if (!otype->is_function()) {
+                continue;
+            }
+            auto& fun = otype->get_function();
+            if (!Type::equal(*fun.return_type, ret) || fun.parameters.size() != types.size()) {
+                continue;
+            }
+            for (auto [a, b] : std::views::zip(types, fun.parameters)) {
+                assert(!a->is_lvalue());
+                if (!Type::equal(*a, *b)) {
+                    continue;
+                }
+            }
+            return *otype;
+        }
+        DEBUG(for (auto& type : types) {
+            assert(!type->is_lvalue());
+        });
+        return *types_database.emplace_back(pair{
+            {},
+            std::make_unique<Type>(Type {
+            .variant = type::Function {
+                    .parameters = types | std::ranges::to<std::vector<ref<Type>>>(),
+                    .return_type = ref(ret),
                 }
             })
         }).second;

@@ -4,6 +4,10 @@
 #include "include/try.hpp"
 #include <memory>
 
+namespace {
+    auto parse_comma = [](TokenParser& parser) { return parser.expect(TokenType::COMMA); };
+}
+
 namespace ast {
 
 auto parse_identifier(TokenParser& parser) -> std::optional<Identifier> {
@@ -169,6 +173,18 @@ auto parse_type(TokenParser& parser) -> std::optional<Type> {
                 .next = std::make_unique<Type>(TRY(parse_type(parser)))
             }
         };
+    } else if (parser.advance_if_match(TokenType::FUNCTION)) {
+        TRY(parser.expect(TokenType::LPAREN));
+        auto params = TRY(parse_with_sep(parser, parse_type, parse_comma, false));
+        TRY(parser.expect(TokenType::RPAREN));
+        TRY(parser.expect(TokenType::COLON));
+        auto ret_type = TRY(parse_type(parser));
+        return Type {
+            .variant = type::Function {
+                .parameter_types = std::move(params),
+                .return_type = std::make_unique<Type>(std::move(ret_type)),
+            }
+        };
     } else {
         return Type {
             .variant = type::Identifier {
@@ -257,7 +273,6 @@ auto parse_function(TokenParser& parser) -> std::optional<Function> {
     TRY(parser.expect(TokenType::FUNCTION));
     auto iden = TRY(parse_identifier(parser));
     TRY(parser.expect(TokenType::LPAREN));
-    auto parse_comma = [](TokenParser& parser) { return parser.expect(TokenType::COMMA); };
     auto args = TRY(parse_with_sep(parser, parse_function_param, parse_comma, false));
     TRY(parser.expect(TokenType::RPAREN));
     TRY(parser.expect(TokenType::COLON));

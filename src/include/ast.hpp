@@ -18,9 +18,13 @@ namespace ast {
         struct Reference {
             std::unique_ptr<Type> next;
         };
+        struct Function {
+            std::vector<Type> parameter_types;
+            std::unique_ptr<Type> return_type;
+        };
     }
     struct Type {
-        std::variant<type::Identifier, type::Pointer, type::Reference> variant;
+        std::variant<type::Identifier, type::Pointer, type::Reference, type::Function> variant;
         bool is_identifier() const {
             return std::holds_alternative<type::Identifier>(variant);
         }
@@ -29,6 +33,9 @@ namespace ast {
         }
         bool is_reference() const {
             return std::holds_alternative<type::Reference>(variant);
+        }
+        bool is_function() const {
+            return std::holds_alternative<type::Function>(variant);
         }
         type::Identifier& get_identifier() {
             return std::get<type::Identifier>(variant);
@@ -47,6 +54,12 @@ namespace ast {
         }
         const type::Reference& get_reference() const {
             return std::get<type::Reference>(variant);
+        }
+        type::Function& get_function() {
+            return std::get<type::Function>(variant);
+        }
+        const type::Function& get_function() const {
+            return std::get<type::Function>(variant);
         }
     };
     struct Expression;
