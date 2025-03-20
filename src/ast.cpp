@@ -235,14 +235,19 @@ auto parse_statement(TokenParser& parser) -> std::optional<Statement> {
         return std::move(stmt);
     } else {
         auto expr = TRY(parse_expression(parser));
-        TRY(parser.expect(TokenType::EQ));
-        auto expr2 = TRY(parse_expression(parser));
+        if (parser.advance_if_match(TokenType::EQ)) {
+            auto expr2 = TRY(parse_expression(parser));
+            TRY(parser.expect(TokenType::SEMICOLON));
+            return Statement {
+                .variant = stmt::Assignment {
+                    .target = std::move(expr),
+                    .value = std::move(expr2)
+                }
+            };
+        }
         TRY(parser.expect(TokenType::SEMICOLON));
         return Statement {
-            .variant = stmt::Assignment {
-                .target = std::move(expr),
-                .value = std::move(expr2)
-            }
+            .variant = std::move(expr)
         };
     }
     return std::nullopt;

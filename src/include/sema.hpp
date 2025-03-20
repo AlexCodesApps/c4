@@ -13,6 +13,10 @@ namespace sema {
         struct Void {};
         struct Integer {};
         struct Bool {};
+        struct Function {
+            std::vector<ref<Type>> args;
+            ref<Type> return_type;
+        };
         struct Pointer {
             ref<Type> next;
         };
@@ -328,10 +332,11 @@ namespace sema {
             Expression target;
             Expression value;
         };
+        using Expression = sema::Expression;
         using Block = std::vector<Statement>;
     }
     struct Statement {
-        std::variant<stmt::Return, stmt::Assignment, stmt::Block> variant;
+        std::variant<stmt::Return, stmt::Assignment, stmt::Block, stmt::Expression> variant;
         bool is_return() const {
             return std::holds_alternative<stmt::Return>(variant);
         }
@@ -340,6 +345,9 @@ namespace sema {
         }
         bool is_block() const {
             return std::holds_alternative<stmt::Block>(variant);
+        }
+        bool is_expr() const {
+            return std::holds_alternative<stmt::Expression>(variant);
         }
         stmt::Return& get_return() {
             return std::get<stmt::Return>(variant);
@@ -358,6 +366,12 @@ namespace sema {
         }
         const stmt::Block& get_block() const {
             return std::get<stmt::Block>(variant);
+        }
+        stmt::Expression& get_expr() {
+            return std::get<stmt::Expression>(variant);
+        }
+        const stmt::Expression& get_expr() const {
+            return std::get<stmt::Expression>(variant);
         }
     };
 

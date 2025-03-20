@@ -1,5 +1,6 @@
 #include "include/sema.hpp"
 #include "include/ast.hpp"
+#include "include/debug.hpp"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -355,7 +356,7 @@ namespace sema {
         if (expr.is_funcall()) {
             auto& funcall = expr.get_funcall();
             auto fun = TRY(parse_expression(*funcall.fun, table, frame));
-            assert(false && "need to flesh out the function type");
+            DEBUG_ERROR("need to flesh out the function type");
             std::vector<std::unique_ptr<Expression>> out{};
             for (auto& arg : funcall.args) {
                 out.push_back(
@@ -459,6 +460,12 @@ namespace sema {
             auto block = TRY(parse_statements(statement.get_block(), table, function_type, sub_frame));
             output.push_back(Statement {
                 .variant = std::move(block)
+            });
+            return std::monostate{};
+        } else if (statement.is_expr()) {
+            auto& expr = statement.get_expr();
+            output.push_back(Statement {
+                .variant = TRY(parse_expression(expr, table, frame))
             });
             return std::monostate{};
         }

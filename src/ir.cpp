@@ -280,6 +280,15 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
         for (auto& statement : statement.get_block()) {
             gen_statement(output, statement, context);
         }
+    } else if (statement.is_expr()) {
+        auto& expr = statement.get_expr();
+        auto placeholder = context.generate_temp_name();
+        auto type = ref(expr.type->deref_lvalue());
+        gen_expression(output, expr, context, Target{
+            .type = Target::REGISTER,
+            .name = placeholder,
+            .type_ref = type,
+        }, ExpressionIntent::VALUE);
     } else {
         std::unreachable();
     }
