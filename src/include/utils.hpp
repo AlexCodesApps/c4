@@ -1,6 +1,9 @@
 #pragma once
 #include "numbers.hpp"
 #include <concepts>
+#include <memory>
+#include <type_traits>
+#include <utility>
 
 constexpr inline bool is_alpha(char c) {
     return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z');
@@ -69,3 +72,9 @@ public:
     //     return m_ptr <=> other;
     // }
 };
+
+template <typename T>
+auto unique_ptr_wrap(T&& v) {
+    using RT = std::remove_cvref_t<T>;
+    return std::make_unique<RT>(std::forward<T>(v));
+}

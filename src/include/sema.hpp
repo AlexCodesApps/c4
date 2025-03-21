@@ -178,11 +178,6 @@ namespace sema {
     };
     extern ConversionTable conversion_table;
     using FunctionType = type::Function;
-    struct Variable {
-        ast::Identifier iden;
-        ref<Type> type;
-        usize scope_level;
-    };
     namespace lit {
         struct Bool {
             bool value;
@@ -217,10 +212,11 @@ namespace sema {
         }
     };
     struct Expression;
+    struct Symbol;
     namespace expr {
         using Literal = sema::Literal;
-        struct Variable {
-            ref<sema::Variable> var;
+        struct Symbol {
+            ref<sema::Symbol> var;
         };
         struct Deref {
             std::unique_ptr<Expression> next;
@@ -248,14 +244,14 @@ namespace sema {
     }
     struct Expression {
         std::variant<
-            expr::Literal, expr::Variable, expr::AddrOf, expr::Deref,
+            expr::Literal, expr::Symbol, expr::AddrOf, expr::Deref,
             expr::Conversion, expr::Unary, expr::Binary, expr::FunctionCall> variant;
         ref<Type> type;
         bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
         }
-        bool is_variable() const {
-            return std::holds_alternative<expr::Variable>(variant);
+        bool is_symbol() const {
+            return std::holds_alternative<expr::Symbol>(variant);
         }
         bool is_addr_of() const {
             return std::holds_alternative<expr::AddrOf>(variant);
@@ -281,11 +277,11 @@ namespace sema {
         const expr::Literal& get_literal() const {
             return std::get<expr::Literal>(variant);
         }
-        expr::Variable& get_variable() {
-            return std::get<expr::Variable>(variant);
+        expr::Symbol& get_symbol() {
+            return std::get<expr::Symbol>(variant);
         }
-        const expr::Variable& get_variable() const {
-            return std::get<expr::Variable>(variant);
+        const expr::Symbol& get_symbol() const {
+            return std::get<expr::Symbol>(variant);
         }
         expr::AddrOf& get_addr_of() {
             return std::get<expr::AddrOf>(variant);
@@ -330,14 +326,13 @@ namespace sema {
 
     struct Frame {
         std::vector<std::unique_ptr<Frame>> frames;
-        std::vector<std::unique_ptr<Variable>> parameters;
-        std::vector<std::unique_ptr<Variable>> variables;
+        std::vector<std::unique_ptr<Symbol>> symbols;
         std::vector<Statement> statements;
         enum { GLOBAL, FUNCTION_BASE, SCOPED } type;
         Frame * parent;
         usize scope_level;
-        Variable * lookup(const ast::Identifier& iden);
-        Variable& push_variable(Variable new_var, TypeTable& table);
+        Symbol * lookup(const ast::Identifier& iden);
+        Symbol& push_symbol(Symbol symbol, TypeTable& table);
         Frame& new_child();
         void push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table);
     };
@@ -345,6 +340,7 @@ namespace sema {
         struct Variable {
             usize offset;
         };
+        struct Parameter {};
         namespace cnst {
             struct Integer {
             private:
@@ -384,12 +380,15 @@ namespace sema {
     struct Symbol {
         ref<Type> type;
         ast::Identifier identifier;
-        std::variant<symb::Variable, symb::Constant> variant;
+        std::variant<symb::Variable, symb::Constant, symb::Parameter> variant;
         bool is_variable() const {
             return std::holds_alternative<symb::Variable>(variant);
         }
         bool is_constant() const {
             return std::holds_alternative<symb::Constant>(variant);
+        }
+        bool is_parameter() const {
+            return std::holds_alternative<symb::Parameter>(variant);
         }
         symb::Variable& get_variable() {
             return std::get<symb::Variable>(variant);

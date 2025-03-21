@@ -2,6 +2,7 @@
 #include "include/sema.hpp"
 #include "include/utils.hpp"
 #include <cassert>
+#include <format>
 #include <ostream>
 #include <print>
 #include <string>
@@ -77,8 +78,16 @@ std::string_view value_type_single(ValueType type) {
     return std::string_view(str.end() - 1, str.end());
 }
 
-std::string sema_variable_to_string(const sema::Variable& variable) {
-    return std::format("%.v{}_{}", variable.scope_level, variable.iden);
+std::string sema_symbol_to_string(const sema::Symbol& symbol) {
+    if (symbol.is_constant()) {
+        return std::string(symbol.identifier);
+    } else if (symbol.is_parameter()) {
+        return std::format(".v_{}", symbol.identifier);
+    } else if (symbol.is_variable()) {
+        auto& var = symbol.get_variable();
+        return std::format(".v{}_{}", var.offset, symbol.identifier);
+    }
+    std::unreachable();
 }
 
 ValueType sema_type_to_type(sema::Type& type) {
@@ -193,15 +202,15 @@ void gen_expression(std::ostream& output, sema::Expression& expr, Context& conte
         }
     } else if (expr.is_literal()) {
         return gen_load_literal(output, target, expr.get_literal(), *expr.type, context);
-    } else if (expr.is_variable()) {
-        auto& sema_var = *expr.get_variable().var;
+    } else if (expr.is_symbol()) {
+        auto& sema_var = *expr.get_symbol().var;
         store([&](std::string_view var) {
             if (intent == ExpressionIntent::ADDRESS) {
-                auto str = std::format("copy {}", sema_variable_to_string(sema_var));
+                auto str = std::format("copy {}", sema_symbol_to_string(sema_var));
                 assign(output, target.name, str, ValueType::LONG);
             } else if (intent == ExpressionIntent::VALUE) {
                 auto& type = sema_var.type->deref_lvalue();
-                load(output, var, sema_variable_to_string(sema_var), sema_type_to_type(type));
+                load(output, var, sema_symbol_to_string(sema_var), sema_type_to_type(type));
             } else {
                 std::unreachable();
             }
@@ -300,25 +309,22 @@ void gen_function(std::ostream& output, sema::Function& function) {
         std::print(output, " {}", value_type_double(sema_type_to_type(*function.type.return_type)));
     }
     std::print(output, " ${} (", function.identifier);
-    for (auto& param : function.frame.parameters) {
-        std::print(output, "{} %.p{}, ", value_type_double(sema_type_to_type(param->type->deref_lvalue())), param->iden);
+    for (auto& symbol : function.frame.symbols) {
+        if (!symbol->is_parameter()) break;
+        std::print(output, "{} %.p{}, ", value_type_double(sema_type_to_type(symbol->type->deref_lvalue())), symbol->identifier);
     }
     std::println(output, ") {{\n"
                        "@start");
-    for (auto& var : function.frame.parameters) {
-        if (var->iden.empty()) {
+    for (auto& symbol : function.frame.symbols) {
+        if (!symbol->is_parameter()) break;
+        if (symbol->identifier.empty()) {
             continue;
         }
-        auto& type = var->type->deref_lvalue();
-        assign(output, sema_variable_to_string(*var), std::format("alloc{} {}", type.alignment(), type.size()), ValueType::LONG);
-        store(output, sema_variable_to_string(*var), std::format("%.p{}", var->iden), sema_type_to_type(type));
-    }
-    for (auto& var : function.frame.variables) {
-        if (var->iden.empty()) {
-            continue;
+        auto& type = symbol->type->deref_lvalue();
+        assign(output, sema_symbol_to_string(*symbol), std::format("alloc{} {}", type.alignment(), type.size()), ValueType::LONG);
+        if (symbol->is_parameter()) {
+            store(output, sema_symbol_to_string(*symbol), std::format("%.p{}", symbol->identifier), sema_type_to_type(type));
         }
-        auto& type = var->type->deref_lvalue();
-        assign(output, sema_variable_to_string(*var), std::format("alloc{} {}", type.alignment(), type.size()), ValueType::LONG);
     }
     Context context;
     for (auto& statement : function.frame.statements) {

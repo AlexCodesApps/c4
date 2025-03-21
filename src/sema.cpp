@@ -208,14 +208,9 @@ namespace sema {
         return get_pointer_to(get_void());
     }
 
-    Variable * Frame::lookup(const ast::Identifier& iden) {
-        for (auto& var : parameters) {
-            if (var->iden == iden) {
-                return var.get();
-            }
-        }
-        for (auto& var : variables) {
-            if (var->iden == iden) {
+    Symbol * Frame::lookup(const ast::Identifier& iden) {
+        for (auto& var : symbols) {
+            if (var->identifier == iden) {
                 return var.get();
             }
         }
@@ -223,19 +218,21 @@ namespace sema {
             return parent->lookup(iden);
         }
         if (type == FUNCTION_BASE) {
-            std::println(stderr, "global variables not implemented");
+            DEBUG_ERROR("global variables unimplemented");
         }
         return nullptr;
     }
 
-    Variable& Frame::push_variable(Variable new_var, TypeTable& table) {
-        new_var.type = ref(table.get_lvalue_to(*new_var.type));
-        new_var.scope_level = scope_level;
-        return *variables.emplace_back(std::make_unique<Variable>(std::move(new_var)));
+    Symbol& Frame::push_symbol(Symbol symbol, TypeTable& table) {
+        if (symbol.is_variable()) {
+            symbol.get_variable().offset = scope_level;
+        }
+        symbol.type = ref(table.get_lvalue_to(*symbol.type));
+        return *symbols.emplace_back(unique_ptr_wrap(std::move(symbol)));
     }
 
     Frame& Frame::new_child() {
-        auto new_frame = std::make_unique<Frame>(Frame {
+        auto new_frame = unique_ptr_wrap(Frame {
             .type = SCOPED,
             .parent = this,
             .scope_level = scope_level + 1,
@@ -260,9 +257,10 @@ namespace sema {
 
     void Frame::push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table) {
         for (auto [type, ast] : std::views::zip(function.parameters, ast.args)) {
-            parameters.push_back(std::make_unique<Variable>(Variable {
-                .iden = ast.iden.value_or(""),
+            symbols.push_back(unique_ptr_wrap(Symbol {
                 .type = ref(table.get_lvalue_to(*type)),
+                .identifier = ast.iden.value_or(""),
+                .variant = symb::Parameter{},
             }));
         }
     }
@@ -311,7 +309,7 @@ namespace sema {
         if (expr.is_identifier()) {
             auto& var = TRY(frame.lookup(expr.get_identifier()));
             return Expression {
-                .variant = expr::Variable {
+                .variant = expr::Symbol {
                     .var = ref(var)
                 },
                 .type = var.type,
@@ -475,15 +473,16 @@ namespace sema {
             return parse_assignment(assignment.target, assignment.value);
         } else if (statement.is_variable_decl()) {
             auto& var_decl = statement.get_variable_decl();
-            auto& var = frame.push_variable(Variable{
-                .iden = var_decl.iden,
-                .type = ref(TRY(table.lookup(var_decl.type)))
+            auto& var = frame.push_symbol(Symbol{
+                .type = ref(TRY(table.lookup(var_decl.type))),
+                .identifier = var_decl.iden,
+                .variant = symb::Variable{},
             }, table);
             if (var_decl.value) {
                 output.push_back(Statement {
                     .variant = stmt::Assignment {
                             .target = Expression {
-                                .variant = expr::Variable {
+                                .variant = expr::Symbol {
                                 .var = ref(var)
                             },
                             .type = var.type,
