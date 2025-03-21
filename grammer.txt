@@ -11,9 +11,9 @@ return = "return" expr ";";
 declaration = IDEN ":" type ("=" expr)? ";";
 type =  "*" type
         | "&" type
-        | IDEN;
-        | "fn" "(" (type ("," type)*)? ")" ":" type
-expr = as_exor
+        | IDEN
+        | "fn" "(" (type ("," type)*)? ")" ":" type;
+expr = as_expr;
 as_expr = term_expr ("as" type)*;
 term_expr = unary_expr (("-"|"+") unary_expr)*;
 unary_expr = ("&"|"-") postfix_expr
