@@ -303,12 +303,15 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
     }
 }
 
-void gen_function(std::ostream& output, sema::Function& function) {
+void gen_function(std::ostream& output, sema::Symbol& symbol) {
+    assert(symbol.is_constant() && symbol.get_constant().is_function());
+    auto& function = symbol.get_constant().get_function();
+    auto& type = symbol.type->get_function();
     std::print(output, "export function");
-    if (!function.type.return_type->is_void()) {
-        std::print(output, " {}", value_type_double(sema_type_to_type(*function.type.return_type)));
+    if (!type.return_type->is_void()) {
+        std::print(output, " {}", value_type_double(sema_type_to_type(*type.return_type)));
     }
-    std::print(output, " ${} (", function.identifier);
+    std::print(output, " ${} (", symbol.identifier);
     for (auto& symbol : function.frame.symbols) {
         if (!symbol->is_parameter()) break;
         std::print(output, "{} %.p{}, ", value_type_double(sema_type_to_type(symbol->type->deref_lvalue())), symbol->identifier);
@@ -336,9 +339,9 @@ void gen_function(std::ostream& output, sema::Function& function) {
     std::println(output, "}}");
 }
 
-void gen(std::ostream& output, std::span<sema::Function> functions) {
-    for (auto& function : functions) {
-        gen_function(output, function);
+void gen(std::ostream& output, sema::SymbolTable& table) {
+    for (auto& symbol : table.global_frame.symbols) {
+        gen_function(output, *symbol);
     }
 }
 

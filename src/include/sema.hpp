@@ -321,11 +321,10 @@ namespace sema {
         }
     };
     struct Statement;
-    struct Function;
     struct Symbol;
 
     struct Frame {
-        std::vector<std::unique_ptr<Frame>> frames;
+        std::vector<std::unique_ptr<Frame>> children;
         std::vector<std::unique_ptr<Symbol>> symbols;
         std::vector<Statement> statements;
         enum { GLOBAL, FUNCTION_BASE, SCOPED } type;
@@ -374,6 +373,24 @@ namespace sema {
         }
         struct Constant {
             std::variant<cnst::Integer, cnst::Function> variant;
+            bool is_integer() const {
+                return std::holds_alternative<cnst::Integer>(variant);
+            }
+            bool is_function() const {
+                return std::holds_alternative<cnst::Function>(variant);
+            }
+            cnst::Integer& get_integer() {
+                return std::get<cnst::Integer>(variant);
+            }
+            const cnst::Integer& get_integer() const {
+                return std::get<cnst::Integer>(variant);
+            }
+            cnst::Function& get_function() {
+                return std::get<cnst::Function>(variant);
+            }
+            const cnst::Function& get_function() const {
+                return std::get<cnst::Function>(variant);
+            }
         };
     }
 
@@ -455,15 +472,9 @@ namespace sema {
         }
     };
 
-    struct Function {
-        FunctionType type;
-        ast::Identifier identifier;
-        Frame frame;
-    };
-
     struct SymbolTable {
         TypeTable types;
-        std::vector<Function> functions;
+        Frame global_frame;
     };
 
     std::optional<Expression>
@@ -474,10 +485,10 @@ namespace sema {
 
     std::optional<std::vector<Statement>>
     parse_statements(
-        std::span<ast::Statement> statements, TypeTable& type_table, FunctionType& type, Frame& frame);
+        std::span<ast::Statement> statements, TypeTable& type_table, type::Function& type, Frame& frame);
 
-    std::optional<Function>
-    parse_function(ast::Function& function, TypeTable& type_table);
+    std::optional<Symbol>
+    parse_function(ast::Function& function, SymbolTable& table);
 
     std::optional<SymbolTable>
     parse(ast::Program& program);

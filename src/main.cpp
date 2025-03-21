@@ -48,5 +48,5 @@ int main(int argc, char ** argv) {
         }
         std::move(*result);
     });
-    ir::gen(std::cout, symbol_table.functions);
+    ir::gen(std::cout, symbol_table);
 }

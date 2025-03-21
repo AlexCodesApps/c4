@@ -209,7 +209,7 @@ namespace sema {
     }
 
     Symbol * Frame::lookup(const ast::Identifier& iden) {
-        for (auto& var : symbols) {
+        for (auto& var : std::views::reverse(symbols)) {
             if (var->identifier == iden) {
                 return var.get();
             }
@@ -237,7 +237,7 @@ namespace sema {
             .parent = this,
             .scope_level = scope_level + 1,
         });
-        return *frames.emplace_back(std::move(new_frame));
+        return *children.emplace_back(std::move(new_frame));
     }
 
     // fn(i32): i32
@@ -522,32 +522,41 @@ namespace sema {
         return output;
     }
 
-    auto parse_function(ast::Function& function, TypeTable& type_table) -> std::optional<Function> {
-        FunctionType type {
-            .return_type = ref(TRY(type_table.lookup(function.return_type)))
-        };
+    auto parse_function(ast::Function& function, SymbolTable& table) -> std::optional<Symbol> {
+        auto& return_type = TRY(table.types.lookup(function.return_type));
+        std::vector<ref<Type>> parameters;
         for (auto& arg : function.args) {
-            type.parameters.push_back(ref(TRY(type_table.lookup(arg.type))));
+            parameters.push_back(ref(TRY(table.types.lookup(arg.type))));
         }
+        auto& type = table.types.get_function_to(return_type, parameters);
         Frame new_frame {
             .type = Frame::FUNCTION_BASE,
-            .parent = nullptr,
+            .parent = &table.global_frame,
             .scope_level = 1,
         };
-        new_frame.push_function_args(type, function, type_table);
-        new_frame.statements = TRY(parse_statements(function.body, type_table, type, new_frame));
-        return Function {
-            .type = std::move(type),
+        new_frame.push_function_args(type.get_function(), function, table.types);
+        new_frame.statements = TRY(parse_statements(function.body, table.types, type.get_function(), new_frame));
+        return Symbol {
+            .type = ref(type),
             .identifier = function.iden,
-            .frame = std::move(new_frame),
+            .variant = symb::Constant {
+                .variant = symb::cnst::Function {
+                    .frame = std::move(new_frame),
+                }
+            }
         };
     }
 
     auto parse(ast::Program& program) -> std::optional<SymbolTable> {
-        SymbolTable table;
+        SymbolTable table = {
+            .global_frame = {
+                .type = Frame::GLOBAL,
+                .parent = nullptr,
+            }
+        };
         for (auto& function : program) {
-            auto new_function = TRY(parse_function(function, table.types));
-            table.functions.push_back(std::move(new_function));
+            auto new_symbol = TRY(parse_function(function, table));
+            table.global_frame.symbols.push_back(unique_ptr_wrap(std::move(new_symbol)));
         }
         return table;
     }
