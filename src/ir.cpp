@@ -80,12 +80,12 @@ std::string_view value_type_single(ValueType type) {
 
 std::string sema_symbol_to_string(const sema::Symbol& symbol) {
     if (symbol.is_constant()) {
-        return std::string(symbol.identifier);
+        return std::format("${}", symbol.identifier);
     } else if (symbol.is_parameter()) {
-        return std::format(".v_{}", symbol.identifier);
+        return std::format("%.v_{}", symbol.identifier);
     } else if (symbol.is_variable()) {
         auto& var = symbol.get_variable();
-        return std::format(".v{}_{}", var.offset, symbol.identifier);
+        return std::format("%.v{}_{}", var.offset, symbol.identifier);
     }
     std::unreachable();
 }
@@ -97,6 +97,8 @@ ValueType sema_type_to_type(sema::Type& type) {
         return ValueType::BYTE;
     } else if (type.is_integer()) {
         return ValueType::WORD;
+    } else if (type.is_function()) {
+        return ValueType::LONG;
     } else {
         std::unreachable();
     }
@@ -306,7 +308,7 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
 void gen_function(std::ostream& output, sema::Symbol& symbol) {
     assert(symbol.is_constant() && symbol.get_constant().is_function());
     auto& function = symbol.get_constant().get_function();
-    auto& type = symbol.type->get_function();
+    auto& type = symbol.type->deref_lvalue().get_function();
     std::print(output, "export function");
     if (!type.return_type->is_void()) {
         std::print(output, " {}", value_type_double(sema_type_to_type(*type.return_type)));
@@ -319,7 +321,6 @@ void gen_function(std::ostream& output, sema::Symbol& symbol) {
     std::println(output, ") {{\n"
                        "@start");
     for (auto& symbol : function.frame.symbols) {
-        if (!symbol->is_parameter()) break;
         if (symbol->identifier.empty()) {
             continue;
         }

@@ -27,3 +27,14 @@ fn useless(): void {
 	2 + 4;
 	return;
 }
+
+
+fn decls(a: int): &int {
+    let a: int = 40;
+    useless;
+    return &a;
+}
+
+fn test(c: *fn(*fn():void):*fn():int): &fn(int): &int {
+    return &decls;
+}

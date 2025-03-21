@@ -214,7 +214,7 @@ namespace sema {
                 return var.get();
             }
         }
-        if (type == SCOPED || FUNCTION_BASE) {
+        if (type == SCOPED || type == FUNCTION_BASE) {
             return parent->lookup(iden);
         }
         return nullptr;
@@ -254,11 +254,11 @@ namespace sema {
 
     void Frame::push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table) {
         for (auto [type, ast] : std::views::zip(function.parameters, ast.args)) {
-            symbols.push_back(unique_ptr_wrap(Symbol {
+            push_symbol(Symbol {
                 .type = ref(table.get_lvalue_to(*type)),
                 .identifier = ast.iden.value_or(""),
                 .variant = symb::Parameter{},
-            }));
+            }, table);
         }
     }
 
@@ -553,7 +553,7 @@ namespace sema {
         };
         for (auto& function : program) {
             auto new_symbol = TRY(parse_function(function, table));
-            table.global_frame.symbols.push_back(unique_ptr_wrap(std::move(new_symbol)));
+            table.global_frame.push_symbol(std::move(new_symbol), table.types);
         }
         return table;
     }

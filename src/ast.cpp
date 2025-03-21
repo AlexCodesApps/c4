@@ -63,7 +63,6 @@ auto parse_expression_primary(TokenParser& parser) -> std::optional<Expression> 
 
 auto parse_expression_funcall(Expression& expr, TokenParser& parser) -> bool {
     if (parser.advance_if_match(TokenType::LPAREN)) {
-        auto parse_comma = [](TokenParser& parser) { return parser.expect(TokenType::COMMA); };
         auto args = TRY(parse_with_sep(parser, parse_expression, parse_comma, false));
         TRY(parser.expect(TokenType::RPAREN));
         expr = Expression {
