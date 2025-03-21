@@ -109,7 +109,7 @@ namespace sema {
         }
         return *types_database.emplace_back(pair{
             {},
-            std::make_unique<Type>(Type {
+            unique_ptr_wrap(Type {
                 .variant = type::Pointer {
                     .next = ref(type)
                 }
@@ -128,7 +128,7 @@ namespace sema {
         }
         return *types_database.emplace_back(pair{
             {},
-            std::make_unique<Type>(Type {
+            unique_ptr_wrap(Type {
                 .variant = type::Reference {
                     .next = ref(type)
                 }
@@ -147,7 +147,7 @@ namespace sema {
         }
         return *types_database.emplace_back(pair{
             {},
-            std::make_unique<Type>(Type {
+            unique_ptr_wrap(Type {
                 .variant = type::LValue {
                     .next = ref(type)
                 }
@@ -177,7 +177,7 @@ namespace sema {
         });
         return *types_database.emplace_back(pair{
             {},
-            std::make_unique<Type>(Type {
+            unique_ptr_wrap(Type {
             .variant = type::Function {
                     .parameters = types | std::ranges::to<std::vector<ref<Type>>>(),
                     .return_type = ref(ret),
@@ -214,11 +214,8 @@ namespace sema {
                 return var.get();
             }
         }
-        if (type == SCOPED) {
+        if (type == SCOPED || FUNCTION_BASE) {
             return parent->lookup(iden);
-        }
-        if (type == FUNCTION_BASE) {
-            DEBUG_ERROR("global variables unimplemented");
         }
         return nullptr;
     }
@@ -324,7 +321,7 @@ namespace sema {
             }
             return Expression {
                 .variant = expr::AddrOf {
-                    .next = std::make_unique<Expression>(std::move(next))
+                    .next = unique_ptr_wrap(std::move(next))
                 },
                 .type = ref(table.get_reference_to(*next.type))
             };
@@ -337,7 +334,7 @@ namespace sema {
             }
             return Expression {
                 .variant = expr::Deref {
-                    .next = std::make_unique<Expression>(std::move(next)),
+                    .next = unique_ptr_wrap(std::move(next)),
                 },
                 .type = ref(next.type->deref_lvalue().deref())
             };
@@ -349,7 +346,7 @@ namespace sema {
             auto& conversion = TRY(conversion_table.validate_explicit(expr.type->deref_lvalue(), to));
             return Expression {
                 .variant = expr::Conversion {
-                    .next = std::make_unique<Expression>(std::move(expr)),
+                    .next = unique_ptr_wrap(std::move(expr)),
                     .conversion_type = ref(conversion),
                 },
                 .type = ref(to),
@@ -365,7 +362,7 @@ namespace sema {
             auto type = ref(next.type->deref_lvalue());
             return Expression {
                 .variant = expr::Unary {
-                    .next = std::make_unique<Expression>(std::move(next)),
+                    .next = unique_ptr_wrap(std::move(next)),
                     .type = expr::Unary::MINUS,
                 },
                 .type = type
@@ -385,8 +382,8 @@ namespace sema {
             }
             return Expression {
                 .variant = expr::Binary {
-                    .a = std::make_unique<Expression>(std::move(a)),
-                    .b = std::make_unique<Expression>(std::move(b)),
+                    .a = unique_ptr_wrap(std::move(a)),
+                    .b = unique_ptr_wrap(std::move(b)),
                     .type = binary.type == ast::expr::Binary::ADD ? expr::Binary::ADD : expr::Binary::SUB
                 },
                 .type = ref(a.type->deref_lvalue())
@@ -399,7 +396,7 @@ namespace sema {
             std::vector<std::unique_ptr<Expression>> out{};
             for (auto& arg : funcall.args) {
                 out.push_back(
-                    std::make_unique<Expression>(TRY(
+                    unique_ptr_wrap(TRY(
                         parse_expression(arg, table, frame))));
             }
 
@@ -417,7 +414,7 @@ namespace sema {
         auto& conversion = TRY(conversion_table.validate_implicit(target_type_deref, type_deref));
         return Expression {
             .variant = expr::Conversion {
-                .next = std::make_unique<Expression>(std::move(target)),
+                .next = unique_ptr_wrap(std::move(target)),
                 .conversion_type = ref(conversion),
             },
             .type = ref(type_deref)

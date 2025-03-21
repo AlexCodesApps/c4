@@ -130,17 +130,17 @@ namespace sema {
         std::vector<pair> types_database;
         TypeTable() {
             types_database.emplace_back(
-                std::vector<std::string_view>({"int", "i32"}), std::make_unique<Type>(Type{
+                std::vector<std::string_view>({"int", "i32"}), unique_ptr_wrap(Type{
                     .variant = type::Integer{}
                 })
             );
             types_database.emplace_back(
-                std::vector<std::string_view>({"bool"}), std::make_unique<Type>(Type{
+                std::vector<std::string_view>({"bool"}), unique_ptr_wrap(Type{
                     .variant = type::Bool{}
                 })
             );
             types_database.emplace_back(
-                std::vector<std::string_view>({"void"}), std::make_unique<Type>(Type{
+                std::vector<std::string_view>({"void"}), unique_ptr_wrap(Type{
                     .variant = type::Void{}
                 })
             );
@@ -333,7 +333,7 @@ namespace sema {
         Symbol * lookup(const ast::Identifier& iden);
         Symbol& push_symbol(Symbol symbol, TypeTable& table);
         Frame& new_child();
-        void push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table);
+        void push_function_args(const type::Function& function, const ast::Function& ast, TypeTable& table);
     };
     namespace symb {
         struct Variable {

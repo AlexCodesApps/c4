@@ -2,7 +2,7 @@
 #include "include/lexer.hpp"
 #include "include/token_parser.hpp"
 #include "include/try.hpp"
-#include <memory>
+#include "include/utils.hpp"
 
 namespace {
     auto parse_comma = [](TokenParser& parser) { return parser.expect(TokenType::COMMA); };
@@ -68,7 +68,7 @@ auto parse_expression_funcall(Expression& expr, TokenParser& parser) -> bool {
         TRY(parser.expect(TokenType::RPAREN));
         expr = Expression {
             .variant = expr::FunctionCall {
-                .fun = std::make_unique<Expression>(std::move(expr)),
+                .fun = unique_ptr_wrap(std::move(expr)),
                 .args = std::move(args),
             }
         };
@@ -81,7 +81,7 @@ auto parse_expression_deref(Expression& expr, TokenParser& parser) -> bool {
         parser.advance(2);
         expr = Expression {
             .variant = expr::Deref {
-                .next = std::make_unique<Expression>(std::move(expr))
+                .next = unique_ptr_wrap(std::move(expr))
             }
         };
         return true;
@@ -109,13 +109,13 @@ auto parse_expression_unary(TokenParser& parser) -> std::optional<Expression> {
     if (parser.advance_if_match(TokenType::AMPERSAND)) {
         return Expression {
             .variant = expr::AddrOf {
-                .next = std::make_unique<Expression>(TRY(parse_expression_unary(parser)))
+                .next = unique_ptr_wrap(TRY(parse_expression_unary(parser)))
             }
         };
     } else if (parser.advance_if_match(TokenType::MINUS)) {
         return Expression {
             .variant = expr::Unary {
-                .next = std::make_unique<Expression>(TRY(parse_expression_unary(parser))),
+                .next = unique_ptr_wrap(TRY(parse_expression_unary(parser))),
                 .type = expr::Unary::MINUS
             }
         };
@@ -133,8 +133,8 @@ auto parse_expression_term(TokenParser& parser) -> std::optional<Expression> {
             expr::Binary::ADD : expr::Binary::SUB;
         expr = Expression {
             .variant = expr::Binary {
-                .a = std::make_unique<Expression>(std::move(expr)),
-                .b = std::make_unique<Expression>(TRY(parse_expression_unary(parser))),
+                .a = unique_ptr_wrap(std::move(expr)),
+                .b = unique_ptr_wrap(TRY(parse_expression_unary(parser))),
                 .type = bin_type
             }
         };
@@ -148,7 +148,7 @@ auto parse_expression_as(TokenParser& parser) -> std::optional<Expression> {
     while (parser.advance_if_match(TokenType::AS)) {
         expr = Expression {
             .variant = expr::As {
-                .next = std::make_unique<Expression>(std::move(expr)),
+                .next = unique_ptr_wrap(std::move(expr)),
                 .type = TRY(parse_type(parser))
             }
         };
@@ -164,13 +164,13 @@ auto parse_type(TokenParser& parser) -> std::optional<Type> {
     if (parser.advance_if_match(TokenType::AMPERSAND)) {
         return Type {
             .variant = type::Reference {
-                .next = std::make_unique<Type>(TRY(parse_type(parser)))
+                .next = unique_ptr_wrap(TRY(parse_type(parser)))
             }
         };
     } else if (parser.advance_if_match(TokenType::STAR)) {
         return Type {
             .variant = type::Pointer {
-                .next = std::make_unique<Type>(TRY(parse_type(parser)))
+                .next = unique_ptr_wrap(TRY(parse_type(parser)))
             }
         };
     } else if (parser.advance_if_match(TokenType::FUNCTION)) {
@@ -182,7 +182,7 @@ auto parse_type(TokenParser& parser) -> std::optional<Type> {
         return Type {
             .variant = type::Function {
                 .parameter_types = std::move(params),
-                .return_type = std::make_unique<Type>(std::move(ret_type)),
+                .return_type = unique_ptr_wrap(std::move(ret_type)),
             }
         };
     } else {
