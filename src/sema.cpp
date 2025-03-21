@@ -472,7 +472,7 @@ namespace sema {
             auto& var_decl = statement.get_variable_decl();
             auto& var = frame.push_symbol(Symbol{
                 .type = ref(TRY(table.lookup(var_decl.type))),
-                .identifier = var_decl.iden,
+                .identifier = var_decl.identifier,
                 .variant = symb::Variable{},
             }, table);
             if (var_decl.value) {

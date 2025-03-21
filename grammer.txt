@@ -1,22 +1,24 @@
-program = (';' | function)*
+program = (';' | function | declaration)*
 function = "fn" IDEN "(" (IDEN ":" type ("," IDEN ":" type)*)? ")" ":" type "{" statement "}";
-statement = return | assignment | declaration;
-assignment = IDEN "=" expr;
-return = "return" expr;
-declaration = IDEN ":" type ("=" expr)?;
+statement = return
+    | assignment
+    | declaration
+    | expr ";"
+    | "{" statement* "}"
+    | ";";
+assignment = IDEN "=" expr ";";
+return = "return" expr ";";
+declaration = IDEN ":" type ("=" expr)? ";";
 type =  "*" type
         | "&" type
         | IDEN;
-expr = INTEGER
-    | IDEN
-    | "&" expr
-    | expr (".*")*;
-    | "(" expr ")";
+        | "fn" "(" (type ("," type)*)? ")" ":" type
+expr = as_exor
 as_expr = term_expr ("as" type)*;
-term_expr = unary_expr ("-" unary_expr)*;
-unary_expr = ("&"|"-") deref_expr
-            | deref_expr;
-deref_expr = primary_expr (".*")*;
+term_expr = unary_expr (("-"|"+") unary_expr)*;
+unary_expr = ("&"|"-") postfix_expr
+            | postfix_expr;
+postfix_expr = primary_expr (".*" | "(" (expr ("," expr)*)? ")")*;
 primary_expr = INTEGER
     | IDEN
     | "(" expr ")";

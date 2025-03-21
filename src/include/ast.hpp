@@ -197,7 +197,7 @@ namespace ast {
         }
     };
     struct Variable {
-        Identifier iden;
+        Identifier identifier;
         Type type;
         std::optional<Expression> value;
     };

@@ -203,7 +203,7 @@ auto parse_variable_declaration(TokenParser& parser) -> std::optional<Variable> 
         expr = TRY(parse_expression(parser));
     }
     return Variable {
-        .iden = std::move(iden),
+        .identifier = std::move(iden),
         .type = std::move(type),
         .value = std::move(expr),
     };
@@ -217,7 +217,7 @@ auto parse_function_param(TokenParser& parser) -> std::optional<FunctionParamete
             return std::nullopt;
         }
         return FunctionParameter {
-            .iden = std::move(decl->iden),
+            .iden = std::move(decl->identifier),
             .type = std::move(decl->type)
         };
     }
