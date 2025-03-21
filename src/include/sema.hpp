@@ -385,6 +385,24 @@ namespace sema {
         ref<Type> type;
         ast::Identifier identifier;
         std::variant<symb::Variable, symb::Constant> variant;
+        bool is_variable() const {
+            return std::holds_alternative<symb::Variable>(variant);
+        }
+        bool is_constant() const {
+            return std::holds_alternative<symb::Constant>(variant);
+        }
+        symb::Variable& get_variable() {
+            return std::get<symb::Variable>(variant);
+        }
+        const symb::Variable& get_variable() const {
+            return std::get<symb::Variable>(variant);
+        }
+        symb::Constant& get_constant() {
+            return std::get<symb::Constant>(variant);
+        }
+        const symb::Constant& get_constant() const {
+            return std::get<symb::Constant>(variant);
+        }
     };
 
     namespace stmt {
