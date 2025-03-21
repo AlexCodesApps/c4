@@ -1,6 +1,7 @@
 #pragma once
 #include "ast.hpp"
 #include "debug.hpp"
+#include "numbers.hpp"
 #include "utils.hpp"
 #include <cassert>
 #include <cmath>
@@ -325,6 +326,8 @@ namespace sema {
     };
     struct Statement;
     struct Function;
+    struct Symbol;
+
     struct Frame {
         std::vector<std::unique_ptr<Frame>> frames;
         std::vector<std::unique_ptr<Variable>> parameters;
@@ -337,6 +340,51 @@ namespace sema {
         Variable& push_variable(Variable new_var, TypeTable& table);
         Frame& new_child();
         void push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table);
+    };
+    namespace symb {
+        struct Variable {
+            usize offset;
+        };
+        namespace cnst {
+            struct Integer {
+            private:
+                union { u32 u; i32 i; };
+                u8 tag;
+            public:
+                explicit Integer(u32 u) : u(u), tag(0) {}
+                explicit Integer(i32 i) : i(i), tag(1) {}
+                bool is_unsigned() const { return tag == 0; }
+                bool is_signed() const  { return tag == 1; }
+                u32& get_unsigned() {
+                    assert(is_unsigned());
+                    return u;
+                }
+                const u32& get_unsigned() const {
+                    assert(is_unsigned());
+                    return u;
+                }
+                i32& get_signed() {
+                    assert(is_signed());
+                    return i;
+                }
+                const i32& get_signed() const {
+                    assert(is_signed());
+                    return i;
+                }
+            };
+            struct Function {
+                Frame frame;
+            };
+        }
+        struct Constant {
+            std::variant<cnst::Integer, cnst::Function> variant;
+        };
+    }
+
+    struct Symbol {
+        ref<Type> type;
+        ast::Identifier identifier;
+        std::variant<symb::Variable, symb::Constant> variant;
     };
 
     namespace stmt {
