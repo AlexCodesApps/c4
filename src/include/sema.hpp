@@ -320,6 +320,7 @@ namespace sema {
             return std::get<expr::FunctionCall>(variant);
         }
     };
+
     struct Statement;
     struct Symbol;
 
@@ -335,78 +336,88 @@ namespace sema {
         Frame& new_child();
         void push_function_args(const type::Function& function, const ast::Function& ast, TypeTable& table);
     };
+
     namespace symb {
-        struct Variable {
+        struct Base {
             ref<Type> type;
             ast::Identifier identifier;
-            usize offset;
+            Base(ref<Type> type, ast::Identifier identifier)
+            : type(type), identifier(std::move(identifier)) {}
+            struct Init {
+                ref<Type> type;
+                ast::Identifier identifier;
+            };
+            Base(Init init)
+            : type(init.type), identifier(std::move(init.identifier)) {}
         };
-        struct Parameter {
-            ref<Type> type;
-            ast::Identifier identifier;
+        struct Variable : Base {
+            struct Init {
+                ref<Type> type;
+                ast::Identifier identifier;
+                usize offset;
+            };
+            usize offset;
+            Variable(Init init)
+            : Base(init.type, init.identifier), offset(init.offset)
+            {}
+        };
+        struct Parameter : Base {
+            using Base::Base;
         };
         namespace cnst {
-            struct Integer {
-            private:
-                union { u32 u; i32 i; };
-                u8 tag;
-            public:
-                explicit Integer(u32 u) : u(u), tag(0) {}
-                explicit Integer(i32 i) : i(i), tag(1) {}
-                bool is_unsigned() const { return tag == 0; }
-                bool is_signed() const  { return tag == 1; }
-                u32& get_unsigned() {
-                    assert(is_unsigned());
-                    return u;
-                }
-                const u32& get_unsigned() const {
-                    assert(is_unsigned());
-                    return u;
-                }
-                i32& get_signed() {
-                    assert(is_signed());
-                    return i;
-                }
-                const i32& get_signed() const {
-                    assert(is_signed());
-                    return i;
-                }
+            struct Literal : Base {
+                struct Init {
+                    ref<Type> type;
+                    ast::Identifier identifier;
+                    sema::Literal literal;
+                };
+                sema::Literal literal;
+                Literal(Init init)
+                : Base(init.type, std::move(init.identifier)), literal(std::move(init.literal)) {}
             };
-            struct Function {
+            struct Function : Base {
+                struct Init {
+                    ref<Type> type;
+                    ast::Identifier identifier;
+                    Frame frame;
+                };
                 Frame frame;
+                Function(Init init);
             };
-            struct UnImplemented {};
+            struct UnImplemented : Base {
+                using Base::Base;
+            };
         }
-        struct Constant {
-            ref<Type> type;
-            ast::Identifier identifier;
-            std::variant<cnst::Integer, cnst::Function, cnst::UnImplemented> variant;
-            bool is_integer() const {
-                return std::holds_alternative<cnst::Integer>(variant);
+        class Constant : public poly_variant<Base, cnst::Literal, cnst::Function, cnst::UnImplemented> {
+            using BaseType = poly_variant<Base, cnst::Literal, cnst::Function, cnst::UnImplemented>;
+        public:
+            using BaseType::BaseType;
+            bool is_literal() const {
+                return std::holds_alternative<cnst::Literal>(*this);
             }
             bool is_function() const {
-                return std::holds_alternative<cnst::Function>(variant);
+                return std::holds_alternative<cnst::Function>(*this);
             }
             bool is_unimplemented() const {
-                return std::holds_alternative<cnst::UnImplemented>(variant);
+                return std::holds_alternative<cnst::UnImplemented>(*this);
             }
-            cnst::Integer& get_integer() {
-                return std::get<cnst::Integer>(variant);
+            cnst::Literal& get_literal() {
+                return std::get<cnst::Literal>(*this);
             }
-            const cnst::Integer& get_integer() const {
-                return std::get<cnst::Integer>(variant);
+            const cnst::Literal& get_literal() const {
+                return std::get<cnst::Literal>(*this);
             }
             cnst::Function& get_function() {
-                return std::get<cnst::Function>(variant);
+                return std::get<cnst::Function>(*this);
             }
             const cnst::Function& get_function() const {
-                return std::get<cnst::Function>(variant);
+                return std::get<cnst::Function>(*this);
             }
         };
     }
 
     struct Symbol {
-        std::variant<symb::Variable, symb::Constant, symb::Parameter> variant;
+        poly_variant<symb::Base, symb::Variable, symb::Constant, symb::Parameter> variant;
         bool is_variable() const {
             return std::holds_alternative<symb::Variable>(variant);
         }
@@ -429,24 +440,16 @@ namespace sema {
             return std::get<symb::Constant>(variant);
         }
         Type& get_type() {
-            return std::visit([](auto& variant) -> Type& {
-                return *variant.type;
-            }, variant);
+            return *variant->type;
         }
         const Type& get_type() const {
-            return std::visit([](auto& variant) -> Type& {
-                return *variant.type;
-            }, variant);
+            return *variant->type;
         }
         ast::Identifier& get_identifier() {
-            return std::visit([](auto& variant) -> ast::Identifier& {
-                return variant.identifier;
-            }, variant);
+            return variant->identifier;
         }
         const ast::Identifier& get_identifier() const {
-            return std::visit([](auto& variant) -> const ast::Identifier& {
-                return variant.identifier;
-            }, variant);
+            return variant->identifier;
         }
     };
 

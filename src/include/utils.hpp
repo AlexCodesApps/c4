@@ -4,6 +4,7 @@
 #include <memory>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 constexpr inline bool is_alpha(char c) {
     return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z');
@@ -78,3 +79,57 @@ auto unique_ptr_wrap(T&& v) {
     using RT = std::remove_cvref_t<T>;
     return std::make_unique<RT>(std::forward<T>(v));
 }
+
+template <typename T, typename Base>
+concept poly_variant_of = requires { typename T::poly_variant_tag; } && std::is_same_v<Base, typename T::base_type>;
+
+template <typename Parent, typename ...Children>
+class poly_variant : public std::variant<Parent, Children...> {
+    using __Base = std::variant<Parent, Children...>;
+    class visitor {
+        template <poly_variant_of<__Base> T>
+        constexpr auto& operator()(T& value) const {
+            return value.get_base();
+        }
+        template <poly_variant_of<__Base> T>
+        constexpr auto&& operator()(T&& value) const {
+            return std::move(value.get_base());
+        }
+        template <poly_variant_of<__Base> T>
+        constexpr const auto& operator()(const T& value) const {
+            return value.get_base();
+        }
+        template <std::derived_from<__Base> T>
+        constexpr decltype(auto) operator()(T&& value) {
+            return std::forward<T>(value);
+        }
+    };
+public:
+    using __Base::__Base;
+    using base_type = Parent;
+    struct poly_variant_tag {};
+    Parent& get_base() & {
+        return std::visit(visitor{}, *this);
+    }
+    Parent&& get_base() && {
+        return std::visit(visitor{}, *this);
+    }
+    const Parent& get_base() const& {
+        return std::visit(visitor{}, *this);
+    }
+    Parent& operator*() & {
+        return get_base();
+    }
+    Parent&& operator*() && {
+        return std::move(get_base());
+    }
+    const Parent& operator*() const& {
+        return std::visit(get_base());
+    }
+    Parent* operator->() {
+        return &get_base();
+    }
+    const Parent* operator->() const {
+        return &get_base();
+    }
+};

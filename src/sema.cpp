@@ -256,10 +256,10 @@ namespace sema {
     void Frame::push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table) {
         for (auto [type, ast] : std::views::zip(function.parameters, ast.args)) {
             push_symbol(Symbol {
-                .variant = symb::Parameter{
+                .variant = symb::Parameter({
                     .type = ref(table.get_lvalue_to(*type)),
                     .identifier = ast.iden.value_or(""),
-                },
+                }),
             }, table);
         }
     }
@@ -473,10 +473,10 @@ namespace sema {
         } else if (statement.is_variable_decl()) {
             auto& var_decl = statement.get_variable_decl();
             auto& var = frame.push_symbol(Symbol{
-                .variant = symb::Variable{
+                .variant = symb::Variable({
                     .type = ref(TRY(table.lookup(var_decl.type))),
                     .identifier = var_decl.identifier,
-                },
+                }),
             }, table);
             if (var_decl.value) {
                 output.push_back(Statement {
@@ -531,9 +531,10 @@ namespace sema {
         auto& type = table.types.get_function_to(return_type, parameters);
         return Symbol {
             .variant = symb::Constant {
-                .type = ref(return_type),
-                .identifier = function.iden,
-                .variant = symb::cnst::UnImplemented{},
+                symb::cnst::UnImplemented({
+                    .type = ref(return_type),
+                    .identifier = function.iden,
+                })
             }
         };
     }
@@ -541,18 +542,16 @@ namespace sema {
     auto parse_constant_declaration(const ast::Variable& variable, SymbolTable& table) -> std::optional<Symbol> {
         return Symbol {
             .variant = symb::Constant {
-                .type = ref(TRY(table.types.lookup(variable.type))),
-                .identifier = variable.identifier,
-                .variant = symb::cnst::UnImplemented {}
+                symb::cnst::UnImplemented ({
+                    .type = ref(TRY(table.types.lookup(variable.type))),
+                    .identifier = variable.identifier,
+                })
             }
         };
     }
 
-    auto parse_function_implementation(symb::Constant& function, ast::Function& ast_fun, SymbolTable& table)
+    auto parse_function_implementation(symb::cnst::Function& function, ast::Function& ast_fun, SymbolTable& table)
     -> std::optional<std::monostate> {
-        if (!function.is_function()) {
-            return std::nullopt;
-        }
         auto& type = function.type->get_function();
         Frame new_frame {
             .type = Frame::FUNCTION_BASE,
@@ -561,9 +560,11 @@ namespace sema {
         };
         new_frame.push_function_args(type, ast_fun, table.types);
         new_frame.statements = TRY(parse_statements(ast_fun.body, table.types, type, new_frame));
-        function.variant = symb::cnst::Function {
+        function = symb::cnst::Function ({
+            .type = function.type,
+            .identifier = std::move(function.identifier),
             .frame = std::move(new_frame),
-        };
+        });
         return std::monostate{};
     }
 
@@ -600,8 +601,12 @@ namespace sema {
         }
         for (auto& function : program.functions) {
             auto& symbol = TRY(table.global_frame.lookup(function.iden));
-            parse_function_implementation(symbol.get_constant(), function, table);
+            parse_function_implementation(symbol.get_constant().get_function(), function, table);
         }
         return table;
     }
+
+    symb::cnst::Function::Function(Init init)
+    : Base(init.type, std::move(init.identifier)), frame(std::move(init.frame))
+    {}
 }
