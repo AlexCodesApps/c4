@@ -4,8 +4,10 @@
 #include <print>
 #include <source_location>
 #define DEBUG(...) __VA_ARGS__
+#define RELEASE(...)
 #else
 #define DEBUG(...)
+#define RELEASE(...) __VA_ARGS__
 #endif
 DEBUG (
     namespace _detail {

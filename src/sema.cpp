@@ -210,7 +210,7 @@ namespace sema {
 
     Symbol * Frame::lookup(const ast::Identifier& iden) {
         for (auto& var : std::views::reverse(symbols)) {
-            if (var->identifier == iden) {
+            if (var->get_identifier() == iden) {
                 return var.get();
             }
         }
@@ -224,7 +224,7 @@ namespace sema {
         if (symbol.is_variable()) {
             symbol.get_variable().offset = scope_level;
         }
-        symbol.type = ref(table.get_lvalue_to(*symbol.type));
+        symbol.get_type() = table.get_lvalue_to(symbol.get_type());
         return *symbols.emplace_back(unique_ptr_wrap(std::move(symbol)));
     }
 
@@ -255,9 +255,10 @@ namespace sema {
     void Frame::push_function_args(const FunctionType& function, const ast::Function& ast, TypeTable& table) {
         for (auto [type, ast] : std::views::zip(function.parameters, ast.args)) {
             push_symbol(Symbol {
-                .type = ref(table.get_lvalue_to(*type)),
-                .identifier = ast.iden.value_or(""),
-                .variant = symb::Parameter{},
+                .variant = symb::Parameter{
+                    .type = ref(table.get_lvalue_to(*type)),
+                    .identifier = ast.iden.value_or(""),
+                },
             }, table);
         }
     }
@@ -309,7 +310,7 @@ namespace sema {
                 .variant = expr::Symbol {
                     .var = ref(var)
                 },
-                .type = var.type,
+                .type = ref(var.get_type()),
             };
         }
         if (expr.is_addr_of()) {
@@ -471,9 +472,10 @@ namespace sema {
         } else if (statement.is_variable_decl()) {
             auto& var_decl = statement.get_variable_decl();
             auto& var = frame.push_symbol(Symbol{
-                .type = ref(TRY(table.lookup(var_decl.type))),
-                .identifier = var_decl.identifier,
-                .variant = symb::Variable{},
+                .variant = symb::Variable{
+                    .type = ref(TRY(table.lookup(var_decl.type))),
+                    .identifier = var_decl.identifier,
+                },
             }, table);
             if (var_decl.value) {
                 output.push_back(Statement {
@@ -482,11 +484,11 @@ namespace sema {
                                 .variant = expr::Symbol {
                                 .var = ref(var)
                             },
-                            .type = var.type,
+                            .type = ref(var.get_type()),
                         },
                         .value = TRY(parse_expression(*var_decl.value, table, frame)
                             .and_then([&](Expression expr) {
-                                return type_coerce(std::move(expr), var.type->deref_lvalue());
+                                return type_coerce(std::move(expr), var.get_type().deref_lvalue());
                             }))
                     }
                 });
@@ -519,29 +521,39 @@ namespace sema {
         return output;
     }
 
-    auto parse_function(ast::Function& function, SymbolTable& table) -> std::optional<Symbol> {
+    auto parse_function_declaration(ast::Function& function, SymbolTable& table) -> std::optional<Symbol> {
         auto& return_type = TRY(table.types.lookup(function.return_type));
         std::vector<ref<Type>> parameters;
         for (auto& arg : function.args) {
             parameters.push_back(ref(TRY(table.types.lookup(arg.type))));
         }
         auto& type = table.types.get_function_to(return_type, parameters);
+        return Symbol {
+            .variant = symb::Constant {
+                .type = ref(return_type),
+                .identifier = function.iden,
+                .variant = symb::cnst::UnImplemented{},
+            }
+        };
+    }
+
+    auto parse_function_implementation(symb::Constant& function, ast::Function& ast_fun, SymbolTable& table)
+    -> std::optional<std::monostate> {
+        if (!function.is_function()) {
+            return std::nullopt;
+        }
+        auto& type = function.type->get_function();
         Frame new_frame {
             .type = Frame::FUNCTION_BASE,
             .parent = &table.global_frame,
             .scope_level = 1,
         };
-        new_frame.push_function_args(type.get_function(), function, table.types);
-        new_frame.statements = TRY(parse_statements(function.body, table.types, type.get_function(), new_frame));
-        return Symbol {
-            .type = ref(type),
-            .identifier = function.iden,
-            .variant = symb::Constant {
-                .variant = symb::cnst::Function {
-                    .frame = std::move(new_frame),
-                }
-            }
+        new_frame.push_function_args(type, ast_fun, table.types);
+        new_frame.statements = TRY(parse_statements(ast_fun.body, table.types, type, new_frame));
+        function.variant = symb::cnst::Function {
+            .frame = std::move(new_frame),
         };
+        return std::monostate{};
     }
 
     auto parse(ast::Program& program) -> std::optional<SymbolTable> {
@@ -551,9 +563,15 @@ namespace sema {
                 .parent = nullptr,
             }
         };
-        for (auto& function : program) {
-            auto new_symbol = TRY(parse_function(function, table));
+        for (auto& function : program.functions) {
+            auto new_symbol = TRY(parse_function_declaration(function, table));
             table.global_frame.push_symbol(std::move(new_symbol), table.types);
+        }
+        for (auto& variable : program.variables) {
+        }
+        for (auto& function : program.functions) {
+            auto& symbol = TRY(table.global_frame.lookup(function.iden));
+            parse_function_implementation(symbol.get_constant(), function, table);
         }
         return table;
     }

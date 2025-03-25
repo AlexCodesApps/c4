@@ -80,12 +80,12 @@ std::string_view value_type_single(ValueType type) {
 
 std::string sema_symbol_to_string(const sema::Symbol& symbol) {
     if (symbol.is_constant()) {
-        return std::format("${}", symbol.identifier);
+        return std::format("${}", symbol.get_identifier());
     } else if (symbol.is_parameter()) {
-        return std::format("%.v_{}", symbol.identifier);
+        return std::format("%.v_{}", symbol.get_identifier());
     } else if (symbol.is_variable()) {
         auto& var = symbol.get_variable();
-        return std::format("%.v{}_{}", var.offset, symbol.identifier);
+        return std::format("%.v{}_{}", var.offset, symbol.get_identifier());
     }
     std::unreachable();
 }
@@ -211,7 +211,7 @@ void gen_expression(std::ostream& output, sema::Expression& expr, Context& conte
                 auto str = std::format("copy {}", sema_symbol_to_string(sema_var));
                 assign(output, target.name, str, ValueType::LONG);
             } else if (intent == ExpressionIntent::VALUE) {
-                auto& type = sema_var.type->deref_lvalue();
+                auto& type = sema_var.get_type().deref_lvalue();
                 load(output, var, sema_symbol_to_string(sema_var), sema_type_to_type(type));
             } else {
                 std::unreachable();
@@ -305,9 +305,9 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
     }
 }
 
-void gen_function(std::ostream& output, sema::Symbol& symbol) {
-    assert(symbol.is_constant() && symbol.get_constant().is_function());
-    auto& function = symbol.get_constant().get_function();
+void gen_function(std::ostream& output, sema::symb::Constant& symbol) {
+    assert(symbol.is_function());
+    auto& function = symbol.get_function();
     auto& type = symbol.type->deref_lvalue().get_function();
     std::print(output, "export function");
     if (!type.return_type->is_void()) {
@@ -316,18 +316,18 @@ void gen_function(std::ostream& output, sema::Symbol& symbol) {
     std::print(output, " ${} (", symbol.identifier);
     for (auto& symbol : function.frame.symbols) {
         if (!symbol->is_parameter()) break;
-        std::print(output, "{} %.p{}, ", value_type_double(sema_type_to_type(symbol->type->deref_lvalue())), symbol->identifier);
+        std::print(output, "{} %.p{}, ", value_type_double(sema_type_to_type(symbol->get_type().deref_lvalue())), symbol->get_identifier());
     }
     std::println(output, ") {{\n"
                        "@start");
     for (auto& symbol : function.frame.symbols) {
-        if (symbol->identifier.empty()) {
+        if (symbol->get_identifier().empty()) {
             continue;
         }
-        auto& type = symbol->type->deref_lvalue();
+        auto& type = symbol->get_type().deref_lvalue();
         assign(output, sema_symbol_to_string(*symbol), std::format("alloc{} {}", type.alignment(), type.size()), ValueType::LONG);
         if (symbol->is_parameter()) {
-            store(output, sema_symbol_to_string(*symbol), std::format("%.p{}", symbol->identifier), sema_type_to_type(type));
+            store(output, sema_symbol_to_string(*symbol), std::format("%.p{}", symbol->get_identifier()), sema_type_to_type(type));
         }
     }
     Context context;
@@ -342,7 +342,7 @@ void gen_function(std::ostream& output, sema::Symbol& symbol) {
 
 void gen(std::ostream& output, sema::SymbolTable& table) {
     for (auto& symbol : table.global_frame.symbols) {
-        gen_function(output, *symbol);
+        gen_function(output, symbol->get_constant());
     }
 }
 

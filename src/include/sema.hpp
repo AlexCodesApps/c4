@@ -337,9 +337,14 @@ namespace sema {
     };
     namespace symb {
         struct Variable {
+            ref<Type> type;
+            ast::Identifier identifier;
             usize offset;
         };
-        struct Parameter {};
+        struct Parameter {
+            ref<Type> type;
+            ast::Identifier identifier;
+        };
         namespace cnst {
             struct Integer {
             private:
@@ -370,14 +375,20 @@ namespace sema {
             struct Function {
                 Frame frame;
             };
+            struct UnImplemented {};
         }
         struct Constant {
-            std::variant<cnst::Integer, cnst::Function> variant;
+            ref<Type> type;
+            ast::Identifier identifier;
+            std::variant<cnst::Integer, cnst::Function, cnst::UnImplemented> variant;
             bool is_integer() const {
                 return std::holds_alternative<cnst::Integer>(variant);
             }
             bool is_function() const {
                 return std::holds_alternative<cnst::Function>(variant);
+            }
+            bool is_unimplemented() const {
+                return std::holds_alternative<cnst::UnImplemented>(variant);
             }
             cnst::Integer& get_integer() {
                 return std::get<cnst::Integer>(variant);
@@ -395,8 +406,6 @@ namespace sema {
     }
 
     struct Symbol {
-        ref<Type> type;
-        ast::Identifier identifier;
         std::variant<symb::Variable, symb::Constant, symb::Parameter> variant;
         bool is_variable() const {
             return std::holds_alternative<symb::Variable>(variant);
@@ -418,6 +427,26 @@ namespace sema {
         }
         const symb::Constant& get_constant() const {
             return std::get<symb::Constant>(variant);
+        }
+        Type& get_type() {
+            return std::visit([](auto& variant) -> Type& {
+                return *variant.type;
+            }, variant);
+        }
+        const Type& get_type() const {
+            return std::visit([](auto& variant) -> Type& {
+                return *variant.type;
+            }, variant);
+        }
+        ast::Identifier& get_identifier() {
+            return std::visit([](auto& variant) -> ast::Identifier& {
+                return variant.identifier;
+            }, variant);
+        }
+        const ast::Identifier& get_identifier() const {
+            return std::visit([](auto& variant) -> const ast::Identifier& {
+                return variant.identifier;
+            }, variant);
         }
     };
 
@@ -477,18 +506,9 @@ namespace sema {
         Frame global_frame;
     };
 
-    std::optional<Expression>
-    parse_expression(ast::Expression& expr, TypeTable& table, Frame& frame);
-
-    std::optional<std::monostate>
-    parse_statement(std::vector<Statement>& output, ast::Statement& statement, TypeTable& type_table, FunctionType& function_type, Frame& frame);
-
     std::optional<std::vector<Statement>>
     parse_statements(
         std::span<ast::Statement> statements, TypeTable& type_table, type::Function& type, Frame& frame);
-
-    std::optional<Symbol>
-    parse_function(ast::Function& function, SymbolTable& table);
 
     std::optional<SymbolTable>
     parse(ast::Program& program);

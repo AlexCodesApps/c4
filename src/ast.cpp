@@ -291,7 +291,22 @@ auto parse_program(TokenParser& parser) -> std::optional<Program> {
     auto eof = [](TokenParser& parser) {
         return parser.eof();
     };
-    return parse_until(parser, parse_function, eof);
+    Program program;
+    auto helper = [&](auto& output, auto functor) {
+        if (auto value = parse_maybe(parser, functor)) {
+            output.push_back(std::move(*value));
+            return true;
+        }
+        return false;
+    };
+    auto var_decl = [](TokenParser& parser) {
+        auto ret = parse_variable_declaration(parser);
+        parser.expect(TokenType::SEMICOLON);
+        return ret;
+    };
+    while (helper(program.functions, parse_function)
+        || helper(program.variables, var_decl)) {}
+    return std::optional(std::move(program));
 }
 
 auto parse(std::span<Token> src) -> std::optional<Program> {

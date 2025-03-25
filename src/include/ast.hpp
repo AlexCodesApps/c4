@@ -272,7 +272,11 @@ namespace ast {
         Type return_type;
         std::vector<Statement> body;
     };
-    using Program = std::vector<Function>;
+    struct Program {
+        std::vector<Function> functions;
+        std::vector<Variable> variables;
+    };
+
     template <typename F>
     auto parse_maybe(TokenParser& parser, F functor)
     -> std::optional<typename decltype(functor(parser))::value_type> {
