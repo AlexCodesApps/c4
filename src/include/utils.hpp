@@ -110,19 +110,19 @@ class poly_variant : public std::variant<Children...> {
     using Base__ = std::variant<Children...>;
     struct Visitor__ {
         template <poly_variant_of<Parent> T>
-        constexpr auto& operator()(T& value) const {
+        constexpr auto& operator()(T& value) const noexcept {
             return value.get_base();
         }
         template <poly_variant_of<Parent> T>
-        constexpr auto&& operator()(T&& value) const {
+        constexpr auto&& operator()(T&& value) const noexcept {
             return std::move(value.get_base());
         }
         template <poly_variant_of<Parent> T>
-        constexpr const auto& operator()(const T& value) const {
+        constexpr const auto& operator()(const T& value) const noexcept {
             return value.get_base();
         }
         template <typename T>
-        constexpr decltype(auto) operator()(T&& value) const {
+        constexpr decltype(auto) operator()(T&& value) const noexcept {
             return static_cast<propogate_qualifiers_t<T, Parent>>(value);
         }
     };
@@ -130,28 +130,28 @@ public:
     using Base__::Base__;
     using base_type = Parent;
     struct poly_variant_tag {};
-    Parent& get_base() & {
+    Parent& get_base() & noexcept {
         return std::visit(Visitor__{}, *this);
     }
-    Parent&& get_base() && {
+    Parent&& get_base() && noexcept {
         return std::visit(Visitor__{}, std::move(*this));
     }
-    const Parent& get_base() const& {
+    const Parent& get_base() const& noexcept {
         return std::visit(Visitor__{}, *this);
     }
-    Parent& operator*() & {
+    Parent& operator*() & noexcept {
         return get_base();
     }
-    Parent&& operator*() && {
+    Parent&& operator*() && noexcept {
         return std::move(get_base());
     }
-    const Parent& operator*() const& {
+    const Parent& operator*() const& noexcept {
         return std::visit(get_base());
     }
-    Parent* operator->() {
+    Parent* operator->() noexcept {
         return &get_base();
     }
-    const Parent* operator->() const {
+    const Parent* operator->() const noexcept {
         return &get_base();
     }
 };
