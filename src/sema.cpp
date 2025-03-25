@@ -6,6 +6,7 @@
 #include <array>
 #include <cassert>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <utility>
 #include <variant>
@@ -263,7 +264,7 @@ namespace sema {
         }
     }
 
-    auto parse_expression(ast::Expression& expr, TypeTable& table, Frame& frame) -> std::optional<Expression> {
+    auto parse_expression(const ast::Expression& expr, TypeTable& table, Frame& frame) -> std::optional<Expression> {
         if (expr.is_literal()) {
             auto& lit = expr.get_literal();
             if (lit.is_integer()) {
@@ -521,7 +522,7 @@ namespace sema {
         return output;
     }
 
-    auto parse_function_declaration(ast::Function& function, SymbolTable& table) -> std::optional<Symbol> {
+    auto parse_function_declaration(const ast::Function& function, SymbolTable& table) -> std::optional<Symbol> {
         auto& return_type = TRY(table.types.lookup(function.return_type));
         std::vector<ref<Type>> parameters;
         for (auto& arg : function.args) {
@@ -533,6 +534,16 @@ namespace sema {
                 .type = ref(return_type),
                 .identifier = function.iden,
                 .variant = symb::cnst::UnImplemented{},
+            }
+        };
+    }
+
+    auto parse_constant_declaration(const ast::Variable& variable, SymbolTable& table) -> std::optional<Symbol> {
+        return Symbol {
+            .variant = symb::Constant {
+                .type = ref(TRY(table.types.lookup(variable.type))),
+                .identifier = variable.identifier,
+                .variant = symb::cnst::UnImplemented {}
             }
         };
     }
@@ -554,6 +565,24 @@ namespace sema {
             .frame = std::move(new_frame),
         };
         return std::monostate{};
+    }
+
+    std::optional<symb::Constant> evaluate_constant_expression(const Expression& expr, SymbolTable& table) {
+        DEBUG_ERROR("unimplemented");
+        std::visit(Overload {
+            [&](const expr::Literal& literal){
+                // TRY(table.global_frame.lookup(literal.));
+            },
+            [](auto&){}
+        }, expr.variant);
+    }
+
+    auto parse_constant_implementation(symb::Constant& constant, const ast::Variable& variable,
+                                        SymbolTable& table)
+    -> std::optional<std::monostate> {
+        auto& ast_expr = TRY(variable.value);
+        auto expr = TRY(parse_expression(ast_expr, table.types, table.global_frame));
+        DEBUG_ERROR("unimplemented");
     }
 
     auto parse(ast::Program& program) -> std::optional<SymbolTable> {
