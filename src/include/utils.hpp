@@ -74,48 +74,70 @@ public:
     // }
 };
 
+
 template <typename T>
 auto unique_ptr_wrap(T&& v) {
     using RT = std::remove_cvref_t<T>;
     return std::make_unique<RT>(std::forward<T>(v));
 }
 
+template <bool Value, template <typename> typename MetaClass, typename T>
+struct apply_metaclass_if {
+    using type = std::conditional_t<Value, MetaClass<T>, T>;
+};
+
+template <bool Value, template <typename> typename MetaClass, typename T>
+using apply_metaclass_if_t = apply_metaclass_if<Value, MetaClass, T>::type;
+
+template <typename From, typename To>
+struct propogate_qualifiers
+{
+    using FromWithoutRef = std::remove_reference_t<From>;
+    using type = apply_metaclass_if_t<std::is_rvalue_reference_v<From>, std::add_rvalue_reference_t,
+                    apply_metaclass_if_t<std::is_lvalue_reference_v<From>, std::add_lvalue_reference_t,
+                        apply_metaclass_if_t<std::is_const_v<FromWithoutRef>, std::add_const_t,
+                            apply_metaclass_if_t<std::is_volatile_v<FromWithoutRef>, std::add_volatile_t,
+                                std::remove_cvref_t<To>>>>>;
+};
+template <typename From, typename To>
+using propogate_qualifiers_t = propogate_qualifiers<From, To>::type;
+
 template <typename T, typename Base>
 concept poly_variant_of = requires { typename T::poly_variant_tag; } && std::is_same_v<Base, typename T::base_type>;
 
 template <typename Parent, typename ...Children>
-class poly_variant : public std::variant<Parent, Children...> {
-    using __Base = std::variant<Parent, Children...>;
-    class visitor {
-        template <poly_variant_of<__Base> T>
+class poly_variant : public std::variant<Children...> {
+    using Base__ = std::variant<Children...>;
+    struct Visitor__ {
+        template <poly_variant_of<Parent> T>
         constexpr auto& operator()(T& value) const {
             return value.get_base();
         }
-        template <poly_variant_of<__Base> T>
+        template <poly_variant_of<Parent> T>
         constexpr auto&& operator()(T&& value) const {
             return std::move(value.get_base());
         }
-        template <poly_variant_of<__Base> T>
+        template <poly_variant_of<Parent> T>
         constexpr const auto& operator()(const T& value) const {
             return value.get_base();
         }
-        template <std::derived_from<__Base> T>
-        constexpr decltype(auto) operator()(T&& value) {
-            return std::forward<T>(value);
+        template <typename T>
+        constexpr decltype(auto) operator()(T&& value) const {
+            return static_cast<propogate_qualifiers_t<T, Parent>>(value);
         }
     };
 public:
-    using __Base::__Base;
+    using Base__::Base__;
     using base_type = Parent;
     struct poly_variant_tag {};
     Parent& get_base() & {
-        return std::visit(visitor{}, *this);
+        return std::visit(Visitor__{}, *this);
     }
     Parent&& get_base() && {
-        return std::visit(visitor{}, *this);
+        return std::visit(Visitor__{}, std::move(*this));
     }
     const Parent& get_base() const& {
-        return std::visit(visitor{}, *this);
+        return std::visit(Visitor__{}, *this);
     }
     Parent& operator*() & {
         return get_base();

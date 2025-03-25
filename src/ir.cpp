@@ -308,12 +308,12 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
 void gen_function(std::ostream& output, sema::symb::Constant& symbol) {
     assert(symbol.is_function());
     auto& function = symbol.get_function();
-    auto& type = symbol.type->deref_lvalue().get_function();
+    auto& type = symbol->type->deref_lvalue().get_function();
     std::print(output, "export function");
     if (!type.return_type->is_void()) {
         std::print(output, " {}", value_type_double(sema_type_to_type(*type.return_type)));
     }
-    std::print(output, " ${} (", symbol.identifier);
+    std::print(output, " ${} (", symbol->identifier);
     for (auto& symbol : function.frame.symbols) {
         if (!symbol->is_parameter()) break;
         std::print(output, "{} %.p{}, ", value_type_double(sema_type_to_type(symbol->get_type().deref_lvalue())), symbol->get_identifier());
