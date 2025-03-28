@@ -8,6 +8,8 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <string_view>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -42,6 +44,77 @@ namespace sema {
                 return from.can_be_deref() && to.can_be_deref();
             }
         },
+        Conversion {
+            .type = Conversion::BITCAST,
+            .implicit = false, // unsigned to signed cast of same size and vice versa
+            .validate = [](Type& from, Type& to) {
+                if (!from.is_integer() || !to.is_integer()) {
+                    return false;
+                }
+                auto& ifrom = from.get_integer();
+                auto& ito = to.get_integer();
+                return ifrom.size() == ito.size();
+            }
+        },
+        Conversion {
+            .type = Conversion::ZERO_EXTEND,
+            .implicit = true,
+            .validate = [](Type& from, Type& to) {
+                if (!from.is_integer() || !to.is_integer()) {
+                    return false;
+                }
+                auto& ifrom = from.get_integer();
+                auto& ito = to.get_integer();
+                if (!ito.is_unsigned() || !ifrom.is_unsigned()) {
+                    return false;
+                }
+                if (ito.size() < ifrom.size()) {
+                    return false;
+                }
+                return true;
+            }
+        },
+        Conversion {
+            .type = Conversion::ZERO_EXTEND, // lossy signed to bigger unsigned conv
+            .implicit = false, // for obvious reasons
+            .validate = [](Type& from, Type& to) {
+                if (!from.is_integer() || !to.is_integer()) {
+                    return false;
+                }
+                auto& ifrom = from.get_integer();
+                auto& ito = to.get_integer();
+                if (!ifrom.is_signed() || !ito.is_unsigned()) {
+                    return false;
+                }
+                return ito.size() > ifrom.size();
+            }
+        },
+        Conversion {
+            .type = Conversion::SIGN_EXTEND,
+            .implicit = true,
+            .validate = [](Type& from, Type& to) {
+                if (!from.is_integer() || !to.is_integer()) {
+                    return false;
+                }
+                auto& ito = to.get_integer();
+                auto& ifrom = from.get_integer();
+                if (!ito.is_signed()) {
+                    return false;
+                }
+                if (ito.size() <= ifrom.size()) {
+                    return false;
+                }
+                return true;
+            }
+        },
+        Conversion {
+            .type = Conversion::TRUNCATE,
+            .implicit = false, // lossy cast
+            .validate = [](Type& from, Type& to) {
+                return from.is_integer() && to.is_integer();
+                // the above cases should handle casts to larger integers
+            }
+        },
     });
     ConversionTable conversion_table = {
         .conversions = conversion_array
@@ -68,6 +141,51 @@ namespace sema {
             }
         }
         return nullptr;
+    }
+
+    TypeTable::TypeTable() {
+        assert(IntegerKind::U8 == IntegerKind::BOOL);
+        types_database.resize(4);
+        types_database.emplace_back(
+            std::vector<std::string_view>({"void"}), unique_ptr_wrap(Type{
+                .variant = type::Void{}
+            })
+        );
+        types_database.emplace_back(
+            std::vector<std::string_view>({"i8"}), unique_ptr_wrap(Type{
+                type::Integer { IntegerKind::I8 }
+            })
+        );
+        types_database.emplace_back(
+            std::vector<std::string_view>({"i16"}), unique_ptr_wrap(Type{
+                type::Integer { IntegerKind::I16 }
+            })
+        );
+        types_database.emplace_back(
+            std::vector<std::string_view>({"int", "i32"}), unique_ptr_wrap(Type{
+                type::Integer { IntegerKind::I32 }
+            })
+        );
+        types_database.emplace_back(
+            std::vector<std::string_view>({"isize, i64"}), unique_ptr_wrap(Type{
+                type::Integer{ IntegerKind::I64 }
+            })
+        );
+        types_database.emplace_back(
+            std::vector<std::string_view>({"u8", "bool"}), unique_ptr_wrap(Type{
+                type::Integer{ IntegerKind::U8 }
+            })
+        );
+        types_database.emplace_back(
+            std::vector<std::string_view>({"u32"}), unique_ptr_wrap(Type{
+                type::Integer{ IntegerKind::U32 }
+            })
+        );
+        types_database.emplace_back(
+            std::vector<std::string_view>({"usize, u64"}), unique_ptr_wrap(Type{
+                type::Integer{ IntegerKind::U64 }
+            })
+        );
     }
 
     Type * TypeTable::lookup(const ast::Type& type) {
@@ -187,20 +305,34 @@ namespace sema {
         }).second;
     }
 
-    Type& TypeTable::get_integer() {
-        Type * t = lookup_identifier("int");
+    Type& TypeTable::get_integer(IntegerKind type) {
+        std::array<char, 3> buffer;
+        auto n = std::to_underlying(type);
+        buffer[0] = n < 4 ? 'i' : 'u';
+        u8 l;
+        if (n % 4 == 3) {
+            buffer[1] = '6';
+            buffer[2] = '4';
+            l = 3;
+        } else if (n % 4 == 2) {
+            buffer[1] = '3';
+            buffer[2] = '2';
+            l = 3;
+        } else if (n % 4 == 1) {
+            buffer[1] = '1';
+            buffer[2] = '6';
+            l = 3;
+        } else {
+            buffer[1] = '8';
+            l = 2;
+        }
+        Type * t = lookup_identifier(std::string_view(buffer.data(), l));
         assert(t);
         return *t;
     }
 
     Type& TypeTable::get_void() {
         Type * t = lookup_identifier("void");
-        assert(t);
-        return *t;
-    }
-
-    Type& TypeTable::get_bool() {
-        Type * t = lookup_identifier("bool");
         assert(t);
         return *t;
     }
@@ -231,6 +363,9 @@ namespace sema {
 
     Frame& Frame::new_child() {
         auto new_frame = unique_ptr_wrap(Frame {
+            .children = {},
+            .symbols = {},
+            .statements = {},
             .type = SCOPED,
             .parent = this,
             .scope_level = scope_level + 1,
@@ -264,6 +399,23 @@ namespace sema {
         }
     }
 
+    auto type_coerce(Expression target, Type& type)
+    -> std::optional<Expression> {
+        auto& target_type_deref = target.type->deref_lvalue();
+        auto& type_deref = type.deref_lvalue();
+        if (Type::equal(target_type_deref, type_deref)) {
+            return std::optional{ std::move(target) };
+        }
+        auto& conversion = TRY(conversion_table.validate_implicit(target_type_deref, type_deref));
+        return Expression {
+            .variant = expr::Conversion {
+                .next = unique_ptr_wrap(std::move(target)),
+                .conversion_type = ref(conversion),
+            },
+            .type = ref(type_deref)
+        };
+    }
+
     auto parse_expression(const ast::Expression& expr, TypeTable& table, Frame& frame) -> std::optional<Expression> {
         if (expr.is_literal()) {
             auto& lit = expr.get_literal();
@@ -271,10 +423,11 @@ namespace sema {
                 return Expression {
                     .variant = expr::Literal {
                         .variant = lit::Integer {
-                            .value = lit.get_integer().value
+                            .uvalue = lit.get_integer().value,
+                            .type = IntegerKind::I32,
                         }
                     },
-                    .type = ref(table.get_integer())
+                    .type = ref(table.get_integer(IntegerKind::I32))
                 };
             } else if (lit.is_nullptr()) {
                 return Expression {
@@ -286,20 +439,22 @@ namespace sema {
             } else if (lit.is_true()) {
                 return Expression {
                     .variant = expr::Literal {
-                        .variant = lit::Bool {
-                            .value = true
+                        .variant = lit::Integer {
+                            .uvalue = true,
+                            .type = IntegerKind::BOOL,
                         }
                     },
-                    .type = ref(table.get_bool())
+                    .type = ref(table.get_integer(IntegerKind::BOOL))
                 };
             } else if (lit.is_false()) {
                 return Expression {
                     .variant = expr::Literal {
-                        .variant = lit::Bool {
-                            .value = false
+                        .variant = lit::Integer {
+                            .uvalue = false,
+                            .type = IntegerKind::BOOL,
                         }
                     },
-                    .type = ref(table.get_bool())
+                    .type = ref(table.get_integer(IntegerKind::BOOL))
                 };
             } else {
                 std::unreachable();
@@ -357,7 +512,7 @@ namespace sema {
         if (expr.is_unary()) {
             auto& unary = expr.get_unary();
             auto next = TRY(parse_expression(*unary.next, table, frame));
-            if (next.type->is_void()) {
+            if (!next.type->is_integer()) {
                 std::println(stderr, "invalid type in unary operation");
                 return std::nullopt;
             }
@@ -394,33 +549,28 @@ namespace sema {
         if (expr.is_funcall()) {
             auto& funcall = expr.get_funcall();
             auto fun = TRY(parse_expression(*funcall.fun, table, frame));
-            DEBUG_ERROR("need to flesh out the function type");
-            std::vector<std::unique_ptr<Expression>> out{};
-            for (auto& arg : funcall.args) {
-                out.push_back(
-                    unique_ptr_wrap(TRY(
-                        parse_expression(arg, table, frame))));
+            auto& type = fun.type->get_function();
+            if (funcall.args.size() != type.parameters.size()) {
+                return std::nullopt;
             }
-
+            std::vector<std::unique_ptr<Expression>> out{};
+            for (usize i = 0; i < funcall.args.size(); ++i) {
+                auto& arg = funcall.args[i];
+                auto& atype = type.parameters[i].get();
+                out.push_back(
+                    unique_ptr_wrap(
+                        TRY(type_coerce(
+                            TRY(parse_expression(arg, table, frame)), atype))));
+            }
+            return Expression {
+                .variant = expr::FunctionCall {
+                    .function = unique_ptr_wrap(std::move(fun)),
+                    .args = std::move(out),
+                },
+                .type = type.return_type,
+            };
         }
         std::unreachable();
-    }
-
-    auto type_coerce(Expression target, Type& type)
-    -> std::optional<Expression> {
-        auto& target_type_deref = target.type->deref_lvalue();
-        auto& type_deref = type.deref_lvalue();
-        if (Type::equal(target_type_deref, type_deref)) {
-            return std::move(target);
-        }
-        auto& conversion = TRY(conversion_table.validate_implicit(target_type_deref, type_deref));
-        return Expression {
-            .variant = expr::Conversion {
-                .next = unique_ptr_wrap(std::move(target)),
-                .conversion_type = ref(conversion),
-            },
-            .type = ref(type_deref)
-        };
     }
 
     auto
@@ -432,8 +582,6 @@ namespace sema {
         auto parse_assignment = [&](ast::Expression& target, ast::Expression& value) -> std::optional<std::monostate> {
             auto expr1 = TRY(parse_expression(target, table, frame));
             auto expr2 = TRY(parse_expression(value, table, frame));
-            auto& type1_deref = expr1.type->deref_lvalue();
-            auto& type2_deref = expr2.type->deref_lvalue();
             if (!expr1.type->is_lvalue()) {
                 std::println(stderr, "invalid assignment");
                 return std::nullopt;
@@ -476,6 +624,7 @@ namespace sema {
                 .variant = symb::Variable({
                     .type = ref(TRY(table.lookup(var_decl.type))),
                     .identifier = var_decl.identifier,
+                    .offset = 0,
                 }),
             }, table);
             if (var_decl.value) {
@@ -516,7 +665,6 @@ namespace sema {
     -> std::optional<std::vector<Statement>> {
         std::vector<Statement> output;
         for (auto& statement : statements) {
-            usize size = output.size();
             TRY(parse_statement(output, statement, type_table, function_type, frame));
         }
         return output;
@@ -532,7 +680,7 @@ namespace sema {
         return Symbol {
             .variant = symb::Constant {
                 symb::cnst::UnImplemented({
-                    .type = ref(return_type),
+                    .type = ref(type),
                     .identifier = function.iden,
                 })
             }
@@ -554,6 +702,9 @@ namespace sema {
     -> std::optional<std::monostate> {
         auto& type = function.type->get_function();
         Frame new_frame {
+            .children = {},
+            .symbols = {},
+            .statements = {},
             .type = Frame::FUNCTION_BASE,
             .parent = &table.global_frame,
             .scope_level = 1,
@@ -568,36 +719,130 @@ namespace sema {
         return std::monostate{};
     }
 
-    std::optional<symb::Constant> evaluate_constant_expression(const Expression& expr, SymbolTable& table) {
-        DEBUG_ERROR("unimplemented");
-        std::visit(Overload {
-            [&](const expr::Literal& literal){
-                // TRY(table.global_frame.lookup(literal.));
+    std::optional<Literal> evaluate_constant_expression(const Expression& expr, SymbolTable& table) {
+        auto& type = expr.type.get();
+        if (!type.is_integer()) {
+            return std::nullopt;
+        }
+        auto& itype = type.get_integer();
+        struct IntegerHelper {
+            union {
+                usize u;
+                isize i;
+            };
+            enum Tag : u8 { U, I } tag;
+        };
+        auto helper = [](const Literal& literal) {
+            if (literal.is_nullptr()) {
+                return IntegerHelper { .u = 0, .tag = IntegerHelper::U };
+            } else if (literal.is_integer()) {
+                auto& integer = literal.get_integer();
+                return IntegerHelper {
+                    .u = integer.uvalue,
+                    .tag = (IntegerHelper::Tag)integer.is_signed()
+                };
+            }
+            std::unreachable();
+        };
+        auto value = TRY(std::visit(Overload {
+            [&](const expr::Literal& literal) -> std::optional<IntegerHelper> {
+                return helper(literal);
             },
-            [](auto&){}
-        }, expr.variant);
+            [&](const expr::Symbol& esymbol) -> std::optional<IntegerHelper> {
+                auto& symbol = esymbol.var.get();
+                if (!symbol.get_type().is_integer()) {
+                    return std::nullopt;
+                }
+                auto& lit = symbol.get_constant().get_literal();
+                return helper(lit.literal);
+            },
+            [](const expr::AddrOf&) -> std::optional<IntegerHelper> {
+                return std::nullopt;
+            },
+            [](const expr::Deref&) -> std::optional<IntegerHelper> {
+                return std::nullopt;
+            },
+            [&](const expr::Conversion& conversion) -> std::optional<IntegerHelper> {
+                if (!expr.type->is_integer() || !conversion.next->type->is_integer()) {
+                    return std::nullopt;
+                }
+                return helper(TRY(evaluate_constant_expression(*conversion.next, table)));
+            },
+            [&](const expr::Unary& unary) -> std::optional<IntegerHelper> {
+                switch (unary.type) {
+                case expr::Unary::MINUS:
+                    auto integer = helper(TRY(evaluate_constant_expression(*unary.next, table)));
+                    integer.u = -integer.u;
+                    return integer;
+                    break;
+                }
+                std::unreachable();
+            },
+            [&](const expr::Binary& binary) -> std::optional<IntegerHelper> {
+                auto a = helper(TRY(evaluate_constant_expression(*binary.a, table)));
+                auto b = helper(TRY(evaluate_constant_expression(*binary.b, table)));
+                switch (binary.type) {
+                case expr::Binary::ADD:
+                    return IntegerHelper {
+                        .u = a.u + b.u,
+                        .tag = a.tag,
+                    };
+                    break;
+                case expr::Binary::SUB:
+                    return IntegerHelper {
+                        .u = a.u + b.u,
+                        .tag = a.tag,
+                    };
+                    break;
+                }
+                std::unreachable();
+            },
+            [](const expr::FunctionCall&) -> std::optional<IntegerHelper> {
+                return std::nullopt;
+            },
+        }, expr.variant));
+        return Literal {
+            .variant = lit::Integer {
+                .uvalue = value.u,
+                .type = itype.type,
+            }
+        };
     }
 
     auto parse_constant_implementation(symb::Constant& constant, const ast::Variable& variable,
                                         SymbolTable& table)
     -> std::optional<std::monostate> {
+        (void)constant;
         auto& ast_expr = TRY(variable.value);
         auto expr = TRY(parse_expression(ast_expr, table.types, table.global_frame));
-        DEBUG_ERROR("unimplemented");
+        auto value = TRY(evaluate_constant_expression(expr, table));
+        constant = symb::cnst::Literal({
+            .type = constant->type,
+            .identifier = constant->identifier,
+            .literal = std::move(value),
+        });
+        return std::monostate{};
     }
 
     auto parse(ast::Program& program) -> std::optional<SymbolTable> {
         SymbolTable table = {
             .global_frame = {
+                .children = {},
+                .symbols = {},
+                .statements = {},
                 .type = Frame::GLOBAL,
                 .parent = nullptr,
-            }
+                .scope_level = 0
+            },
+            .types = {},
         };
         for (auto& function : program.functions) {
             auto new_symbol = TRY(parse_function_declaration(function, table));
             table.global_frame.push_symbol(std::move(new_symbol), table.types);
         }
         for (auto& variable : program.variables) {
+            auto& symbol = TRY(table.global_frame.lookup(variable.identifier));
+            parse_constant_implementation(symbol.get_constant(), variable, table);
         }
         for (auto& function : program.functions) {
             auto& symbol = TRY(table.global_frame.lookup(function.iden));

@@ -7,15 +7,32 @@
 #include <cmath>
 #include <memory>
 #include <span>
+#include <utility>
 #include <variant>
 #include <vector>
 
 namespace sema {
+    enum class IntegerKind {
+        U8 = 0, U16 = 1, U32 = 2, U64 = 3, I8 = 4, I16 = 5, I32 = 6, I64 = 7, BOOL = U8,
+    };
     struct Type;
     namespace type {
         struct Void {};
-        struct Integer {};
-        struct Bool {};
+        struct Integer {
+            IntegerKind type;
+            bool is_signed() const {
+                return std::to_underlying(type) >= 4;
+            }
+            bool is_unsigned() const {
+                return std::to_underlying(type) < 4;
+            }
+            usize size() const {
+                return std::pow<usize>(2, std::to_underlying(type) % 4);
+            }
+            usize align() const {
+                return size();
+            }
+        };
         struct Function {
             std::vector<ref<Type>> parameters;
             ref<Type> return_type;
@@ -31,7 +48,7 @@ namespace sema {
         };
     }
     struct Type {
-        std::variant<type::Void, type::Integer, type::Bool,
+        std::variant<type::Void, type::Integer,
             type::Pointer, type::Reference, type::LValue, type::Function> variant;
         bool is_void() const {
             return std::holds_alternative<type::Void>(variant);
@@ -47,9 +64,6 @@ namespace sema {
         }
         bool is_lvalue() const {
             return std::holds_alternative<type::LValue>(variant);
-        }
-        bool is_bool() const {
-            return std::holds_alternative<type::Bool>(variant);
         }
         bool is_function() const {
             return std::holds_alternative<type::Function>(variant);
@@ -99,6 +113,12 @@ namespace sema {
         const type::Function& get_function() const {
             return std::get<type::Function>(variant);
         }
+        type::Integer& get_integer() {
+            return std::get<type::Integer>(variant);
+        }
+        const type::Integer& get_integer() const {
+            return std::get<type::Integer>(variant);
+        }
         usize size() const {
             return std::visit(Overload{
                 [](const type::Void&) { return 0UL; },
@@ -106,8 +126,7 @@ namespace sema {
                 [](const type::Reference&) { return sizeof(void *); },
                 [](const type::LValue&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
                 [](const type::Function&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
-                [](const type::Integer&) { return sizeof(int); },
-                [](const type::Bool&) { return sizeof(bool); },
+                [](const type::Integer& integer) { return integer.size(); },
             }, variant);
         }
         usize alignment() const {
@@ -117,8 +136,7 @@ namespace sema {
                 [](const type::Reference&) { return alignof(void *); },
                 [](const type::LValue&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
                 [](const type::Function&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
-                [](const type::Integer&) { return alignof(int); },
-                [](const type::Bool&) { return alignof(bool); },
+                [](const type::Integer& integer) { return integer.align(); },
             }, variant);
         }
         static bool equal(const Type& a, const Type& b) {
@@ -128,33 +146,16 @@ namespace sema {
     struct TypeTable {
         using pair = std::pair<std::vector<ast::Identifier>, std::unique_ptr<Type>>;
         std::vector<pair> types_database;
-        TypeTable() {
-            types_database.emplace_back(
-                std::vector<std::string_view>({"int", "i32"}), unique_ptr_wrap(Type{
-                    .variant = type::Integer{}
-                })
-            );
-            types_database.emplace_back(
-                std::vector<std::string_view>({"bool"}), unique_ptr_wrap(Type{
-                    .variant = type::Bool{}
-                })
-            );
-            types_database.emplace_back(
-                std::vector<std::string_view>({"void"}), unique_ptr_wrap(Type{
-                    .variant = type::Void{}
-                })
-            );
-        }
+        TypeTable();
         Type * lookup(const ast::Type& type);
         Type * lookup_identifier(const ast::Identifier& iden);
         Type& get_pointer_to(Type& type);
         Type& get_reference_to(Type& type);
         Type& get_lvalue_to(Type& type);
         Type& get_function_to(Type& ret, std::span<ref<Type>> types);
-        Type& get_integer();
+        Type& get_integer(IntegerKind);
         Type& get_void_pointer();
         Type& get_void();
-        Type& get_bool();
     };
     struct Conversion {
         enum {
@@ -178,31 +179,37 @@ namespace sema {
     };
     extern ConversionTable conversion_table;
     using FunctionType = type::Function;
+    struct Expression;
+    struct Symbol;
     namespace lit {
-        struct Bool {
-            bool value;
-        };
         struct Nullptr {};
         struct Integer {
-            usize value;
+            union {
+                usize uvalue;
+                isize ivalue;
+            };
+            IntegerKind type;
+            bool is_signed() const {
+                return std::to_underlying(type) >= 4;
+            }
+            bool is_unsigned() const {
+                return std::to_underlying(type) < 4;
+            }
+            usize size() const {
+                return std::pow<usize>(2, std::to_underlying(type) % 4);
+            }
+            usize align() const {
+                return size();
+            }
         };
     }
     struct Literal {
-        std::variant<lit::Bool, lit::Nullptr, lit::Integer> variant;
-        bool is_bool() const {
-            return std::holds_alternative<lit::Bool>(variant);
-        }
+        std::variant<lit::Nullptr, lit::Integer> variant;
         bool is_nullptr() const {
             return std::holds_alternative<lit::Nullptr>(variant);
         }
         bool is_integer() const {
             return std::holds_alternative<lit::Integer>(variant);
-        }
-        lit::Bool& get_bool() {
-            return std::get<lit::Bool>(variant);
-        }
-        const lit::Bool& get_bool() const {
-            return std::get<lit::Bool>(variant);
         }
         lit::Integer& get_integer() {
             return std::get<lit::Integer>(variant);
@@ -211,8 +218,6 @@ namespace sema {
             return std::get<lit::Integer>(variant);
         }
     };
-    struct Expression;
-    struct Symbol;
     namespace expr {
         using Literal = sema::Literal;
         struct Symbol {
@@ -505,8 +510,8 @@ namespace sema {
     };
 
     struct SymbolTable {
-        TypeTable types;
         Frame global_frame;
+        TypeTable types;
     };
 
     std::optional<std::vector<Statement>>

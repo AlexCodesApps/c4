@@ -80,13 +80,6 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
         }
         ++index;
     };
-    auto match = [&](char c) {
-        if (peek() == c) {
-            advance();
-            return true;
-        }
-        return false;
-    };
     auto iden = [&](std::string_view iden) {
         if (!str.substr(index).starts_with(iden)) {
             return false;
@@ -104,7 +97,8 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
         output.push_back(Token{
             .type = type,
             .source_location = {row, col},
-            .source_string = source_string
+            .source_string = source_string,
+            .integer = 0,
         });
     };
     while (!eof()) {
@@ -213,6 +207,7 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
                     .type = TokenType::IDENTIFIER,
                     .source_location = {srow, scol},
                     .source_string = str.substr(start, count),
+                    .integer = 0,
                 });
             } else {
                 std::print(stderr, "unexpected token '");
@@ -230,6 +225,7 @@ auto lex(std::string_view str) -> std::optional<std::vector<Token>> {
         .type = TokenType::_EOF,
         .source_location = {row, col},
         .source_string = "",
+        .integer = 0,
     });
     return std::optional(std::move(output));
 }

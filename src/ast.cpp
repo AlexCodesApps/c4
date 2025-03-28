@@ -20,9 +20,9 @@ auto parse_identifier(TokenParser& parser) -> std::optional<Identifier> {
 
 auto parse_expression_primary(TokenParser& parser) -> std::optional<Expression> {
     if (parser.advance_if_match(TokenType::LPAREN)) {
-        auto expr = TRY(parse_expression(parser));
+        auto expr = parse_expression(parser);
         parser.expect(TokenType::RPAREN);
-        return std::move(expr);
+        return expr;
     } else if (parser.match(TokenType::INTEGER)) {
         auto& tok = parser.peek_advance();
         return Expression {
@@ -152,7 +152,7 @@ auto parse_expression_as(TokenParser& parser) -> std::optional<Expression> {
             }
         };
     }
-    return std::move(expr);
+    return std::optional{ std::move(expr) };
 }
 
 auto parse_expression(TokenParser& parser) -> std::optional<Expression> {
@@ -241,13 +241,13 @@ auto parse_statement(TokenParser& parser) -> std::optional<Statement> {
             }
         };
         TRY(parser.expect(TokenType::SEMICOLON));
-        return std::move(statement);
+        return std::optional{ std::move(statement) };
     } else if (parser.advance_if_match(TokenType::LET)) {
         auto stmt = Statement {
             .variant = TRY(parse_variable_declaration(parser))
         };
         TRY(parser.expect(TokenType::SEMICOLON));
-        return std::move(stmt);
+        return std::optional{ std::move(stmt) };
     } else {
         auto expr = TRY(parse_expression(parser));
         if (parser.advance_if_match(TokenType::EQ)) {
@@ -288,9 +288,6 @@ auto parse_function(TokenParser& parser) -> std::optional<Function> {
 }
 
 auto parse_program(TokenParser& parser) -> std::optional<Program> {
-    auto eof = [](TokenParser& parser) {
-        return parser.eof();
-    };
     Program program;
     auto helper = [&](auto& output, auto functor) {
         if (auto value = parse_maybe(parser, functor)) {
@@ -306,6 +303,7 @@ auto parse_program(TokenParser& parser) -> std::optional<Program> {
     };
     while (helper(program.functions, parse_function)
         || helper(program.variables, var_decl)) {}
+    TRY(parser.expect(TokenType::_EOF));
     return std::optional(std::move(program));
 }
 
