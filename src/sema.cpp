@@ -1,6 +1,5 @@
 #include "include/sema.hpp"
 #include "include/ast.hpp"
-#include "include/debug.hpp"
 #include "include/utils.hpp"
 #include <algorithm>
 #include <array>
@@ -218,9 +217,6 @@ namespace sema {
     }
 
     Type& TypeTable::get_pointer_to(Type& type) {
-        if (type.is_lvalue()) {
-            return get_pointer_to(*type.get_lvalue().next);
-        }
         for (auto& [_, otype] : types_database) {
             if (otype->is_pointer() && Type::equal(*otype->get_pointer().next, type)) {
                 return *otype;
@@ -237,9 +233,6 @@ namespace sema {
     }
 
     Type& TypeTable::get_reference_to(Type& type) {
-        if (type.is_lvalue()) {
-            return get_reference_to(*type.get_lvalue().next);
-        }
         for (auto& [_, otype] : types_database) {
             if (otype->is_reference() && Type::equal(*otype->get_reference().next, type)) {
                 return *otype;
@@ -255,24 +248,7 @@ namespace sema {
         }).second;
     }
 
-    Type& TypeTable::get_lvalue_to(Type& type) {
-        if (type.is_lvalue()) {
-            return type;
-        }
-        for (auto& [_, otype] : types_database) {
-            if (otype->is_lvalue() && Type::equal(*otype->get_lvalue().next, type)) {
-                return *otype;
-            }
-        }
-        return *types_database.emplace_back(pair{
-            {},
-            unique_ptr_wrap(Type {
-                .variant = type::LValue {
-                    .next = ref(type)
-                }
-            })
-        }).second;
-    }
+
 
     Type& TypeTable::get_function_to(Type& ret, std::span<ref<Type>> types) {
         for (auto& [_, otype] : types_database) {
@@ -284,16 +260,12 @@ namespace sema {
                 continue;
             }
             for (auto [a, b] : std::views::zip(types, fun.parameters)) {
-                assert(!a->is_lvalue());
                 if (!Type::equal(*a, *b)) {
                     continue;
                 }
             }
             return *otype;
         }
-        DEBUG(for (auto& type : types) {
-            assert(!type->is_lvalue());
-        });
         return *types_database.emplace_back(pair{
             {},
             unique_ptr_wrap(Type {
@@ -354,10 +326,10 @@ namespace sema {
     }
 
     Symbol& Frame::push_symbol(Symbol symbol, TypeTable& table) {
+        (void)table;
         if (symbol.is_variable()) {
             symbol.get_variable().offset = scope_level;
         }
-        symbol.get_type() = table.get_lvalue_to(symbol.get_type());
         return *symbols.emplace_back(unique_ptr_wrap(std::move(symbol)));
     }
 
@@ -392,7 +364,7 @@ namespace sema {
         for (auto [type, ast] : std::views::zip(function.parameters, ast.args)) {
             push_symbol(Symbol {
                 .variant = symb::Parameter({
-                    .type = ref(table.get_lvalue_to(*type)),
+                    .type = ref(*type),
                     .identifier = ast.iden.value_or(""),
                 }),
             }, table);
@@ -401,18 +373,18 @@ namespace sema {
 
     auto type_coerce(Expression target, Type& type)
     -> std::optional<Expression> {
-        auto& target_type_deref = target.type->deref_lvalue();
-        auto& type_deref = type.deref_lvalue();
-        if (Type::equal(target_type_deref, type_deref)) {
+        auto& target_type = *target.type;
+        if (Type::equal(target_type, type)) {
             return std::optional{ std::move(target) };
         }
-        auto& conversion = TRY(conversion_table.validate_implicit(target_type_deref, type_deref));
+        auto& conversion = TRY(conversion_table.validate_implicit(target_type, type));
         return Expression {
             .variant = expr::Conversion {
                 .next = unique_ptr_wrap(std::move(target)),
                 .conversion_type = ref(conversion),
             },
-            .type = ref(type_deref)
+            .type = ref(type),
+            .is_lvalue = false,
         };
     }
 
@@ -427,14 +399,16 @@ namespace sema {
                             .type = IntegerKind::I32,
                         }
                     },
-                    .type = ref(table.get_integer(IntegerKind::I32))
+                    .type = ref(table.get_integer(IntegerKind::I32)),
+                    .is_lvalue = false,
                 };
             } else if (lit.is_nullptr()) {
                 return Expression {
                     .variant = expr::Literal {
                         .variant = lit::Nullptr {}
                     },
-                    .type = ref(table.get_pointer_to(table.get_void()))
+                    .type = ref(table.get_pointer_to(table.get_void())),
+                    .is_lvalue = false,
                 };
             } else if (lit.is_true()) {
                 return Expression {
@@ -444,7 +418,8 @@ namespace sema {
                             .type = IntegerKind::BOOL,
                         }
                     },
-                    .type = ref(table.get_integer(IntegerKind::BOOL))
+                    .type = ref(table.get_integer(IntegerKind::BOOL)),
+                    .is_lvalue = false,
                 };
             } else if (lit.is_false()) {
                 return Expression {
@@ -454,7 +429,8 @@ namespace sema {
                             .type = IntegerKind::BOOL,
                         }
                     },
-                    .type = ref(table.get_integer(IntegerKind::BOOL))
+                    .type = ref(table.get_integer(IntegerKind::BOOL)),
+                    .is_lvalue = false,
                 };
             } else {
                 std::unreachable();
@@ -467,12 +443,13 @@ namespace sema {
                     .var = ref(var)
                 },
                 .type = ref(var.get_type()),
+                .is_lvalue = true,
             };
         }
         if (expr.is_addr_of()) {
             auto& next_ast = *expr.get_addr_of().next;
             auto next = TRY(parse_expression(next_ast, table, frame));
-            if (!next.type->is_lvalue()) {
+            if (!next.is_lvalue) {
                 std::println(stderr, "invalid addr of");
                 return std::nullopt;
             }
@@ -480,12 +457,13 @@ namespace sema {
                 .variant = expr::AddrOf {
                     .next = unique_ptr_wrap(std::move(next))
                 },
-                .type = ref(table.get_reference_to(*next.type))
+                .type = ref(table.get_reference_to(*next.type)),
+                .is_lvalue = false,
             };
         }
         if (expr.is_deref()) {
             auto next = TRY(parse_expression(*expr.get_deref().next, table, frame));
-            if (!next.type->deref_lvalue().can_be_deref()) {
+            if (!next.type->can_be_deref()) {
                 std::println(stderr, "tried to deref a non-pointer type");
                 return std::nullopt;
             }
@@ -493,20 +471,22 @@ namespace sema {
                 .variant = expr::Deref {
                     .next = unique_ptr_wrap(std::move(next)),
                 },
-                .type = ref(next.type->deref_lvalue().deref())
+                .type = ref(next.type->deref()),
+                .is_lvalue = true,
             };
         }
         if (expr.is_as()) {
             auto& as_ast = expr.get_as();
             auto expr = TRY(parse_expression(*as_ast.next, table, frame));
             auto& to = TRY(table.lookup(as_ast.type));
-            auto& conversion = TRY(conversion_table.validate_explicit(expr.type->deref_lvalue(), to));
+            auto& conversion = TRY(conversion_table.validate_explicit(*expr.type, to));
             return Expression {
                 .variant = expr::Conversion {
                     .next = unique_ptr_wrap(std::move(expr)),
                     .conversion_type = ref(conversion),
                 },
                 .type = ref(to),
+                .is_lvalue = false,
             };
         }
         if (expr.is_unary()) {
@@ -516,24 +496,25 @@ namespace sema {
                 std::println(stderr, "invalid type in unary operation");
                 return std::nullopt;
             }
-            auto type = ref(next.type->deref_lvalue());
+            auto type = next.type;
             return Expression {
                 .variant = expr::Unary {
                     .next = unique_ptr_wrap(std::move(next)),
                     .type = expr::Unary::MINUS,
                 },
-                .type = type
+                .type = type,
+                .is_lvalue = false,
             };
         }
         if (expr.is_binary()) {
             auto& binary = expr.get_binary();
             auto a = TRY(parse_expression(*binary.a, table, frame));
             auto b = TRY(parse_expression(*binary.b, table, frame));
-            if (!Type::equal(a.type->deref_lvalue(), b.type->deref_lvalue())) {
+            if (!Type::equal(*a.type, *b.type)) {
                 std::println(stderr, "mismatched types in binary operation");
                 return std::nullopt;
             }
-            if (a.type->deref_lvalue().is_void()) {
+            if (a.type->is_void()) {
                 std::println(stderr, "invalid type in unary operation");
                 return std::nullopt;
             }
@@ -543,7 +524,8 @@ namespace sema {
                     .b = unique_ptr_wrap(std::move(b)),
                     .type = binary.type == ast::expr::Binary::ADD ? expr::Binary::ADD : expr::Binary::SUB
                 },
-                .type = ref(a.type->deref_lvalue())
+                .type = a.type,
+                .is_lvalue = false,
             };
         }
         if (expr.is_funcall()) {
@@ -568,6 +550,7 @@ namespace sema {
                     .args = std::move(out),
                 },
                 .type = type.return_type,
+                .is_lvalue = false,
             };
         }
         std::unreachable();
@@ -582,7 +565,7 @@ namespace sema {
         auto parse_assignment = [&](ast::Expression& target, ast::Expression& value) -> std::optional<std::monostate> {
             auto expr1 = TRY(parse_expression(target, table, frame));
             auto expr2 = TRY(parse_expression(value, table, frame));
-            if (!expr1.type->is_lvalue()) {
+            if (!expr1.is_lvalue) {
                 std::println(stderr, "invalid assignment");
                 return std::nullopt;
             }
@@ -629,17 +612,18 @@ namespace sema {
             }, table);
             if (var_decl.value) {
                 output.push_back(Statement {
-                    .variant = stmt::Assignment {
+                        .variant = stmt::Assignment {
                             .target = Expression {
                                 .variant = expr::Symbol {
                                 .var = ref(var)
                             },
                             .type = ref(var.get_type()),
+                            .is_lvalue = true,
                         },
                         .value = TRY(parse_expression(*var_decl.value, table, frame)
                             .and_then([&](Expression expr) {
-                                return type_coerce(std::move(expr), var.get_type().deref_lvalue());
-                            }))
+                                return type_coerce(std::move(expr), var.get_type());
+                        }))
                     }
                 });
             }

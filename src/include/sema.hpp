@@ -49,7 +49,7 @@ namespace sema {
     }
     struct Type {
         std::variant<type::Void, type::Integer,
-            type::Pointer, type::Reference, type::LValue, type::Function> variant;
+            type::Pointer, type::Reference, type::Function> variant;
         bool is_void() const {
             return std::holds_alternative<type::Void>(variant);
         }
@@ -62,32 +62,19 @@ namespace sema {
         bool is_reference() const {
             return std::holds_alternative<type::Reference>(variant);
         }
-        bool is_lvalue() const {
-            return std::holds_alternative<type::LValue>(variant);
-        }
         bool is_function() const {
             return std::holds_alternative<type::Function>(variant);
         }
         bool can_be_deref() const {
             return is_pointer() || is_reference();
         }
-        bool is_complete() const {
-            return !is_function() && !is_void();
+        bool is_tangible() const {
+            return !(is_function() || is_void());
         }
         Type& deref() const {
             return is_pointer() ?
             *get_pointer().next
             : *get_reference().next;
-        }
-        Type& deref_lvalue() {
-            return is_lvalue() ?
-                *get_lvalue().next
-                : *this;
-        }
-        const Type& deref_lvalue() const {
-            return is_lvalue() ?
-                *get_lvalue().next
-                : *this;
         }
         type::Pointer& get_pointer() {
             return std::get<type::Pointer>(variant);
@@ -100,12 +87,6 @@ namespace sema {
         }
         const type::Reference& get_reference() const {
             return std::get<type::Reference>(variant);
-        }
-        type::LValue& get_lvalue() {
-            return std::get<type::LValue>(variant);
-        }
-        const type::LValue& get_lvalue() const {
-            return std::get<type::LValue>(variant);
         }
         type::Function& get_function() {
             return std::get<type::Function>(variant);
@@ -124,7 +105,6 @@ namespace sema {
                 [](const type::Void&) { return 0UL; },
                 [](const type::Pointer&) { return sizeof(void *); },
                 [](const type::Reference&) { return sizeof(void *); },
-                [](const type::LValue&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
                 [](const type::Function&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
                 [](const type::Integer& integer) { return integer.size(); },
             }, variant);
@@ -134,7 +114,6 @@ namespace sema {
                 [](const type::Void&) { return 0UL; },
                 [](const type::Pointer&) { return alignof(void *); },
                 [](const type::Reference&) { return alignof(void *); },
-                [](const type::LValue&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
                 [](const type::Function&) -> usize { DEBUG_ERROR("invalid operation on incomplete type"); },
                 [](const type::Integer& integer) { return integer.align(); },
             }, variant);
@@ -151,7 +130,6 @@ namespace sema {
         Type * lookup_identifier(const ast::Identifier& iden);
         Type& get_pointer_to(Type& type);
         Type& get_reference_to(Type& type);
-        Type& get_lvalue_to(Type& type);
         Type& get_function_to(Type& ret, std::span<ref<Type>> types);
         Type& get_integer(IntegerKind);
         Type& get_void_pointer();
@@ -252,6 +230,7 @@ namespace sema {
             expr::Literal, expr::Symbol, expr::AddrOf, expr::Deref,
             expr::Conversion, expr::Unary, expr::Binary, expr::FunctionCall> variant;
         ref<Type> type;
+        bool is_lvalue;
         bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
         }

@@ -77,7 +77,7 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
         }
     } else if (statement.is_assignment()) {
         auto& assign_stmt = statement.get_assignment();
-        auto type = ref(assign_stmt.target.type->deref_lvalue());
+        auto type = assign_stmt.target.type;
         auto var = context.generate_temp_name();
         gen_expression(output, assign_stmt.target, context, Target{
             .type = Target::REGISTER,
@@ -96,7 +96,7 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
     } else if (statement.is_expr()) {
         auto& expr = statement.get_expr();
         auto placeholder = context.generate_temp_name();
-        auto type = ref(expr.type->deref_lvalue());
+        auto type = expr.type;
         gen_expression(output, expr, context, Target{
             .type = Target::REGISTER,
             .name = placeholder,
@@ -110,7 +110,7 @@ void gen_statement(std::ostream& output, sema::Statement& statement, Context& co
 void gen_function(std::ostream& output, sema::symb::Constant& symbol) {
     assert(symbol.is_function());
     auto& function = symbol.get_function();
-    auto& type = symbol->type->deref_lvalue().get_function();
+    auto& type = symbol->type->get_function();
     std::print(output, "export function");
     if (!type.return_type->is_void()) {
         // std::print(output, " {}", value_type_double(sema_type_to_type(*type.return_type)));
