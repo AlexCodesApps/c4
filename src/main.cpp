@@ -3,6 +3,7 @@
 #include <sstream>
 #include <print>
 #include <utility>
+#include "include/arena.hpp"
 #include "include/ir.hpp"
 #include "include/lexer.hpp"
 #include "include/ast.hpp"
@@ -32,8 +33,9 @@ int main(int argc, char ** argv) {
             token_type_to_string(tok.type), tok.source_string,
             tok.source_location.first, tok.source_location.second, tok.integer);
     }
+    Arena arena(MB(512 * 2));
     auto ast = ({
-        auto result = ast::parse(tokens);
+        auto result = ast::parse(tokens, arena);
         if (!result) {
             DEBUG_LOG("parsing error");
             return -4;
@@ -41,7 +43,7 @@ int main(int argc, char ** argv) {
         std::move(*result);
     });
     auto symbol_table = ({
-        auto result = sema::parse(ast);
+        auto result = sema::parse(ast, arena);
         if (!result) {
             DEBUG_LOG("semantic error");
             return -5;

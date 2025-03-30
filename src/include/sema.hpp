@@ -1,17 +1,19 @@
 #pragma once
+#include "arena.hpp"
 #include "ast.hpp"
 #include "debug.hpp"
 #include "numbers.hpp"
+#include "small_vector.hpp"
 #include "utils.hpp"
 #include <cassert>
 #include <cmath>
-#include <memory>
 #include <span>
 #include <utility>
 #include <variant>
 #include <vector>
 
 namespace sema {
+    class LexerState;
     enum class IntegerKind {
         U8 = 0, U16 = 1, U32 = 2, U64 = 3, I8 = 4, I16 = 5, I32 = 6, I64 = 7, BOOL = U8,
     };
@@ -71,6 +73,9 @@ namespace sema {
         bool is_tangible() const {
             return !(is_function() || is_void());
         }
+        bool is_integer_like() const {
+            return is_integer() || can_be_deref();
+        }
         Type& deref() const {
             return is_pointer() ?
             *get_pointer().next
@@ -123,16 +128,15 @@ namespace sema {
         }
     };
     struct TypeTable {
-        using pair = std::pair<std::vector<ast::Identifier>, std::unique_ptr<Type>>;
+        using pair = std::pair<std::vector<ast::Identifier>, ref<Type>>;
         std::vector<pair> types_database;
-        TypeTable();
-        Type * lookup(const ast::Type& type);
+        TypeTable(Arena& arena);
+        Type * lookup(const ast::Type& type, Arena& arena);
         Type * lookup_identifier(const ast::Identifier& iden);
-        Type& get_pointer_to(Type& type);
-        Type& get_reference_to(Type& type);
-        Type& get_function_to(Type& ret, std::span<ref<Type>> types);
+        Type& get_pointer_to(Type& type, Arena& arena);
+        Type& get_reference_to(Type& type, Arena& arena);
+        Type& get_function_to(Type& ret, std::span<ref<Type>> types, Arena& arena);
         Type& get_integer(IntegerKind);
-        Type& get_void_pointer();
         Type& get_void();
     };
     struct Conversion {
@@ -159,6 +163,21 @@ namespace sema {
     using FunctionType = type::Function;
     struct Expression;
     struct Symbol;
+    struct Statement;
+
+    struct Frame {
+        SmallVector<Frame> children;
+        SmallVector<Symbol> symbols;
+        SmallVector<Statement> statements;
+        enum Type { GLOBAL, FUNCTION_BASE, SCOPED } type;
+        Frame * parent;
+        usize scope_level;
+        Symbol * lookup(const ast::Identifier& iden);
+        Symbol& push_symbol(Symbol symbol, Arena& arena);
+        Frame& new_child(Arena& arena, usize children_cap, usize symbol_cap, usize statement_cap);
+        void push_function_args(const type::Function& function, const ast::expr::Function& ast, Arena& arena);
+    };
+
     namespace lit {
         struct Nullptr {};
         struct Integer {
@@ -180,20 +199,33 @@ namespace sema {
                 return size();
             }
         };
+        struct Function {
+            ref<Type> type;
+            Frame frame;
+        };
     }
     struct Literal {
-        std::variant<lit::Nullptr, lit::Integer> variant;
+        std::variant<lit::Nullptr, lit::Integer, lit::Function> variant;
         bool is_nullptr() const {
             return std::holds_alternative<lit::Nullptr>(variant);
         }
         bool is_integer() const {
             return std::holds_alternative<lit::Integer>(variant);
         }
+        bool is_function() const {
+            return std::holds_alternative<lit::Function>(variant);
+        }
         lit::Integer& get_integer() {
             return std::get<lit::Integer>(variant);
         }
         const lit::Integer& get_integer() const {
             return std::get<lit::Integer>(variant);
+        }
+        lit::Function& get_function() {
+            return std::get<lit::Function>(variant);
+        }
+        const lit::Function& get_function() const {
+            return std::get<lit::Function>(variant);
         }
     };
     namespace expr {
@@ -202,27 +234,27 @@ namespace sema {
             ref<sema::Symbol> var;
         };
         struct Deref {
-            std::unique_ptr<Expression> next;
+            ref<Expression> next;
         };
         struct AddrOf {
-            std::unique_ptr<Expression> next;
+            ref<Expression> next;
         };
         struct Conversion {
-            std::unique_ptr<Expression> next;
+            ref<Expression> next;
             ref<sema::Conversion> conversion_type;
         };
         struct Unary {
-            std::unique_ptr<Expression> next;
+            ref<Expression> next;
             enum { MINUS } type;
         };
         struct Binary {
-            std::unique_ptr<Expression> a;
-            std::unique_ptr<Expression> b;
-            enum { ADD, SUB } type;
+            ref<Expression> a;
+            ref<Expression> b;
+            enum Type { ADD, SUB } type;
         };
         struct FunctionCall {
-            std::unique_ptr<Expression> function;
-            std::vector<std::unique_ptr<Expression>> args;
+            ref<Expression> function;
+            std::vector<ref<Expression>> args;
         };
     }
     struct Expression {
@@ -308,19 +340,6 @@ namespace sema {
     struct Statement;
     struct Symbol;
 
-    struct Frame {
-        std::vector<std::unique_ptr<Frame>> children;
-        std::vector<std::unique_ptr<Symbol>> symbols;
-        std::vector<Statement> statements;
-        enum { GLOBAL, FUNCTION_BASE, SCOPED } type;
-        Frame * parent;
-        usize scope_level;
-        Symbol * lookup(const ast::Identifier& iden);
-        Symbol& push_symbol(Symbol symbol, TypeTable& table);
-        Frame& new_child();
-        void push_function_args(const type::Function& function, const ast::Function& ast, TypeTable& table);
-    };
-
     namespace symb {
         struct Base {
             ref<Type> type;
@@ -359,28 +378,16 @@ namespace sema {
                 Literal(Init init)
                 : Base(init.type, std::move(init.identifier)), literal(std::move(init.literal)) {}
             };
-            struct Function : Base {
-                struct Init {
-                    ref<Type> type;
-                    ast::Identifier identifier;
-                    Frame frame;
-                };
-                Frame frame;
-                Function(Init init);
-            };
             struct UnImplemented : Base {
                 using Base::Base;
             };
         }
-        class Constant : public poly_variant<Base, cnst::Literal, cnst::Function, cnst::UnImplemented> {
-            using BaseType = poly_variant<Base, cnst::Literal, cnst::Function, cnst::UnImplemented>;
+        class Constant : public poly_variant<Base, cnst::Literal, cnst::UnImplemented> {
+            using BaseType = poly_variant<Base, cnst::Literal, cnst::UnImplemented>;
         public:
             using BaseType::BaseType;
             bool is_literal() const {
                 return std::holds_alternative<cnst::Literal>(*this);
-            }
-            bool is_function() const {
-                return std::holds_alternative<cnst::Function>(*this);
             }
             bool is_unimplemented() const {
                 return std::holds_alternative<cnst::UnImplemented>(*this);
@@ -390,12 +397,6 @@ namespace sema {
             }
             const cnst::Literal& get_literal() const {
                 return std::get<cnst::Literal>(*this);
-            }
-            cnst::Function& get_function() {
-                return std::get<cnst::Function>(*this);
-            }
-            const cnst::Function& get_function() const {
-                return std::get<cnst::Function>(*this);
             }
         };
     }
@@ -493,10 +494,40 @@ namespace sema {
         TypeTable types;
     };
 
+    class LexerState {
+        ref<Arena> m_arena;
+        ref<TypeTable> m_types;
+        ref<Frame> m_frame;
+    public:
+        LexerState(Arena& arena, SymbolTable& table);
+        LexerState(Arena&, TypeTable&, Frame&);
+        Arena& arena() {
+            return m_arena.get();
+        }
+        const Arena& arena() const {
+            return m_arena.get();
+        }
+        TypeTable& type_table() {
+            return m_types.get();
+        }
+        const TypeTable& type_table() const {
+            return m_types.get();
+        }
+        Frame& frame() {
+            return m_frame.get();
+        }
+        const Frame& frame() const {
+            return m_frame.get();
+        }
+        LexerState construct_new_state(Frame& frame) {
+            return LexerState(arena(), type_table(), frame);
+        }
+    };
+
     std::optional<std::vector<Statement>>
     parse_statements(
-        std::span<ast::Statement> statements, TypeTable& type_table, type::Function& type, Frame& frame);
+        std::span<const ast::Statement> statements, type::Function& type, LexerState& state);
 
     std::optional<SymbolTable>
-    parse(ast::Program& program);
+    parse(ast::Program& program, Arena& arena);
 }

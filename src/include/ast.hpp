@@ -1,11 +1,11 @@
 #pragma once
-#include <memory>
-#include <print>
 #include <variant>
 #include <vector>
+#include "arena.hpp"
 #include "lexer.hpp"
 #include "try.hpp"
 #include "token_parser.hpp"
+#include "utils.hpp"
 
 namespace ast {
     using Identifier = std::string_view;
@@ -13,14 +13,14 @@ namespace ast {
     namespace type {
         using Identifier = ast::Identifier;
         struct Pointer {
-            std::unique_ptr<Type> next;
+            ref<Type> next;
         };
         struct Reference {
-            std::unique_ptr<Type> next;
+            ref<Type> next;
         };
         struct Function {
             std::vector<Type> parameter_types;
-            std::unique_ptr<Type> return_type;
+            ref<Type> return_type;
         };
     }
     struct Type {
@@ -92,37 +92,47 @@ namespace ast {
             return std::get<lit::Integer>(variant);
         }
     };
+    struct Statement;
     namespace expr {
         using Literal = ast::Literal;
         struct AddrOf {
-            std::unique_ptr<Expression> next;
+            ref<Expression> next;
         };
         struct Deref {
-            std::unique_ptr<Expression> next;
+            ref<Expression> next;
         };
         struct As {
-            std::unique_ptr<Expression> next;
+            ref<Expression> next;
             Type type;
         };
         struct Unary {
-            std::unique_ptr<Expression> next;
+            ref<Expression> next;
             enum { MINUS } type;
         };
         struct Binary {
-            std::unique_ptr<Expression> a;
-            std::unique_ptr<Expression> b;
-            enum { ADD, SUB } type;
+            ref<Expression> a;
+            ref<Expression> b;
+            enum Type { ADD, SUB } type;
         };
         struct FunctionCall {
-            std::unique_ptr<Expression> fun;
+            ref<Expression> fun;
             std::vector<Expression> args;
+        };
+        struct Function {
+            struct Parameter {
+                std::optional<Identifier> identifier;
+                Type type;
+            };
+            std::vector<Parameter> args;
+            Type return_type;
+            std::vector<Statement> body;
         };
         using Identifier = ast::Identifier;
     }
     struct Expression {
         std::variant<
             expr::Literal, expr::Identifier, expr::AddrOf, expr::Deref,
-            expr::As, expr::Unary, expr::Binary, expr::FunctionCall> variant;
+            expr::As, expr::Unary, expr::Binary, expr::FunctionCall, expr::Function> variant;
         bool is_literal() const {
             return std::holds_alternative<expr::Literal>(variant);
         }
@@ -146,6 +156,9 @@ namespace ast {
         }
         bool is_funcall() const {
             return std::holds_alternative<expr::FunctionCall>(variant);
+        }
+        bool is_function() const {
+            return std::holds_alternative<expr::Function>(variant);
         }
         expr::Literal& get_literal() {
             return std::get<expr::Literal>(variant);
@@ -194,6 +207,12 @@ namespace ast {
         }
         const expr::FunctionCall& get_funcall() const {
             return std::get<expr::FunctionCall>(variant);
+        }
+        expr::Function& get_function() {
+            return std::get<expr::Function>(variant);
+        }
+        const expr::Function& get_function() const {
+            return std::get<expr::Function>(variant);
         }
     };
     struct Variable {
@@ -262,28 +281,17 @@ namespace ast {
             return std::get<stmt::Expression>(variant);
         }
     };
-    struct FunctionParameter {
-        std::optional<Identifier> iden;
-        Type type;
-    };
-    struct Function {
-        Identifier iden;
-        std::vector<FunctionParameter> args;
-        Type return_type;
-        std::vector<Statement> body;
-    };
     struct Program {
-        std::vector<Function> functions;
         std::vector<Variable> variables;
     };
 
     template <typename F>
     auto parse_maybe(TokenParser& parser, F functor)
     -> std::optional<typename decltype(functor(parser))::value_type> {
-        auto pos = parser.get_position();
+        auto pos = parser.get_state();
         auto opt = functor(parser);
         if (!opt) {
-            parser.set_position(pos);
+            parser.set_state(pos);
         }
         return opt;
     }
@@ -292,11 +300,11 @@ namespace ast {
         using type = typename decltype(functor(parser))::value_type;
         std::vector<type> output;
         for (;;) {
-            usize pos = parser.get_position();
+            auto state = parser.get_state();
             auto value = ({
                 auto opt = functor(parser);
                 if (!opt) {
-                    parser.set_position(pos);
+                    parser.set_state(state);
                     return output;
                 }
                 std::move(*opt);
@@ -319,10 +327,10 @@ namespace ast {
             switch (state) {
             case NONE:
                 output.push_back(({
-                    auto pos = parser.get_position();
+                    auto pos = parser.get_state();
                     auto opt = functor(parser);
                     if (!opt) {
-                        parser.set_position(pos);
+                        parser.set_state(pos);
                         return output;
                     }
                     std::move(*opt);
@@ -330,9 +338,9 @@ namespace ast {
                 state = EXPECT_SEP_OR_END;
                 break;
             case EXPECT_SEP_OR_END: {
-                    auto pos = parser.get_position();
+                    auto pos = parser.get_state();
                     if (!sep_functor(parser)) {
-                        parser.set_position(pos);
+                        parser.set_state(pos);
                         return output;
                     }
                 }
@@ -340,13 +348,13 @@ namespace ast {
                 break;
             case EXPECT_FUN_OR_TRAIL:
                 output.push_back(({
-                    auto pos = parser.get_position();
+                    auto pos = parser.get_state();
                     auto opt = functor(parser);
                     if (!opt) {
                         if (!allow_trailing) {
                             return std::nullopt;
                         }
-                        parser.set_position(pos);
+                        parser.set_state(pos);
                         return output;
                     }
                     std::move(*opt);
@@ -372,9 +380,8 @@ namespace ast {
     std::optional<Expression> parse_expression(TokenParser& parser);
     std::optional<Type> parse_type(TokenParser& parser);
     std::optional<Variable> parse_variable_declaration(TokenParser& parser);
-    std::optional<FunctionParameter> parse_function_param(TokenParser& parser);
     std::optional<Statement> parse_statement(TokenParser& parser);
-    std::optional<Function> parse_function(TokenParser& parser);
+    std::optional<Variable> parse_function(TokenParser& parser);
     std::optional<Program> parse_program(TokenParser& parser);
-    std::optional<Program> parse(std::span<Token> src);
+    std::optional<Program> parse(std::span<Token> src, Arena& arena);
 }

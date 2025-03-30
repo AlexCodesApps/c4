@@ -5,6 +5,12 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <assert.h>
+
+// avoid macros to slow compile time is pointless
+#define KB(n) ((n) * 1024)
+#define MB(n) ((n) * 1024 * 1024)
+#define GB(n) ((n) * 1024 * 1024 * 1024)
 
 constexpr inline bool is_alpha(char c) {
     return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z');

@@ -1,5 +1,6 @@
 #pragma once
 #include "lexer.hpp"
+#include "arena.hpp"
 #include <span>
 #include <cassert>
 #include <optional>
@@ -8,9 +9,10 @@
 class TokenParser {
     std::span<Token> src;
     usize index;
+    ref<Arena> m_arena;
 public:
-    TokenParser(std::span<Token> src)
-    : src(src), index(0) {
+    TokenParser(std::span<Token> src, Arena& arena)
+    : src(src), index(0), m_arena(arena) {
         assert(src.size() > 0 && src.back().type == TokenType::_EOF);
     }
     bool eof(usize offset = 0) const {
@@ -47,10 +49,24 @@ public:
         }
         return std::nullopt;
     }
-    usize get_position() const {
-        return index;
+    class State {
+        friend TokenParser;
+        usize index;
+        void * arena_ptr;
+        State(usize index, void * arena_ptr)
+        : index(index), arena_ptr(arena_ptr) {}
+    };
+    State get_state() const {
+        return State(index, m_arena->get_current_ptr());
     }
-    void set_position(usize saved) {
-        index = saved;
+    void set_state(State saved) {
+        index = saved.index;
+        m_arena->unsafe_set_current_ptr(saved.arena_ptr);
+    }
+    Arena& arena() {
+        return m_arena.get();
+    }
+    const Arena& arena() const {
+        return m_arena.get();
     }
 };

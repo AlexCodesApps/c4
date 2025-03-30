@@ -1,8 +1,9 @@
 #include "include/ast.hpp"
+#include "include/arena.hpp"
 #include "include/lexer.hpp"
 #include "include/token_parser.hpp"
 #include "include/try.hpp"
-#include "include/utils.hpp"
+#include <print>
 
 namespace {
     auto parse_comma = [](TokenParser& parser) { return parser.expect(TokenType::COMMA); };
@@ -67,7 +68,7 @@ auto parse_expression_funcall(Expression& expr, TokenParser& parser) -> bool {
         TRY(parser.expect(TokenType::RPAREN));
         expr = Expression {
             .variant = expr::FunctionCall {
-                .fun = unique_ptr_wrap(std::move(expr)),
+                .fun = parser.arena().wrap(std::move(expr)),
                 .args = std::move(args),
             }
         };
@@ -80,7 +81,7 @@ auto parse_expression_deref(Expression& expr, TokenParser& parser) -> bool {
         parser.advance(2);
         expr = Expression {
             .variant = expr::Deref {
-                .next = unique_ptr_wrap(std::move(expr))
+                .next = parser.arena().wrap(std::move(expr))
             }
         };
         return true;
@@ -91,9 +92,9 @@ auto parse_expression_deref(Expression& expr, TokenParser& parser) -> bool {
 auto parse_expression_postfix(TokenParser& parser) -> std::optional<Expression> {
     auto expr = TRY(parse_expression_primary(parser));
     auto helper = [&](auto fun) {
-        auto pos = parser.get_position();
+        auto pos = parser.get_state();
         if (!fun(expr, parser)) {
-            parser.set_position(pos);
+            parser.set_state(pos);
             return false;
         }
         return true;
@@ -108,13 +109,13 @@ auto parse_expression_unary(TokenParser& parser) -> std::optional<Expression> {
     if (parser.advance_if_match(TokenType::AMPERSAND)) {
         return Expression {
             .variant = expr::AddrOf {
-                .next = unique_ptr_wrap(TRY(parse_expression_unary(parser)))
+                .next = parser.arena().wrap(TRY(parse_expression_unary(parser)))
             }
         };
     } else if (parser.advance_if_match(TokenType::MINUS)) {
         return Expression {
             .variant = expr::Unary {
-                .next = unique_ptr_wrap(TRY(parse_expression_unary(parser))),
+                .next = parser.arena().wrap(TRY(parse_expression_unary(parser))),
                 .type = expr::Unary::MINUS
             }
         };
@@ -132,8 +133,8 @@ auto parse_expression_term(TokenParser& parser) -> std::optional<Expression> {
             expr::Binary::ADD : expr::Binary::SUB;
         expr = Expression {
             .variant = expr::Binary {
-                .a = unique_ptr_wrap(std::move(expr)),
-                .b = unique_ptr_wrap(TRY(parse_expression_unary(parser))),
+                .a = parser.arena().wrap(std::move(expr)),
+                .b = parser.arena().wrap(TRY(parse_expression_unary(parser))),
                 .type = bin_type
             }
         };
@@ -147,8 +148,8 @@ auto parse_expression_as(TokenParser& parser) -> std::optional<Expression> {
     while (parser.advance_if_match(TokenType::AS)) {
         expr = Expression {
             .variant = expr::As {
-                .next = unique_ptr_wrap(std::move(expr)),
-                .type = TRY(parse_type(parser))
+                .next = parser.arena().wrap(std::move(expr)),
+                .type = TRY(parse_type(parser)),
             }
         };
     }
@@ -163,13 +164,13 @@ auto parse_type(TokenParser& parser) -> std::optional<Type> {
     if (parser.advance_if_match(TokenType::AMPERSAND)) {
         return Type {
             .variant = type::Reference {
-                .next = unique_ptr_wrap(TRY(parse_type(parser)))
+                .next = parser.arena().wrap(TRY(parse_type(parser)))
             }
         };
     } else if (parser.advance_if_match(TokenType::STAR)) {
         return Type {
             .variant = type::Pointer {
-                .next = unique_ptr_wrap(TRY(parse_type(parser)))
+                .next = parser.arena().wrap(TRY(parse_type(parser)))
             }
         };
     } else if (parser.advance_if_match(TokenType::FUNCTION)) {
@@ -181,7 +182,7 @@ auto parse_type(TokenParser& parser) -> std::optional<Type> {
         return Type {
             .variant = type::Function {
                 .parameter_types = std::move(params),
-                .return_type = unique_ptr_wrap(std::move(ret_type)),
+                .return_type = parser.arena().wrap(std::move(ret_type)),
             }
         };
     } else {
@@ -208,21 +209,22 @@ auto parse_variable_declaration(TokenParser& parser) -> std::optional<Variable> 
     };
 }
 
-auto parse_function_param(TokenParser& parser) -> std::optional<FunctionParameter> {
+auto parse_function_param(TokenParser& parser) -> std::optional<expr::Function::Parameter> {
+    using Parameter = expr::Function::Parameter;
     auto decl = parse_maybe(parser, parse_variable_declaration);
     if (decl) {
         if (decl->value) {
             std::println(stderr, "doesn't support default function args ");
             return std::nullopt;
         }
-        return FunctionParameter {
-            .iden = std::move(decl->identifier),
+        return Parameter {
+            .identifier = std::move(decl->identifier),
             .type = std::move(decl->type)
         };
     }
     auto type = TRY(parse_type(parser));
-    return FunctionParameter {
-        .iden = std::nullopt,
+    return Parameter {
+        .identifier = std::nullopt,
         .type = std::move(type)
     };
 }
@@ -268,7 +270,7 @@ auto parse_statement(TokenParser& parser) -> std::optional<Statement> {
     return std::nullopt;
 }
 
-auto parse_function(TokenParser& parser) -> std::optional<Function> {
+auto parse_function(TokenParser& parser) -> std::optional<Variable> {
     TRY(parser.expect(TokenType::FUNCTION));
     auto iden = TRY(parse_identifier(parser));
     TRY(parser.expect(TokenType::LPAREN));
@@ -279,12 +281,28 @@ auto parse_function(TokenParser& parser) -> std::optional<Function> {
     TRY(parser.expect(TokenType::LBRACE));
     auto body = parse_many(parser, parse_statement);
     TRY(parser.expect(TokenType::RBRACE));
-    return Function {
-        .iden = std::move(iden),
-        .args = std::move(args),
-        .return_type = std::move(return_type),
-        .body = std::move(body)
+    std::vector<Type> parameter_types{};
+    parameter_types.reserve(args.size());
+    for (auto& [_, type] : args) {
+        parameter_types.push_back(type);
+    }
+    Variable new_var = {
+        .identifier = std::move(iden),
+        .type = {
+                .variant = type::Function {
+                .parameter_types = std::move(parameter_types),
+                .return_type = ref(new_var.type),
+            }
+        },
+        .value = Expression {
+            .variant = expr::Function {
+                .args = std::move(args),
+                .return_type = return_type,
+                .body = std::move(body),
+            }
+        },
     };
+    return std::optional { std::move(new_var) };
 }
 
 auto parse_program(TokenParser& parser) -> std::optional<Program> {
@@ -301,14 +319,14 @@ auto parse_program(TokenParser& parser) -> std::optional<Program> {
         parser.expect(TokenType::SEMICOLON);
         return ret;
     };
-    while (helper(program.functions, parse_function)
+    while (helper(program.variables, parse_function)
         || helper(program.variables, var_decl)) {}
     TRY(parser.expect(TokenType::_EOF));
     return std::optional(std::move(program));
 }
 
-auto parse(std::span<Token> src) -> std::optional<Program> {
-    TokenParser parser(src);
+auto parse(std::span<Token> src, Arena& arena) -> std::optional<Program> {
+    TokenParser parser(src, arena);
     return parse_program(parser);
 }
 
