@@ -161,3 +161,5 @@ public:
         return &get_base();
     }
 };
+
+static constexpr struct Empty {} empty;

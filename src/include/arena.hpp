@@ -32,7 +32,7 @@ public:
     template <typename T>
     std::span<Uninitialized<T>> allocate_n_uninit(usize n) {
         void * ptr = allocate_bytes(sizeof(T) * n, alignof(T));
-        return std::span(static_cast<Uninitialized<T>>(ptr), n);
+        return std::span(static_cast<Uninitialized<T> *>(ptr), n);
     }
     template <typename U>
     auto wrap(U&& value) {

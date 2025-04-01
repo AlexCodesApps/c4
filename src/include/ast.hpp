@@ -1,7 +1,7 @@
 #pragma once
 #include <variant>
-#include <vector>
 #include "arena.hpp"
+#include "arena_chunk_list.hpp"
 #include "lexer.hpp"
 #include "try.hpp"
 #include "token_parser.hpp"
@@ -19,7 +19,7 @@ namespace ast {
             ref<Type> next;
         };
         struct Function {
-            std::vector<Type> parameter_types;
+            ArenaChunkList<Type, 8> parameter_types;
             ref<Type> return_type;
         };
     }
@@ -116,16 +116,16 @@ namespace ast {
         };
         struct FunctionCall {
             ref<Expression> fun;
-            std::vector<Expression> args;
+            ArenaChunkList<Expression, 8> args;
         };
         struct Function {
             struct Parameter {
                 std::optional<Identifier> identifier;
                 Type type;
             };
-            std::vector<Parameter> args;
+            ArenaChunkList<Parameter, 8> args;
             Type return_type;
-            std::vector<Statement> body;
+            ArenaChunkList<Statement, 8> body;
         };
         using Identifier = ast::Identifier;
     }
@@ -231,7 +231,7 @@ namespace ast {
             Expression value;
         };
         using Expression = ast::Expression;
-        using Block = std::vector<Statement>;
+        using Block = ArenaChunkList<Statement, 8>;
     }
     struct Statement {
         std::variant<stmt::Return, stmt::VariableDecl, stmt::Assignment, stmt::Block, stmt::Expression> variant;
@@ -282,7 +282,7 @@ namespace ast {
         }
     };
     struct Program {
-        std::vector<Variable> variables;
+        ArenaChunkList<Variable, 8> variables;
     };
 
     template <typename F>
@@ -295,10 +295,11 @@ namespace ast {
         }
         return opt;
     }
-    template <typename F>
+    template <usize Size, typename F>
     auto parse_many(TokenParser& parser, F functor) {
         using type = typename decltype(functor(parser))::value_type;
-        std::vector<type> output;
+        auto& arena = parser.arena();
+        ArenaChunkList<type, Size> output;
         for (;;) {
             auto state = parser.get_state();
             auto value = ({
@@ -309,12 +310,12 @@ namespace ast {
                 }
                 std::move(*opt);
             });
-            output.push_back(std::move(value));
+            output.push_back(arena, std::move(value));
         }
     }
-    template <typename F, typename S>
+    template <usize Size, typename F, typename S>
     auto parse_with_sep(TokenParser& parser, F functor, S sep_functor, bool allow_trailing)
-    -> std::optional<std::vector<typename decltype(functor(parser))::value_type>>
+    -> std::optional<ArenaChunkList<typename decltype(functor(parser))::value_type, Size>>
     {
         enum {
             NONE,
@@ -322,7 +323,8 @@ namespace ast {
             EXPECT_FUN_OR_TRAIL,
         } state = NONE;
         using type = typename decltype(functor(parser))::value_type;
-        std::vector<type> output;
+        auto& arena = parser.arena();
+        ArenaChunkList<type, Size> output;
         for (;;) {
             switch (state) {
             case NONE:
@@ -347,7 +349,7 @@ namespace ast {
                 state = EXPECT_FUN_OR_TRAIL;
                 break;
             case EXPECT_FUN_OR_TRAIL:
-                output.push_back(({
+                output.push_back(arena, ({
                     auto pos = parser.get_state();
                     auto opt = functor(parser);
                     if (!opt) {
@@ -364,13 +366,13 @@ namespace ast {
             }
         }
     }
-    template <typename F, typename T>
+    template <usize Size, typename F, typename T>
     auto parse_until(TokenParser& parser, F functor, T terminal_functor)
     -> std::optional<
-        std::vector<typename decltype(functor(parser))::value_type>>
+        ArenaChunkList<typename decltype(functor(parser))::value_type, Size>>
     {
         using type = decltype(functor(parser))::value_type;
-        std::vector<type> output;
+        ArenaChunkList<type, Size> output;
         while (!terminal_functor(parser)) {
             output.push_back(TRY(functor(parser)));
         }

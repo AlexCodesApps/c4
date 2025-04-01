@@ -64,7 +64,7 @@ auto parse_expression_primary(TokenParser& parser) -> std::optional<Expression> 
 
 auto parse_expression_funcall(Expression& expr, TokenParser& parser) -> bool {
     if (parser.advance_if_match(TokenType::LPAREN)) {
-        auto args = TRY(parse_with_sep(parser, parse_expression, parse_comma, false));
+        auto args = TRY(parse_with_sep<8>(parser, parse_expression, parse_comma, false));
         TRY(parser.expect(TokenType::RPAREN));
         expr = Expression {
             .variant = expr::FunctionCall {
@@ -175,7 +175,7 @@ auto parse_type(TokenParser& parser) -> std::optional<Type> {
         };
     } else if (parser.advance_if_match(TokenType::FUNCTION)) {
         TRY(parser.expect(TokenType::LPAREN));
-        auto params = TRY(parse_with_sep(parser, parse_type, parse_comma, false));
+        auto params = TRY(parse_with_sep<8>(parser, parse_type, parse_comma, false));
         TRY(parser.expect(TokenType::RPAREN));
         TRY(parser.expect(TokenType::COLON));
         auto ret_type = TRY(parse_type(parser));
@@ -232,7 +232,7 @@ auto parse_function_param(TokenParser& parser) -> std::optional<expr::Function::
 auto parse_statement(TokenParser& parser) -> std::optional<Statement> {
     if (parser.advance_if_match(TokenType::LBRACE)) {
         return Statement {
-            .variant = TRY(parse_until(parser, parse_statement, [](auto& parser) {
+            .variant = TRY(parse_until<8>(parser, parse_statement, [](auto& parser) {
                 return parser.advance_if_match(TokenType::RBRACE);
             }))
         };
@@ -271,27 +271,27 @@ auto parse_statement(TokenParser& parser) -> std::optional<Statement> {
 }
 
 auto parse_function(TokenParser& parser) -> std::optional<Variable> {
+    auto& arena = parser.arena();
     TRY(parser.expect(TokenType::FUNCTION));
     auto iden = TRY(parse_identifier(parser));
     TRY(parser.expect(TokenType::LPAREN));
-    auto args = TRY(parse_with_sep(parser, parse_function_param, parse_comma, false));
+    auto args = TRY(parse_with_sep<8>(parser, parse_function_param, parse_comma, false));
     TRY(parser.expect(TokenType::RPAREN));
     TRY(parser.expect(TokenType::COLON));
     auto return_type = TRY(parse_type(parser));
     TRY(parser.expect(TokenType::LBRACE));
-    auto body = parse_many(parser, parse_statement);
+    auto body = parse_many<8>(parser, parse_statement);
     TRY(parser.expect(TokenType::RBRACE));
-    std::vector<Type> parameter_types{};
-    parameter_types.reserve(args.size());
+    ArenaChunkList<Type, 8> parameter_types{};
     for (auto& [_, type] : args) {
-        parameter_types.push_back(type);
+        parameter_types.push_back(arena, type);
     }
     Variable new_var = {
         .identifier = std::move(iden),
         .type = {
                 .variant = type::Function {
                 .parameter_types = std::move(parameter_types),
-                .return_type = ref(new_var.type),
+                .return_type = ref(parser.arena().wrap(return_type)),
             }
         },
         .value = Expression {
@@ -307,9 +307,10 @@ auto parse_function(TokenParser& parser) -> std::optional<Variable> {
 
 auto parse_program(TokenParser& parser) -> std::optional<Program> {
     Program program;
+    auto& arena = parser.arena();
     auto helper = [&](auto& output, auto functor) {
         if (auto value = parse_maybe(parser, functor)) {
-            output.push_back(std::move(*value));
+            output.push_back(arena, std::move(*value));
             return true;
         }
         return false;

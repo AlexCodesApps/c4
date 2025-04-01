@@ -1,6 +1,7 @@
 #include "include/sema.hpp"
 #include "include/arena.hpp"
 #include "include/ast.hpp"
+#include "include/small_vector.hpp"
 #include "include/utils.hpp"
 #include <algorithm>
 #include <array>
@@ -25,6 +26,14 @@ namespace {
         usize statement_cap = block.size() + symbol_cap;
         return parent.new_child(arena, children_cap, symbol_cap, statement_cap);
     }
+    template <typename T, typename F>
+    std::optional<std::span<T>> simultaneous_initialize(usize n, F functor, Arena& arena) {
+        auto span = arena.allocate_n_uninit<T>(n);
+        for (auto& slot : span) {
+            slot.construct(TRY(functor(n)));
+        }
+        return std::span(span[0].get(), n);
+    };
 }
 
 namespace sema {
@@ -162,46 +171,45 @@ namespace sema {
 
     TypeTable::TypeTable(Arena& arena) {
         assert(IntegerKind::U8 == IntegerKind::BOOL);
-        types_database.reserve(8);
-        types_database.emplace_back(
-            std::vector<std::string_view>({"void"}), arena.wrap(Type{
+        types_database.emplace_back(arena,
+            ArenaChunkList<std::string_view, 4>(arena, {"void"}), Type{
                 .variant = type::Void{}
-            })
+            }
         );
-        types_database.emplace_back(
-            std::vector<std::string_view>({"i8"}), arena.wrap(Type{
+        types_database.emplace_back(arena,
+            ArenaChunkList<std::string_view, 4>(arena, {"i8"}), Type{
                 type::Integer { IntegerKind::I8 }
-            })
+            }
         );
-        types_database.emplace_back(
-            std::vector<std::string_view>({"i16"}), arena.wrap(Type{
+        types_database.emplace_back(arena,
+            ArenaChunkList<std::string_view, 4>(arena, {"i16"}), Type{
                 type::Integer { IntegerKind::I16 }
-            })
+            }
         );
-        types_database.emplace_back(
-            std::vector<std::string_view>({"int", "i32"}), arena.wrap(Type{
+        types_database.emplace_back(arena,
+            ArenaChunkList<std::string_view, 4>(arena, {"int", "i32"}), Type{
                 type::Integer { IntegerKind::I32 }
-            })
+            }
         );
-        types_database.emplace_back(
-            std::vector<std::string_view>({"isize, i64"}), arena.wrap(Type{
+        types_database.emplace_back(arena,
+            ArenaChunkList<std::string_view, 4>(arena, {"isize, i64"}), Type{
                 type::Integer{ IntegerKind::I64 }
-            })
+            }
         );
-        types_database.emplace_back(
-            std::vector<std::string_view>({"u8", "bool"}), arena.wrap(Type{
+        types_database.emplace_back(arena,
+            ArenaChunkList<std::string_view, 4>(arena, {"u8", "bool"}), Type{
                 type::Integer{ IntegerKind::U8 }
-            })
+            }
         );
-        types_database.emplace_back(
-            std::vector<std::string_view>({"u32"}), arena.wrap(Type{
+        types_database.emplace_back(arena,
+            ArenaChunkList<std::string_view, 4>(arena, {"u32"}), Type{
                 type::Integer{ IntegerKind::U32 }
-            })
+            }
         );
-        types_database.emplace_back(
-            std::vector<std::string_view>({"usize, u64"}), arena.wrap(Type{
+        types_database.emplace_back(arena,
+            ArenaChunkList<std::string_view, 4>(arena, {"usize, u64"}), Type{
                 type::Integer{ IntegerKind::U64 }
-            })
+            }
         );
     }
 
@@ -215,10 +223,11 @@ namespace sema {
         } else if (type.is_function()) {
             auto& fun = type.get_function();
             auto& ret_type = TRY(lookup(*fun.return_type, arena));
-            std::vector<ref<Type>> params{};
-            for (auto& type : fun.parameter_types) {
-                params.push_back(ref(TRY(lookup(type, arena))));
-            }
+            auto params =
+                TRY(simultaneous_initialize<ref<Type>>(fun.parameter_types.size(),
+                    [&](usize n) -> std::optional<ref<Type>>{
+                        return ref(TRY(lookup(fun.parameter_types[n], arena)));
+                    }, arena));
             return &get_function_to(ret_type, params, arena);
         } else {
             std::unreachable();
@@ -227,8 +236,10 @@ namespace sema {
 
     Type * TypeTable::lookup_identifier(const ast::Identifier& iden) {
         for (auto& [idens, otype] : types_database) {
-            if (std::find(idens.begin(), idens.end(), iden) != idens.end()) {
-                return otype.get_ptr();
+            for (auto& oiden : idens) {
+                if (iden == oiden) {
+                    return &otype;
+                }
             }
         }
         return nullptr;
@@ -236,33 +247,33 @@ namespace sema {
 
     Type& TypeTable::get_pointer_to(Type& type, Arena& arena) {
         for (auto& [_, otype] : types_database) {
-            if (otype->is_pointer() && Type::equal(*otype->get_pointer().next, type)) {
-                return *otype;
+            if (otype.is_pointer() && Type::equal(*otype.get_pointer().next, type)) {
+                return otype;
             }
         }
-        return *types_database.emplace_back(pair{
+        return types_database.emplace_back(arena, pair{
             {},
-            arena.wrap(Type {
+            Type {
                 .variant = type::Pointer {
                     .next = ref(type)
                 }
-            })
+            }
         }).second;
     }
 
     Type& TypeTable::get_reference_to(Type& type, Arena& arena) {
         for (auto& [_, otype] : types_database) {
-            if (otype->is_reference() && Type::equal(*otype->get_reference().next, type)) {
-                return *otype;
+            if (otype.is_reference() && Type::equal(*otype.get_reference().next, type)) {
+                return otype;
             }
         }
-        return *types_database.emplace_back(pair{
+        return types_database.emplace_back(arena, pair{
             {},
-            arena.wrap(Type {
+            Type {
                 .variant = type::Reference {
                     .next = ref(type)
                 }
-            })
+            }
         }).second;
     }
 
@@ -270,10 +281,10 @@ namespace sema {
 
     Type& TypeTable::get_function_to(Type& ret, std::span<ref<Type>> types, Arena& arena) {
         for (auto& [_, otype] : types_database) {
-            if (!otype->is_function()) {
+            if (!otype.is_function()) {
                 continue;
             }
-            auto& fun = otype->get_function();
+            auto& fun = otype.get_function();
             if (!Type::equal(*fun.return_type, ret) || fun.parameters.size() != types.size()) {
                 continue;
             }
@@ -282,16 +293,16 @@ namespace sema {
                     continue;
                 }
             }
-            return *otype;
+            return otype;
         }
-        return *types_database.emplace_back(pair{
+        return types_database.emplace_back(arena, pair{
             {},
-            arena.wrap(Type {
+            Type {
             .variant = type::Function {
-                    .parameters = std::vector(types.begin(), types.end()),
+                    .parameters = types,
                     .return_type = ref(ret),
                 }
-            })
+            }
         }).second;
     }
 
@@ -339,22 +350,22 @@ namespace sema {
         return nullptr;
     }
 
-    Symbol& Frame::push_symbol(Symbol symbol, Arena& arena) {
+    Symbol& Frame::push_symbol(Symbol symbol) {
         if (symbol.is_variable()) {
             symbol.get_variable().offset = scope_level;
         }
-        return symbols.emplace_back(arena.wrap(std::move(symbol)));
+        return symbols.emplace_back(std::move(symbol));
     }
 
     Frame& Frame::new_child(Arena& arena, usize children_cap, usize symbol_cap, usize statement_cap) {
-        auto new_frame = arena.wrap(Frame {
-            .children = {arena.allocate_n_uninit<Frame>(children_cap)},
-            .symbols = {arena.allocate_n_uninit<Symbol>(symbol_cap)},
-            .statements = {arena.allocate_n_uninit<Statement>(statement_cap)},
+        auto new_frame = Frame {
+            .children = {arena, children_cap},
+            .symbols = {arena, symbol_cap},
+            .statements = {arena, statement_cap},
             .type = SCOPED,
             .parent = this,
             .scope_level = scope_level + 1,
-        });
+        };
         return children.emplace_back(std::move(new_frame));
     }
 
@@ -373,14 +384,14 @@ namespace sema {
     // |               |
     // |~~~~~~~~~~~~~~~|
 
-    void Frame::push_function_args(const FunctionType& function, const ast::expr::Function& ast, Arena& arena) {
+    void Frame::push_function_args(const FunctionType& function, const ast::expr::Function& ast) {
         for (auto [type, ast] : std::views::zip(function.parameters, ast.args)) {
             push_symbol(Symbol {
                 .variant = symb::Parameter({
                     .type = ref(*type),
                     .identifier = ast.identifier.value_or(""),
                 }),
-            }, arena);
+            });
         }
     }
 
@@ -562,19 +573,17 @@ namespace sema {
             if (funcall.args.size() != type.parameters.size()) {
                 return std::nullopt;
             }
-            std::vector<ref<Expression>> out{};
-            for (usize i = 0; i < funcall.args.size(); ++i) {
-                auto& arg = funcall.args[i];
-                auto& atype = type.parameters[i].get();
-                out.push_back(
-                    arena.wrap(
-                        TRY(type_coerce(
-                            TRY(parse_expression(arg, state)), atype, arena))));
-            }
+            auto args = TRY(simultaneous_initialize<Expression>(funcall.args.size(),
+                [&](usize n) {
+                    auto& arg = funcall.args[n];
+                    auto& atype = type.parameters[n].get();
+                    return parse_expression(arg, state)
+                        .and_then([&](auto t) { return type_coerce(std::move(t), atype, arena); });
+                }, arena));
             return Expression {
                 .variant = expr::FunctionCall {
                     .function = arena.wrap(std::move(fun)),
-                    .args = std::move(out),
+                    .args = args,
                 },
                 .type = type.return_type,
                 .is_lvalue = false,
@@ -582,11 +591,13 @@ namespace sema {
         } else if (expr.is_function()) {
             auto& function = expr.get_function();
             auto& return_type = TRY(type_table.lookup(function.return_type, arena));
-            std::vector<ref<Type>> args;
-            args.reserve(function.args.size());
-            for (auto& arg : function.args) {
-                args.push_back(ref(TRY(type_table.lookup(arg.type, arena))));
-            }
+
+            auto args = TRY(simultaneous_initialize<ref<Type>>(function.args.size(),
+                [&](usize n) -> std::optional<ref<Type>> {
+                    auto& arg = function.args[n];
+                    return ref(TRY(type_table.lookup(arg.type, arena)));
+                }, arena));
+
             auto& function_type = type_table.get_function_to(return_type, args, arena);
             usize children_cap =
                 std::accumulate(function.body.begin(), function.body.end(), 0UL,
@@ -594,22 +605,24 @@ namespace sema {
             usize symbol_cap
                 = std::accumulate(function.body.begin(), function.body.end(), 0UL,
                     [](usize size, auto& statement) -> usize { return size + statement.is_variable_decl(); });
+            usize statement_cap = function.body.size() + symbol_cap;
             Frame new_frame = {
-                .children = {arena.allocate_n_uninit<Frame>(children_cap)},
-                .symbols = {arena.allocate_n_uninit<Symbol>(symbol_cap)},
-                .statements = {arena.allocate_n_uninit<Statement>(function.body.size() + symbol_cap)},
+                .children = {arena, children_cap},
+                .symbols = {arena, symbol_cap},
+                .statements = {arena, statement_cap},
                 .type = Frame::FUNCTION_BASE,
                 .parent = &frame,
                 .scope_level = 0,
             };
+            frame.push_function_args(function_type.get_function(), function);
             auto nested_state = state.construct_new_state(new_frame);
-            auto body = TRY(parse_statements(function.body, function_type.get_function(), nested_state));
+            TRY(parse_statements(new_frame.statements, function.body, function_type.get_function(), nested_state));
         }
         std::unreachable();
     }
 
     auto
-    parse_statement(std::vector<Statement>& output,
+    parse_statement(SmallVector<Statement>& output,
         const ast::Statement& statement, FunctionType& function_type,
         LexerState& state)
     -> std::optional<std::monostate>
@@ -664,7 +677,7 @@ namespace sema {
                     .identifier = var_decl.identifier,
                     .offset = 0,
                 }),
-            }, arena);
+            });
             if (var_decl.value) {
                 output.push_back(Statement {
                         .variant = stmt::Assignment {
@@ -686,9 +699,9 @@ namespace sema {
         } else if (statement.is_block()) {
             auto& sub_frame = produce_frame(frame, statement.get_block(), arena);
             auto sub_state = state.construct_new_state(sub_frame);
-            auto block = TRY(parse_statements(statement.get_block(), function_type, sub_state));
+            TRY(parse_statements(sub_frame.statements, statement.get_block(), function_type, sub_state));
             output.push_back(Statement {
-                .variant = std::move(block)
+                .variant = std::span(sub_frame.statements),
             });
             return std::monostate{};
         } else if (statement.is_expr()) {
@@ -701,13 +714,13 @@ namespace sema {
         std::unreachable();
     }
 
-    auto parse_statements(std::span<const ast::Statement> statements, FunctionType& function_type, LexerState& state)
-    -> std::optional<std::vector<Statement>> {
-        std::vector<Statement> output;
+    auto parse_statements(SmallVector<Statement>& output, std::span<const ast::Statement> statements,
+        FunctionType& function_type, LexerState& state)
+    -> std::optional<Empty> {
         for (auto& statement : statements) {
             TRY(parse_statement(output, statement, function_type, state));
         }
-        return output;
+        return empty;
     }
 
     auto parse_constant_declaration(const ast::Variable& variable, LexerState& state) -> std::optional<Symbol> {
@@ -830,7 +843,7 @@ namespace sema {
         SymbolTable table = {
             .global_frame = {
                 .children = {std::span<Uninitialized<Frame>>{}},
-                .symbols = {arena.allocate_n_uninit<Symbol>(program.variables.size())},
+                .symbols = {arena, program.variables.size()},
                 .statements = {std::span<Uninitialized<Statement>>{}},
                 .type = Frame::GLOBAL,
                 .parent = nullptr,
@@ -841,7 +854,7 @@ namespace sema {
         LexerState state(arena, table);
         for (auto& variable : program.variables) {
             auto new_symbol = TRY(parse_constant_declaration(variable, state));
-            table.global_frame.push_symbol(std::move(new_symbol), arena);
+            table.global_frame.push_symbol(std::move(new_symbol));
         }
         for (auto& variable : program.variables) {
             auto& symbol = TRY(table.global_frame.lookup(variable.identifier));

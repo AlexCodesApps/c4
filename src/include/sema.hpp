@@ -1,5 +1,6 @@
 #pragma once
 #include "arena.hpp"
+#include "arena_chunk_list.hpp"
 #include "ast.hpp"
 #include "debug.hpp"
 #include "numbers.hpp"
@@ -10,7 +11,6 @@
 #include <span>
 #include <utility>
 #include <variant>
-#include <vector>
 
 namespace sema {
     class LexerState;
@@ -36,7 +36,7 @@ namespace sema {
             }
         };
         struct Function {
-            std::vector<ref<Type>> parameters;
+            std::span<ref<Type>> parameters;
             ref<Type> return_type;
         };
         struct Pointer {
@@ -127,9 +127,10 @@ namespace sema {
             return &a == &b;
         }
     };
-    struct TypeTable {
-        using pair = std::pair<std::vector<ast::Identifier>, ref<Type>>;
-        std::vector<pair> types_database;
+    class TypeTable {
+        using pair = std::pair<ArenaChunkList<ast::Identifier, 4>, Type>;
+        ArenaChunkList<pair, 8> types_database;
+    public:
         TypeTable(Arena& arena);
         Type * lookup(const ast::Type& type, Arena& arena);
         Type * lookup_identifier(const ast::Identifier& iden);
@@ -173,9 +174,9 @@ namespace sema {
         Frame * parent;
         usize scope_level;
         Symbol * lookup(const ast::Identifier& iden);
-        Symbol& push_symbol(Symbol symbol, Arena& arena);
+        Symbol& push_symbol(Symbol symbol);
         Frame& new_child(Arena& arena, usize children_cap, usize symbol_cap, usize statement_cap);
-        void push_function_args(const type::Function& function, const ast::expr::Function& ast, Arena& arena);
+        void push_function_args(const type::Function& function, const ast::expr::Function& ast);
     };
 
     namespace lit {
@@ -254,9 +255,10 @@ namespace sema {
         };
         struct FunctionCall {
             ref<Expression> function;
-            std::vector<ref<Expression>> args;
+            std::span<Expression> args;
         };
     }
+
     struct Expression {
         std::variant<
             expr::Literal, expr::Symbol, expr::AddrOf, expr::Deref,
@@ -447,7 +449,7 @@ namespace sema {
             Expression value;
         };
         using Expression = sema::Expression;
-        using Block = std::vector<Statement>;
+        using Block = std::span<Statement>;
     }
     struct Statement {
         std::variant<stmt::Return, stmt::Assignment, stmt::Block, stmt::Expression> variant;
@@ -524,8 +526,8 @@ namespace sema {
         }
     };
 
-    std::optional<std::vector<Statement>>
-    parse_statements(
+    std::optional<Empty>
+    parse_statements(SmallVector<Statement>& output,
         std::span<const ast::Statement> statements, type::Function& type, LexerState& state);
 
     std::optional<SymbolTable>

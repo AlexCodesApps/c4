@@ -4,6 +4,7 @@
 #include "numbers.hpp"
 #include "uninitialized.hpp"
 #include <cassert>
+#include <initializer_list>
 #include <type_traits>
 #include <utility>
 
@@ -18,17 +19,15 @@ class ArenaChunkList {
     usize m_size;
 public:
     ArenaChunkList()
-    : m_first(nullptr), m_end(nullptr), m_size(0) {}
-    ArenaChunkList(ArenaChunkList&& other)
-    : m_first(std::exchange(other.m_first, nullptr)),
-    m_end(other.m_end), m_size(other.m_size) {}
-    ArenaChunkList(const ArenaChunkList&) = delete;
-    ArenaChunkList& operator=(ArenaChunkList&&) {
-
-    }
-    ~ArenaChunkList() {
-        static_assert(std::is_trivially_destructible_v<T>, 
+    : m_first(nullptr), m_end(nullptr), m_size(0) {
+        static_assert(std::is_trivially_destructible_v<T>,
             "maybe cheap but removes expensive deallocation routine");
+    }
+    ArenaChunkList(Arena& arena, std::initializer_list<T> list)
+    : ArenaChunkList() {
+        for (auto& elem : list) {
+            push_back(arena, std::move(elem));
+        }
     }
     template <typename ...Args>
     T& emplace_back(Arena& arena, Args&&... args) {
@@ -76,29 +75,52 @@ public:
         }
         return current[real_index];
     }
+    T& front() {
+        assert(m_size > 0);
+        return m_first->array[0].get();
+    }
+    const T& front() const {
+        assert(m_size > 0);
+        return m_first->array[0].get();
+    }
+    T& back() {
+        assert(m_size > 0);
+        usize index = m_size % ChunkSize;
+        return m_end->array[index].get();
+    }
+    const T& back() const {
+        assert(m_size > 0);
+        usize index = m_size % ChunkSize;
+        return m_end->array[index].get();
+    }
+private:
     template <typename U>
-    class IteratorMixin {
+    struct IteratorMixin {
         U& get() {
             return *static_cast<U *>(this);
         }
         const U& get() const {
-            return *static_cast<U *>(this);
+            return *static_cast<const U *>(this);
         }
         bool operator==(U other) const {
             return get().current == other.current && get().current_chunk_index == other.current_chunk_index;
         }
-        const T& operator*() const {
-            return get().current[get().current_chunk_index];
+        bool operator!=(U other) const {
+            return !(*this == other);
         }
-        U& operator++(int) {
+        const T& operator*() const {
+            return *get().current->array[get().current_chunk_index].get();
+        }
+        U& operator++() {
             ++get().current_chunk_index;
             if (get().current_chunk_index == ChunkSize) {
                 get().current = get().current->next;
                 get().current_chunk_index = 0;
             }
-            return *this;
+            return get();
         }
     };
+public:
     class Iterator : public IteratorMixin<Iterator> {
         friend ArenaChunkList;
         Chunk * current;
@@ -108,7 +130,7 @@ public:
         {}
     public:
         T& operator*() {
-            return current[current_chunk_index];
+            return *current->array[current_chunk_index].get();
         }
     };
     class ConstIterator : public IteratorMixin<ConstIterator> {
@@ -118,10 +140,6 @@ public:
         ConstIterator(const Chunk * current, usize current_chunk_index)
         : current(current), current_chunk_index(current_chunk_index)
         {}
-    public:
-        T& operator*() {
-            return current[current_chunk_index];
-        }
     };
     friend Iterator;
     friend ConstIterator;
@@ -130,6 +148,12 @@ public:
     }
     Iterator end() {
         return Iterator(m_end, m_size % ChunkSize);
+    }
+    ConstIterator begin() const {
+        return ConstIterator(m_first, 0);
+    }
+    ConstIterator end() const {
+        return ConstIterator(m_end, m_size % ChunkSize);
     }
     ConstIterator cbegin() const {
         return ConstIterator(m_first, 0);
