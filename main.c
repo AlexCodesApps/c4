@@ -1,6 +1,7 @@
 #include "src/include/allocator.h"
 #include "src/include/arena.h"
 #include "src/include/ast.h"
+#include "src/include/common.h"
 #include "src/include/file.h"
 #include "src/include/lexer.h"
 #include "src/include/str.h"
@@ -85,8 +86,8 @@ void print_stmt(Writer writer, const AstStmt * stmt, usize padding) {
         break;
     case AST_STMT_ASSIGNMENT:
         fmt(writer, "assign\n");
-        print_expr(writer, &stmt->assign_to, padding + 1);
-        print_expr(writer, &stmt->assign_from, padding + 1);
+        print_expr(writer, &stmt->assign.to, padding + 1);
+        print_expr(writer, &stmt->assign.from, padding + 1);
         break;
     case AST_STMT_BLOCK:
         fmt(writer, "block\n");
@@ -121,8 +122,17 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
         pad(writer, padding + 1);
         fmt(writer, "(parameters)\n");
         foreach_span(&expr->function->params, param) {
+            pad(writer, padding + 1);
             fmt(writer, "{} :\n", !str_empty(param->iden) ? param->iden : s("!"));
-            print_type(writer, &param->type, padding + 1);
+            print_type(writer, &param->type, padding + 2);
+        }
+        pad(writer, padding + 1);
+        fmt(writer, "(returns)\n");
+        if (expr->function->has_return_type) {
+            print_type(writer, &expr->function->return_type, padding + 1);
+        } else {
+            pad(writer, padding + 1);
+            fmt(writer, "(void)\n");
         }
         pad(writer, padding + 1);
         fmt(writer, "(body)\n");
@@ -259,7 +269,7 @@ int main(int argc, char ** argv) {
     Str src = str_new(alloc, file_size);
     Arena arena;
     usize reserved_size = MB(20);
-    if (arena_new(&arena, reserved_size)) {
+    if (arena_new(&arena, reserved_size) != 0) {
         fmt(stderrw, "unable to reserve address space with size : {}\n", reserved_size);
         return 1;
     }

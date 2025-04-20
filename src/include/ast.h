@@ -1,6 +1,7 @@
 #pragma once
 
 #include "allocator.h"
+#include "common.h"
 #include "generic/darray.h"
 #include "lexer.h"
 #include "str.h"
@@ -15,6 +16,7 @@ enum AstTLSType {
     m(AstPathList, ast_path_list, Str)
 DARRAY_HEADER(AST_PATH_TEMPLATE);
 struct AstPath {
+    SrcSpan span;
     bool is_global;
     AstPathList list;
 } typedef AstPath;
@@ -22,15 +24,18 @@ struct AstPath {
 #define AST_TYPE_LIST_TEMPLATE(m) \
     m(AstTypeList, ast_type_list, struct AstType)
 DARRAY_HEADER(AST_TYPE_LIST_TEMPLATE);
-enum AstTypeType {
+
+enum AstTypeType : u8 {
     AST_TYPE_POISONED,
     AST_TYPE_POINTER,
     AST_TYPE_REFERENCE,
     AST_TYPE_FN,
     AST_TYPE_PATH,
 } typedef AstTypeType;
+
 struct AstType {
     AstTypeType type;
+    SrcSpan span;
     union {
         struct AstType * next;
         AstPath path;
@@ -46,18 +51,18 @@ struct AstType {
     m(AstExprList, ast_expr_list, struct AstExpr)
 DARRAY_HEADER(AST_EXPR_LIST_TEMPLATE);
 
-enum AstExprBinaryType {
+enum AstExprBinaryType : u8 {
     AST_EXPR_BINARY_ADD,
     AST_EXPR_BINARY_SUB,
 } typedef AstExprBinaryType;
 
-enum AstExprUnaryType {
+enum AstExprUnaryType : u8 {
     AST_EXPR_UNARY_MINUS,
     AST_EXPR_UNARY_DEREF,
     AST_EXPR_UNARY_ADDR,
 } typedef AstExprUnaryType;
 
-enum AstExprType {
+enum AstExprType : u8 {
     AST_EXPR_FUNCTION,
     AST_EXPR_PATH,
     AST_EXPR_FUNCALL,
@@ -72,6 +77,7 @@ enum AstExprType {
 
 struct AstExpr {
     AstExprType type;
+    SrcSpan span;
     union {
         struct AstFunction * function;
         struct AstPath path;
@@ -106,7 +112,7 @@ struct AstExpr {
     m(AstStmtList, ast_stmt_list, struct AstStmt)
 DARRAY_HEADER(AST_STMT_LIST_TEMPLATE);
 
-enum AstStmtType {
+enum AstStmtType : u8 {
     AST_STMT_RETURN,
     AST_STMT_POISONED,
     AST_STMT_BLOCK,
@@ -117,24 +123,24 @@ enum AstStmtType {
 
 struct AstStmt {
     AstStmtType type;
+    SrcSpan span;
     union {
         struct AstDecl * decl;
         struct {
             AstExpr return_expr;
             bool has_return_expr;
         };
-        struct {
-            AstStmtList block;
-        };
+        AstStmtList block;
         AstExpr expr;
         struct {
-            AstExpr assign_to;
-            AstExpr assign_from;
-        };
+            AstExpr to;
+            AstExpr from;
+        } assign;
     };
 } typedef AstStmt;
 
 struct AstFunParam {
+    SrcSpan span;
     Str iden; // no iden represented by empty string
     AstType type;
 } typedef AstFunParam;
@@ -144,6 +150,7 @@ struct AstFunParam {
 DARRAY_HEADER(AST_FUN_PARAM_LIST_TEMPLATE);
 
 struct AstFunction {
+    SrcSpan span;
     AstFunParamList params;
     bool has_return_type;
     AstType return_type;
@@ -151,6 +158,7 @@ struct AstFunction {
 } typedef AstFunction;
 
 struct AstDecl {
+    SrcSpan span;
     Str iden;
     bool is_const;
     bool has_type;
@@ -164,12 +172,14 @@ struct AstDecl {
 DARRAY_HEADER(AST_TOP_LVL_STMT_LIST_TEMPLATE);
 
 struct AstModule {
+    SrcSpan span;
     Str iden;
     AstTLSList body;
 } typedef AstModule;
 
 struct AstTopLvlStmt {
     AstTLSType type;
+    SrcSpan span;
     union {
         AstModule mod;
         AstDecl decl;
@@ -186,7 +196,7 @@ struct ParseError {
     Token unexpected_token;
 } typedef ParseError;
 
-enum IrrecoverableParseError {
+enum IrrecoverableParseError : u8 {
     IRRECOVERABLE_PARSE_ERROR_OOM,
     IRRECOVERABLE_PARSE_ERROR_LIMIT_REACHED,
 } typedef IrrecoverableParseError;
