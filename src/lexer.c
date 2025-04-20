@@ -254,7 +254,7 @@ LexResult lex(Allocator allocator, Str src) {
 }
 
 bool validate_ascii(Str src) {
-    foreach_str(&src, i) {
+    foreach_span(&src, i) {
         char c = *i;
         if (c < 1 || c > 127) {
             return false;

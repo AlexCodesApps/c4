@@ -1,4 +1,5 @@
 #include "list_macros.h"
+#include "macros.h"
 #include "str.h"
 #include "utility.h"
 #include "writer.h"
@@ -53,24 +54,24 @@ bool fmt_str_builder(Writer writer, Str fmt, const StrBuilder builder[ref]);
     const StrBuilder *: fmt_str_builder \
 )(writer, fmt, arg)
 #define _DETAIL_FMT_BEGIN_(arg) \
-    if ((_res_ = fmt_helper(_writer_, &_slice_, &_fmt_str_)) == 0) { \
-        if (!fmt_generic_apply(_writer_, _fmt_str_, arg)) { \
-            _res_ = -1; \
+    if ((MACRO_VAR(status) = fmt_helper(MACRO_VAR(writer), &MACRO_VAR(slice), &MACRO_VAR(fmt_str))) == 0) { \
+        if (!fmt_generic_apply(MACRO_VAR(writer), MACRO_VAR(fmt_str), arg)) { \
+            MACRO_VAR(status) = -1; \
         }
 #define _DETAIL_FMT_END_(...) \
     }
-#define fmt(writer, str, ...) ({ \
-    Writer _writer_ = writer; \
-    int _res_ = 0; \
-    bool _ret_; \
-    Str _slice_ = s(str); \
-    Str _fmt_str_; \
+#define fmt(_writer, str, ...) ({ \
+    Writer MACRO_VAR(writer) = _writer; \
+    int MACRO_VAR(status) = 0; \
+    bool MACRO_VAR(return); \
+    Str MACRO_VAR(slice) = s(str); \
+    Str MACRO_VAR(fmt_str); \
     FOREACH_RECURSE_MACRO(_DETAIL_FMT_BEGIN_, _DETAIL_FMT_END_, __VA_ARGS__); \
-    if (_res_ == 1 || _res_ == 0) { \
-        _res_ = fmt_helper(_writer_, &_slice_, &_fmt_str_); \
+    if (MACRO_VAR(status) == 1 || MACRO_VAR(status) == 0) { \
+        MACRO_VAR(status) = fmt_helper(MACRO_VAR(writer), &MACRO_VAR(slice), &MACRO_VAR(fmt_str)); \
     } \
-    _ret_ = _res_ == 1; \
-    _ret_; \
+    MACRO_VAR(return) = MACRO_VAR(status) == 1; \
+    MACRO_VAR(return); \
 })
 
 int fmt_helper(Writer writer, Str slice[ref], Str fmt_slice[ref]);

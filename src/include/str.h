@@ -58,8 +58,3 @@ static Str str_new(const char * data, usize size) {
 }
 
 #define EMPTY_STR (Str){0, 0};
-
-#define foreach_str(addr, name) \
-    for (const char * name = (addr)->data, * _end_ = (addr)->data + (addr)->size; \
-        name != _end_; \
-        ++name)

@@ -1,8 +1,11 @@
 #include "include/ast.h"
 #include "include/allocator.h"
+#include "include/file.h"
 #include "include/generic/darray.h"
 #include "include/lexer.h"
 #include "include/str.h"
+#include "include/writer.h"
+#include "include/fmt.h"
 #include <setjmp.h>
 
 static void recover_nested(Parser * parser);
@@ -20,7 +23,7 @@ static AstExpr parse_expr(Parser * parser);
 static bool expr_is_ok(AstExpr * expr) {
     return expr->type != AST_EXPR_POISONED;
 }
-bool type_is_ok(AstType * type) {
+static bool type_is_ok(AstType * type) {
     return type->type != AST_TYPE_POISONED;
 }
 
@@ -161,7 +164,7 @@ static AstType parse_function_type(Parser * parser) {
             throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
         }
         *return_type = parse_type(parser);
-        if (return_type->type == AST_TYPE_POISONED) {
+        if (!type_is_ok(return_type)) {
             return poisoned;
         }
     }
@@ -230,7 +233,7 @@ enum ExprInfixPrecedence {
 static AstExpr parse_expr_with_precedence(Parser * parser, ExprPrecedence prec);
 
 #define EXPR_LOW_PREC EXPR_PREC_AS
-#define POISONED_EXPR (AstExpr){ .type = AST_EXPR_POISONED }
+#define POISONED_EXPR ((AstExpr){ .type = AST_EXPR_POISONED })
 
 struct ExprPrefixRule {
     AstExpr(*prefix)(Parser * parser);
@@ -268,6 +271,9 @@ AstExpr parse_infix_funcall(Parser * parser, AstExpr expr) {
                 goto parse_expr;
             }
             continue;
+        }
+        if (!ast_expr_list_push(&list, expr)) {
+            throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
         }
     }
     AstExpr * next = allocator_alloc(parser->allocator, AstExpr);
@@ -366,7 +372,7 @@ AstExpr parse_infix_dotstar(Parser * parser, AstExpr expr) {
     }
     *next = expr;
     AstExpr toret = (AstExpr) {
-        .type = AST_EXPR_BINARY,
+        .type = AST_EXPR_UNARY,
         .unary = {
             .next = next,
             .type = AST_EXPR_UNARY_DEREF,
@@ -470,9 +476,15 @@ AstExpr parse_prefix_lparen(Parser * parser) {
     }
     AstExpr expr = parse_expr(parser);
     if (expr.type == AST_EXPR_POISONED) {
+        parser_emit_error(parser, (ParseError) {
+            .unexpected_token = *parser_peek(parser),
+        });
         while (!parser_eof(parser)) {
             switch (parser_peek(parser)->type) {
             case TOKEN_TYPE_RPAREN:
+                parser_advance(parser);
+                goto outer;
+            case TOKEN_TYPE_SEMICOLON:
                 goto outer;
             default:
                 parser_advance(parser);
@@ -495,8 +507,9 @@ AstExpr parse_prefix_integer(Parser * parser) {
     }
     usize n = 0;
     Str slice = token_get_str(*token, parser->src);
-    foreach_str(&slice, i) {
-        n = 10 * n + (*i - '\0');
+    Writer stderrw = stderr_writer();
+    foreach_span(&slice, i) {
+        n = 10 * n + (*i - '0');
     }
     return (AstExpr) {
         .type = AST_EXPR_INTEGER,
@@ -627,7 +640,7 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
         if (!parser_advance_if(parser, TOKEN_TYPE_SEMICOLON)) {
             has_return_expr = true;
             return_expr = parse_expr(parser);
-            if (return_expr.type == AST_EXPR_POISONED) {
+            if (!expr_is_ok(&return_expr)) {
                 goto error;
             }
             if (!parser_advance_if(parser, TOKEN_TYPE_SEMICOLON)) {
@@ -693,7 +706,7 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
             return true;
         }
         AstExpr expr2 = parse_expr(parser);
-        if (expr2.type == AST_EXPR_POISONED) {
+        if (!expr_is_ok(&expr2)) {
             goto error;
         }
         if (!parser_advance_if(parser, TOKEN_TYPE_SEMICOLON)) {
@@ -851,7 +864,7 @@ static bool parse_function(Parser * parser, AstDecl * out) {
     if (parser_advance_if(parser, TOKEN_TYPE_COLON)) {
         function.has_return_type = true;
         function.return_type = parse_type(parser);
-        if (function.return_type.type == AST_TYPE_POISONED) {
+        if (!type_is_ok(&function.return_type)) {
             parse_function_recover_invalid_return_type(parser);
         }
     } else {
@@ -921,7 +934,7 @@ static bool parse_decl(Parser * parser, AstDecl * out) {
     decl.iden = str_slice(parser->src, iden_token->span.pos.index, iden_token->span.len);
     if (parser_advance_if(parser, TOKEN_TYPE_COLON)) {
         decl.type = parse_type(parser);
-        if (decl.type.type == AST_TYPE_POISONED) {
+        if (!type_is_ok(&decl.type)) {
             parse_decl_recover_invalid_type(parser);
         }
         decl.has_type = true;
@@ -931,7 +944,7 @@ static bool parse_decl(Parser * parser, AstDecl * out) {
     if (parser_advance_if(parser, TOKEN_TYPE_EQ)) {
         decl.has_expr = true;
         decl.expr = parse_expr(parser);
-        if (decl.expr.type == AST_EXPR_POISONED) {
+        if (!expr_is_ok(&decl.expr)) {
             parse_decl_recover_invalid_expr(parser);
         }
     } else {

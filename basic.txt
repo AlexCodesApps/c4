@@ -3,7 +3,7 @@ mod foo {
 }
 
 fn baz(ref: &int) {
-    ref.*foo::bar();
+    ref.*foo::bar(2, 3) + 4;
 }
 
 fn nothing(): void {

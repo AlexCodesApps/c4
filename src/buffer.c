@@ -1,6 +1,5 @@
 #include "include/buffer.h"
 #include "include/writer.h"
-#include <stdlib.h>
 #include <string.h>
 
 BufferedWriter buffered_writer_new(Writer writer, Buffer buffer) {

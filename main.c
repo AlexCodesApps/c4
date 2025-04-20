@@ -1,7 +1,6 @@
 #include "src/include/allocator.h"
 #include "src/include/arena.h"
 #include "src/include/ast.h"
-#include "src/include/buffer.h"
 #include "src/include/file.h"
 #include "src/include/lexer.h"
 #include "src/include/str.h"
@@ -41,20 +40,20 @@ void print_type(Writer writer, const AstType * type, usize padding) {
     pad(writer, padding);
     switch (type->type) {
     case AST_TYPE_REFERENCE:
-        fmt(writer, "(reference) &\n");
+        fmt(writer, "&\n");
         print_type(writer, type->next, padding + 1);
         break;
     case AST_TYPE_POINTER:
-        fmt(writer, "(pointer) *\n");
+        fmt(writer, "*\n");
         print_type(writer, type->next, padding + 1);
         break;
     case AST_TYPE_PATH:
-        fmt(writer, "(path) ");
         print_path(writer, &type->path);
         fmt(writer, "\n");
         break;
     case AST_TYPE_FN:
-        fmt(writer, "(type) fn\n");
+        ++padding;
+        fmt(writer, "fn\n");
         pad(writer, padding);
         fmt(writer, "(params)\n");
         foreach_span(&type->function.parameters, i) {
@@ -71,20 +70,125 @@ void print_type(Writer writer, const AstType * type, usize padding) {
         break;
     }
 }
+void print_expr(Writer writer, const AstExpr * expr, usize padding);
+void print_stmt(Writer writer, const AstStmt * stmt, usize padding) {
+    pad(writer, padding);
+    switch (stmt->type) {
+    case AST_STMT_RETURN:
+        fmt(writer, "return\n");
+        if (stmt->has_return_expr) {
+            print_expr(writer, &stmt->return_expr, padding + 1);
+        } else {
+            pad(writer, padding + 1);
+            fmt(writer, "(void)\n");
+        }
+        break;
+    case AST_STMT_ASSIGNMENT:
+        fmt(writer, "assign\n");
+        print_expr(writer, &stmt->assign_to, padding + 1);
+        print_expr(writer, &stmt->assign_from, padding + 1);
+        break;
+    case AST_STMT_BLOCK:
+        fmt(writer, "block\n");
+        foreach_span(&stmt->block, stmt) {
+            print_stmt(writer, stmt, padding + 1);
+        }
+        break;
+    case AST_STMT_EXPR:
+        fmt(writer, "expr\n");
+        print_expr(writer, &stmt->expr, padding + 1);
+        break;
+    case AST_STMT_DECL:
+        fmt(writer, "{} {}\n", stmt->decl->is_const ? s("const") : s("let"),  stmt->decl->iden);
+        if (stmt->decl->has_type) {
+            print_type(writer, &stmt->decl->type, padding + 1);
+        }
+        if (stmt->decl->has_expr) {
+            print_expr(writer, &stmt->decl->expr, padding + 1);
+        }
+        break;
+    case AST_STMT_POISONED:
+        fmt(writer, "(poisoned)\n");
+        break;
+    }
+}
 
 void print_expr(Writer writer, const AstExpr * expr, usize padding) {
     pad(writer, padding);
     switch (expr->type) {
     case AST_EXPR_FUNCTION:
         fmt(writer, "fn\n");
-        pad(writer, padding);
+        pad(writer, padding + 1);
         fmt(writer, "(parameters)\n");
-
+        foreach_span(&expr->function->params, param) {
+            fmt(writer, "{} :\n", !str_empty(param->iden) ? param->iden : s("!"));
+            print_type(writer, &param->type, padding + 1);
+        }
+        pad(writer, padding + 1);
+        fmt(writer, "(body)\n");
+        foreach_span(&expr->function->body, stmt) {
+            print_stmt(writer, stmt, padding + 1);
+        }
         break;
     case AST_EXPR_AS:
         fmt(writer, "as\n");
         print_expr(writer, expr->as.next, padding + 1);
         print_type(writer, &expr->as.type, padding + 1);
+        break;
+    case AST_EXPR_PATH:
+        print_path(writer, &expr->path);
+        fmt(writer, "\n");
+        break;
+    case AST_EXPR_FUNCALL:
+        fmt(writer, "function call\n");
+        print_expr(writer, expr->funcall.function, padding + 1);
+        pad(writer, padding + 1);
+        fmt(writer, "(parameters)\n");
+        foreach_span(&expr->funcall.args, arg) {
+            print_expr(writer, arg, padding + 1);
+        }
+        break;
+    case AST_EXPR_POISONED:
+        fmt(writer, "(poisoned)\n");
+        break;
+    case AST_EXPR_POISONED_NESTED:
+        fmt(writer, "(poisoned nested)\n");
+        break;
+    case AST_EXPR_INTEGER:
+        fmt(writer, "{}\n", expr->integer.value);
+        break;
+    case AST_EXPR_FIELD_ACCESS:
+        fmt(writer, ".\n");
+        print_expr(writer, expr->field_access.next, padding + 1);
+        pad(writer, padding + 1);
+        print_path(writer, &expr->field_access.name);
+        fmt(writer, "\n");
+        break;
+    case AST_EXPR_UNARY:
+        switch (expr->unary.type) {
+        case AST_EXPR_UNARY_MINUS:
+            fmt(writer, "-\n");
+            break;
+        case AST_EXPR_UNARY_ADDR:
+            fmt(writer, "&\n");
+            break;
+        case AST_EXPR_UNARY_DEREF:
+            fmt(writer, ".*\n");
+            break;
+        }
+        print_expr(writer, expr->unary.next, padding + 1);
+        break;
+    case AST_EXPR_BINARY:
+        switch (expr->binary.type) {
+        case AST_EXPR_BINARY_ADD:
+            fmt(writer, "+\n");
+            break;
+        case AST_EXPR_BINARY_SUB:
+            fmt(writer, "-\n");
+            break;
+        }
+        print_expr(writer, expr->binary.a, padding + 1);
+        print_expr(writer, expr->binary.b, padding + 1);
         break;
     }
 }
@@ -120,7 +224,7 @@ void print_ast(Writer writer, const Ast * ast) {
 }
 
 int main(int argc, char ** argv) {
-    Writer stderrw = file_writer(stderr_file());
+    Writer stderrw = stderr_writer();
     if (argc != 2) {
         fmt(stderrw, "usage : {} <file_name>\n", argv[0]);
         return 1;
@@ -176,10 +280,7 @@ int main(int argc, char ** argv) {
         return 1;
     }
     TokenList list = result.list;
-    static u8 buffer[4096];
-    Writer _stdoutw = file_writer(stdout_file());
-    BufferedWriter _bstdoutw = buffered_writer_new(_stdoutw, b(buffer));
-    Writer stdoutw = buffered_writer_writer(&_bstdoutw);
+    Writer stdoutw = stdout_writer();
     print_token_list(stdoutw, src, &list);
     writer_flush(stdoutw);
 

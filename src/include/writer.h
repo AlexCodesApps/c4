@@ -1,9 +1,6 @@
 #pragma once
-
-#include "file.h"
 #include "ints.h"
 #include "str.h"
-#include <stdio.h>
 
 typedef bool WriterResult;
 
@@ -21,8 +18,6 @@ struct Writer {
     WriterPayload payload;
 } typedef Writer;
 
-Writer file_writer(File file);
-Writer cfile_writer(FILE file[ref]);
 Writer str_builder_writer(StrBuilder builder[ref]);
 
 WriterResult writer_write(Writer writer, const void * data, usize size);

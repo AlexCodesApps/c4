@@ -2,6 +2,7 @@
 #include "include/checked_math.h"
 #include "include/str.h"
 #include "include/writer.h"
+#include "include/file.h"
 #include <stdio.h>
 
 bool fmt_u64(Writer writer, Str fmt, u64 u) {

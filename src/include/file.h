@@ -1,5 +1,7 @@
 #pragma once
 #include "str.h"
+#include "writer.h"
+#include <stdio.h>
 
 struct File {
     int fd;
@@ -30,3 +32,9 @@ File stdout_file();
 File stdin_file();
 File stderr_file();
 File invalid_file();
+
+Writer file_writer(File file);
+Writer cfile_writer(FILE file[ref]);
+
+Writer stdout_writer();
+Writer stderr_writer();

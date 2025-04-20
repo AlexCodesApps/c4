@@ -1,4 +1,5 @@
 #include "include/writer.h"
+#include "include/buffer.h"
 #include "include/file.h"
 #include "include/str.h"
 #include <stdio.h>
@@ -63,4 +64,21 @@ WriterResult writer_str(Writer writer, Str str) {
 
 void writer_flush(Writer writer) {
     writer.flush(writer.payload);
+}
+
+
+Writer stderr_writer() {
+    return file_writer(stderr_file());
+}
+
+Writer stdout_writer() {
+    static u8 buffer[4096];
+    static BufferedWriter buffered_writer = {
+        .buffer.data = nullptr,
+    };
+    if (buffered_writer.buffer.data == nullptr) {
+        Writer base_file_writer = file_writer(stdout_file());
+        buffered_writer = buffered_writer_new(base_file_writer, b(buffer));
+    }
+    return buffered_writer_writer(&buffered_writer);
 }
