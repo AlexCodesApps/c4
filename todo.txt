@@ -1,6 +1,0 @@
-- finish implementing function expresisons
-- implement more basic operations
-- refactor ir generated code to be more robust
- !! important
-- refactor Token into proper variant
-- treat pointers like integers in code

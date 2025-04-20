@@ -1,3 +1,11 @@
+mod foo {
+    fn bar(ptr: *int) {}
+}
+
+fn baz(ref: &int) {
+    ref.*foo::bar();
+}
+
 fn nothing(): void {
 	return;
 }

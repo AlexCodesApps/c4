@@ -1,24 +1,38 @@
-program = (';' | function | declaration)*
-function = "fn" IDEN "(" (IDEN ":" type ("," IDEN ":" type)*)? ")" ":" type "{" statement "}";
+program = top_level_statement*
+top_level_statement = 
+    ";"
+    | function 
+    | declaration
+    | module;
+identifier = "::"? IDEN ("::" IDEN)*;
+module = "mod" IDEN "{" top_level_statement* "}";
+param_list = ((IDEN ":")? type ("," (IDEN ":")? type)*)?;
+function = "fn" IDEN "(" param_list ")" (":" type)? "{" statement* "}";
 statement = return
     | assignment
+    | function
     | declaration
     | expr ";"
     | "{" statement* "}"
     | ";";
-assignment = IDEN "=" expr ";";
+assignment = identifier "=" expr ";";
 return = "return" expr ";";
-declaration = IDEN ":" type ("=" expr)? ";";
+declaration = ("let"| "const") IDEN ":" type ("=" expr)? ";";
 type =  "*" type
         | "&" type
-        | IDEN
-        | "fn" "(" (type ("," type)*)? ")" ":" type;
+        | identifier
+        | "fn" "(" param_list ")" ":" type;
 expr = as_expr;
 as_expr = term_expr ("as" type)*;
 term_expr = unary_expr (("-"|"+") unary_expr)*;
 unary_expr = ("&"|"-") postfix_expr
             | postfix_expr;
 postfix_expr = primary_expr (".*" | "(" (expr ("," expr)*)? ")")*;
-primary_expr = INTEGER
-    | IDEN
+primary_expr = 
+    INTEGER
+    | identifier
+    | "true"
+    | "false"
+    | "nullptr"
+    | "fn" "(" param_list ")" (":" type)? "{" statement* "}"
     | "(" expr ")";
