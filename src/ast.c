@@ -10,7 +10,7 @@
 #include <setjmp.h>
 
 static void recover_nested(Parser * parser);
-static const AstTopLvlStmt * parse_tls(Parser * parser);
+static bool parse_tls(Parser * parser, AstTopLvlStmt * out);
 static bool parse_function(Parser * parser, AstDecl * out);
 static bool parse_decl(Parser * parser, AstDecl * out);
 static bool parse_stmt_block(Parser * parser, AstStmtList * out);
@@ -41,7 +41,7 @@ DARRAY_IMPL(AST_ERROR_LIST_TEMPLATE);
 DARRAY_IMPL(AST_FUN_PARAM_LIST_TEMPLATE);
 DARRAY_IMPL(AST_STMT_LIST_TEMPLATE);
 DARRAY_IMPL(AST_EXPR_LIST_TEMPLATE);
-DARRAY_IMPL(AST_PATH_TEMPLATE);
+DARRAY_IMPL(STR_LIST_TEMPLATE);
 
 [[noreturn]]static void throw(Parser * parser, IrrecoverableParseError err) {
     parser->caught_error_buff = err;
@@ -93,10 +93,10 @@ static void parser_emit_error(Parser * parser, ParseError err) {
     }
 }
 
-static bool parse_path(Parser * parser, AstPath * out) {
-    AstPath path = {
+static bool parse_path(Parser * parser, PathBuilder * out) {
+    PathBuilder path = {
         .is_global = false,
-        .list = ast_path_list_new(parser->allocator),
+        .list = str_list_new(parser->allocator),
     };
     const Token * begin = parser_advance_if(parser, TOKEN_TYPE_SCOPE);
     if (begin) {
@@ -109,7 +109,7 @@ static bool parse_path(Parser * parser, AstPath * out) {
     if (!begin) {
         begin = fst_iden;
     }
-    if (!ast_path_list_push(&path.list, token_get_str(*fst_iden, parser->src))) {
+    if (!str_list_push(&path.list, token_get_str(*fst_iden, parser->src))) {
         throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
     }
     while (parser_advance_if(parser, TOKEN_TYPE_SCOPE)) {
@@ -117,7 +117,7 @@ static bool parse_path(Parser * parser, AstPath * out) {
         if (!iden) {
             return false;
         }
-        if (!ast_path_list_push(&path.list, token_get_str(*iden, parser->src))) {
+        if (!str_list_push(&path.list, token_get_str(*iden, parser->src))) {
             throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
         }
     }
@@ -188,7 +188,7 @@ static AstType parse_function_type(Parser * parser) {
         .function = {
             .has_return_type = has_return_type,
             .return_type = return_type,
-            .parameters = list,
+            .parameters = ast_type_list_to_span(&list),
         }
     };
 }
@@ -223,14 +223,14 @@ static AstType parse_type(Parser * parser) {
     }
     case TOKEN_TYPE_IDENTIFIER:
     case TOKEN_TYPE_SCOPE:
-        AstPath path;
+        PathBuilder path;
         if (!parse_path(parser, &path)) {
             return poisoned;
         }
         return (AstType) {
             .type = AST_TYPE_PATH,
             .span = extend_span_to(token->span.pos, parser),
-            .path = path,
+            .path = path_builder_to_path(&path),
         };
     case TOKEN_TYPE_FN:
         return parse_function_type(parser);
@@ -302,7 +302,7 @@ AstExpr parse_infix_funcall(Parser * parser, AstExpr expr) {
         .type = AST_EXPR_FUNCALL,
         .funcall = {
             .function = next,
-            .args = list,
+            .args = ast_expr_list_to_span(&list),
         }
     };
 }
@@ -361,7 +361,7 @@ AstExpr parse_infix_dot(Parser * parser, AstExpr expr) {
     if (!parser_advance_if(parser, TOKEN_TYPE_DOT)) {
         return POISONED_EXPR;
     }
-    AstPath path;
+    PathBuilder path;
     if (!parse_path(parser, &path)) {
         return POISONED_EXPR;
     }
@@ -374,7 +374,7 @@ AstExpr parse_infix_dot(Parser * parser, AstExpr expr) {
         .type = AST_EXPR_FIELD_ACCESS,
         .field_access = {
             .next = next,
-            .name = path,
+            .name = path_builder_to_path(&path),
         }
     };
 }
@@ -397,7 +397,7 @@ AstExpr parse_infix_dotstar(Parser * parser, AstExpr expr) {
     };
     TokenType next_type = parser_peek(parser)->type;
     if (next_type == TOKEN_TYPE_SCOPE || next_type == TOKEN_TYPE_IDENTIFIER) {
-        AstPath path;
+        PathBuilder path;
         if (!parse_path(parser, &path)) {
             return POISONED_EXPR;
         }
@@ -410,7 +410,7 @@ AstExpr parse_infix_dotstar(Parser * parser, AstExpr expr) {
             .type = AST_EXPR_FIELD_ACCESS,
             .field_access = {
                 .next = next,
-                .name = path,
+                .name = path_builder_to_path(&path),
             }
         };
     }
@@ -440,13 +440,13 @@ AstExpr parse_infix_as(Parser * parser, AstExpr expr) {
 }
 
 AstExpr parse_prefix_path(Parser * parser) {
-    AstPath path;
+    PathBuilder path;
     if (!parse_path(parser, &path)) {
         return POISONED_EXPR;
     }
     return (AstExpr) {
         .type = AST_EXPR_PATH,
-        .path = path,
+        .path = path_builder_to_path(&path),
     };
 }
 
@@ -476,10 +476,10 @@ AstExpr parse_prefix_fn(Parser * parser) {
         throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
     }
     *function = (AstFunction) {
-        .params = params,
+        .params = ast_fun_param_list_to_span(&params),
         .has_return_type = has_return,
         .return_type = return_type,
-        .body = body,
+        .body = ast_stmt_list_to_span(&body),
     };
     return (AstExpr) {
         .type = AST_EXPR_FUNCTION,
@@ -709,7 +709,7 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
         *out = (AstStmt) {
             .type = AST_STMT_BLOCK,
             .span = extend_span_to(token->span.pos, parser),
-            .block = list,
+            .block = ast_stmt_list_to_span(&list),
         };
         return true;
     default:
@@ -886,9 +886,11 @@ static bool parse_function(Parser * parser, AstDecl * out) {
     }
     decl.iden = token_get_str(*iden_token, parser->src);
     AstFunction function;
-    if (!parse_function_param_list(parser, &function.params)) {
+    AstFunParamList list;
+    if (!parse_function_param_list(parser, &list)) {
         return false;
     }
+    function.params = ast_fun_param_list_to_span(&list);
     if (parser_advance_if(parser, TOKEN_TYPE_COLON)) {
         function.has_return_type = true;
         function.return_type = parse_type(parser);
@@ -898,9 +900,11 @@ static bool parse_function(Parser * parser, AstDecl * out) {
     } else {
         function.has_return_type = false;
     }
-    if (!parse_stmt_block(parser, &function.body)) {
+    AstStmtList body;
+    if (!parse_stmt_block(parser, &body)) {
         return false;
     }
+    function.body = ast_stmt_list_to_span(&body);
     AstFunction * fun_alloc = allocator_alloc(parser->allocator, AstFunction);
     if (!fun_alloc) {
         throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
@@ -1006,9 +1010,11 @@ static bool parse_mod(Parser * parser, AstModule * out) {
         if (parser_eof(parser)) {
             return false;
         }
-        const AstTopLvlStmt * tls = parse_tls(parser);
-        if (!tls) continue;
-        if (tls->type == AST_TLS_TYPE_POISONED) {
+        AstTopLvlStmt tls;
+        if (!parse_tls(parser, &tls)) {
+            continue;
+        }
+        if (tls.type == AST_TLS_TYPE_POISONED) {
             recover_nested(parser);
             continue;
         }
@@ -1019,55 +1025,56 @@ static bool parse_mod(Parser * parser, AstModule * out) {
     *out = (AstModule) {
         .span = extend_span_to(begin->span.pos, parser),
         .iden = iden,
-        .body = list,
+        .body = ast_tls_list_to_span(&list),
     };
     return true;
 }
 
 // return value could be null in case of parsing a semicolon.
-static const AstTopLvlStmt * parse_tls(Parser * parser) {
-    static const AstTopLvlStmt poisoned_value = { .type = AST_TLS_TYPE_POISONED };
-    const AstTopLvlStmt * const poisoned = &poisoned_value;
+static bool parse_tls(Parser * parser, AstTopLvlStmt * out) {
+    static const AstTopLvlStmt poisoned = { .type = AST_TLS_TYPE_POISONED };
     Token * const token = parser_peek(parser);
     if (token->type == TOKEN_TYPE_SEMICOLON) {
         parser_advance(parser);
-        return nullptr;
+        return false;
     }
-    AstTopLvlStmt * const tls = allocator_alloc(parser->allocator, AstTopLvlStmt);
-    if (!tls) {
-        throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
-    }
+    AstTopLvlStmt tls;
     switch (token->type) {
     case TOKEN_TYPE_MOD:
-        *tls = (AstTopLvlStmt) {
+        tls = (AstTopLvlStmt) {
             .type = AST_TLS_TYPE_MOD,
         };
-        if (!parse_mod(parser, &tls->mod)) {
-            return poisoned;
+        if (!parse_mod(parser, &tls.mod)) {
+            *out = poisoned;
+            return true;
         }
         break;
     case TOKEN_TYPE_FN:
-        *tls = (AstTopLvlStmt) {
+        tls = (AstTopLvlStmt) {
             .type = AST_TLS_TYPE_DECL,
         };
-        if (!parse_function(parser, &tls->decl)) {
-            return poisoned;
+        if (!parse_function(parser, &tls.decl)) {
+            *out = poisoned;
+            return true;
         }
         break;
     case TOKEN_TYPE_LET:
     case TOKEN_TYPE_CONST:
-        *tls = (AstTopLvlStmt) {
+        tls = (AstTopLvlStmt) {
             .type = AST_TLS_TYPE_DECL,
         };
-        if (!parse_decl(parser, &tls->decl)) {
-            return poisoned;
+        if (!parse_decl(parser, &tls.decl)) {
+            *out = poisoned;
+            return true;
         }
         break;
     default:
-        return poisoned;
+        *out = poisoned;
+        return true;
     }
-    tls->span = extend_span_to(token->span.pos, parser);
-    return tls;
+    tls.span = extend_span_to(token->span.pos, parser);
+    *out = tls;
+    return true;
 }
 
 static void recover_nested(Parser * parser) {
@@ -1130,9 +1137,9 @@ ParseResult parse(Allocator allocator, Str src, TokenSpan tokens) {
     AstTLSList list = ast_tls_list_new(allocator);
     Token * token;
     while ((token = parser_peek(&parser))->type != TOKEN_TYPE_EOF) {
-        const AstTopLvlStmt * tls = parse_tls(&parser);
-        if (!tls) continue;
-        if (tls->type == AST_TLS_TYPE_POISONED) {
+        AstTopLvlStmt tls;
+        if (!parse_tls(&parser, &tls)) continue;
+        if (tls.type == AST_TLS_TYPE_POISONED) {
             recover_top_lvl(&parser);
             continue;
         }
@@ -1142,7 +1149,9 @@ ParseResult parse(Allocator allocator, Str src, TokenSpan tokens) {
     }
     return (ParseResult) {
         .irrecoverable = false,
-        .ast = (Ast){list},
+        .ast = (Ast){
+            ast_tls_list_to_span(&list)
+        },
         .errors = parser.errors,
     };
 }

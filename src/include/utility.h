@@ -57,3 +57,7 @@ for (typeof_unqual((addr)->data) i =  (addr)->data, MACRO_VAR(end) = i + (addr)-
     i != MACRO_VAR(end); \
     ++i \
 )
+#define span_index_in_bounds(addr, i) ((i) < (addr)->size)
+#define span_at(addr, i) (assert(span_index_in_bounds(addr, i)), (addr)->data + (i))
+#define span_back(addr) span_at(addr, (addr)->size - 1)
+#define span_front(addr) span_at(addr, 0)

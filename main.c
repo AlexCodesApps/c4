@@ -26,14 +26,14 @@ void pad(Writer writer, usize padding) {
     }
 }
 
-void print_path(Writer writer, const AstPath * path) {
-    if (path->is_global) {
+void print_path(Writer writer, Path path) {
+    if (path.is_global) {
         fmt(writer, "::");
     }
-    assert(path->list.size > 0);
-    fmt(writer, "{}", path->list.data[0]);
-    for (usize i = 1; i < path->list.size; ++i) {
-        fmt(writer, "::{}", path->list.data[i]);
+    assert(path.list.size > 0);
+    fmt(writer, "{}", path.list.data[0]);
+    for (usize i = 1; i < path.list.size; ++i) {
+        fmt(writer, "::{}", path.list.data[i]);
     }
 }
 
@@ -49,7 +49,7 @@ void print_type(Writer writer, const AstType * type, usize padding) {
         print_type(writer, type->next, padding + 1);
         break;
     case AST_TYPE_PATH:
-        print_path(writer, &type->path);
+        print_path(writer, type->path);
         fmt(writer, "\n");
         break;
     case AST_TYPE_FN:
@@ -146,7 +146,7 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
         print_type(writer, &expr->as.type, padding + 1);
         break;
     case AST_EXPR_PATH:
-        print_path(writer, &expr->path);
+        print_path(writer, expr->path);
         fmt(writer, "\n");
         break;
     case AST_EXPR_FUNCALL:
@@ -171,7 +171,7 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
         fmt(writer, ".\n");
         print_expr(writer, expr->field_access.next, padding + 1);
         pad(writer, padding + 1);
-        print_path(writer, &expr->field_access.name);
+        print_path(writer, expr->field_access.name);
         fmt(writer, "\n");
         break;
     case AST_EXPR_UNARY:
@@ -203,10 +203,9 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
     }
 }
 
-void print_tls_list(Writer writer, const AstTLSList * ast, usize padding) {
+void print_tls_list(Writer writer, const AstTLSSpan * ast, usize padding) {
     Writer stderrw = file_writer(stderr_file());
-    foreach_span(ast, i) {
-        const AstTopLvlStmt * tls = *i;
+    foreach_span(ast, tls) {
         pad(writer, padding);
         switch (tls->type) {
         case AST_TLS_TYPE_MOD:
@@ -230,7 +229,7 @@ void print_tls_list(Writer writer, const AstTLSList * ast, usize padding) {
 }
 
 void print_ast(Writer writer, const Ast * ast) {
-    print_tls_list(writer, &ast->list, 0);
+    print_tls_list(writer, &ast->body, 0);
 }
 
 int main(int argc, char ** argv) {
@@ -294,7 +293,7 @@ int main(int argc, char ** argv) {
     print_token_list(stdoutw, src, &list);
     writer_flush(stdoutw);
 
-    ParseResult parse_result = parse(allocator, src, token_list_to_span(&list));
+    const ParseResult parse_result = parse(allocator, src, token_list_to_span(&list));
 
     foreach_span(&parse_result.errors, err) {
         Token tok = err->unexpected_token;
