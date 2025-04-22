@@ -9,8 +9,8 @@ struct Str {
     usize size;
 } typedef Str;
 
-#define s(input) ((struct Str){ (input), sizeof(input) - 1 })
-#define cstr(input) ((struct Str){ (input), strlen(input) })
+#define s(input) ((struct Str){(input), sizeof(input) - 1})
+#define cstr(input) ((struct Str){(input), strlen(input)})
 
 struct StrBuilder {
     Allocator allocator;
@@ -53,8 +53,6 @@ static char str_at_value_s(Str src, usize index) {
     return src.data[index];
 }
 
-static Str str_new(const char * data, usize size) {
-    return (Str){data, size};
-}
+static Str str_new(const char * data, usize size) { return (Str){data, size}; }
 
 #define EMPTY_STR (Str){0, 0};

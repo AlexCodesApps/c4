@@ -12,8 +12,7 @@ enum AstTLSType {
     AST_TLS_TYPE_POISONED,
 } typedef AstTLSType;
 
-#define AST_TYPE_LIST_TEMPLATE(m) \
-    m(AstTypeList, ast_type_list, struct AstType)
+#define AST_TYPE_LIST_TEMPLATE(m) m(AstTypeList, ast_type_list, struct AstType)
 DARRAY_HEADER(AST_TYPE_LIST_TEMPLATE);
 struct AstTypeSpan {
     const struct AstType * data;
@@ -21,7 +20,7 @@ struct AstTypeSpan {
 } typedef AstTypeSpan;
 
 static AstTypeSpan ast_type_list_to_span(const AstTypeList list[ref]) {
-    return (AstTypeSpan) {
+    return (AstTypeSpan){
         .data = list->data,
         .size = list->size,
     };
@@ -39,18 +38,18 @@ struct AstType {
     AstTypeType type;
     SrcSpan span;
     union {
-        struct AstType * next;
+        struct AstType * pointer;
+        struct AstType * reference;
         Path path;
         struct {
             bool has_return_type;
             struct AstType * return_type;
             AstTypeSpan parameters;
         } function;
-    };
+    } as;
 } typedef AstType;
 
-#define AST_EXPR_LIST_TEMPLATE(m) \
-    m(AstExprList, ast_expr_list, struct AstExpr)
+#define AST_EXPR_LIST_TEMPLATE(m) m(AstExprList, ast_expr_list, struct AstExpr)
 DARRAY_HEADER(AST_EXPR_LIST_TEMPLATE);
 
 struct AstExprSpan {
@@ -59,7 +58,7 @@ struct AstExprSpan {
 } typedef AstExprSpan;
 
 static AstExprSpan ast_expr_list_to_span(const AstExprList list[ref]) {
-    return (AstExprSpan) {
+    return (AstExprSpan){
         .data = list->data,
         .size = list->size,
     };
@@ -112,18 +111,17 @@ struct AstExpr {
             const struct AstExpr * next;
             AstType type;
         } as;
-        struct  {
+        struct {
             usize value;
         } integer;
         struct {
             const struct AstExpr * next;
             Path name;
         } field_access;
-    };
+    } as;
 } typedef AstExpr;
 
-#define AST_STMT_LIST_TEMPLATE(m) \
-    m(AstStmtList, ast_stmt_list, struct AstStmt)
+#define AST_STMT_LIST_TEMPLATE(m) m(AstStmtList, ast_stmt_list, struct AstStmt)
 DARRAY_HEADER(AST_STMT_LIST_TEMPLATE);
 
 struct AstStmtSpan {
@@ -132,7 +130,7 @@ struct AstStmtSpan {
 } typedef AstStmtSpan;
 
 static AstStmtSpan ast_stmt_list_to_span(const AstStmtList list[ref]) {
-    return (AstStmtSpan) {
+    return (AstStmtSpan){
         .data = list->data,
         .size = list->size,
     };
@@ -171,7 +169,7 @@ struct AstFunParam {
     AstType type;
 } typedef AstFunParam;
 
-#define AST_FUN_PARAM_LIST_TEMPLATE(m) \
+#define AST_FUN_PARAM_LIST_TEMPLATE(m)                                         \
     m(AstFunParamList, ast_fun_param_list, AstFunParam)
 DARRAY_HEADER(AST_FUN_PARAM_LIST_TEMPLATE);
 
@@ -180,8 +178,9 @@ struct AstFunParamSpan {
     usize size;
 } typedef AstFunParamSpan;
 
-static AstFunParamSpan ast_fun_param_list_to_span(const AstFunParamList list[ref]) {
-    return (AstFunParamSpan) {
+static AstFunParamSpan
+ast_fun_param_list_to_span(const AstFunParamList list[ref]) {
+    return (AstFunParamSpan){
         .data = list->data,
         .size = list->size,
     };
@@ -205,7 +204,7 @@ struct AstDecl {
     AstExpr expr;
 } typedef AstDecl;
 
-#define AST_TOP_LVL_STMT_LIST_TEMPLATE(m) \
+#define AST_TOP_LVL_STMT_LIST_TEMPLATE(m)                                      \
     m(AstTLSList, ast_tls_list, struct AstTopLvlStmt)
 DARRAY_HEADER(AST_TOP_LVL_STMT_LIST_TEMPLATE);
 
@@ -215,7 +214,7 @@ struct AstTLSSpan {
 } typedef AstTLSSpan;
 
 static AstTLSSpan ast_tls_list_to_span(const AstTLSList list[ref]) {
-    return (AstTLSSpan) {
+    return (AstTLSSpan){
         .data = list->data,
         .size = list->size,
     };
@@ -236,7 +235,6 @@ struct AstTopLvlStmt {
     };
 } typedef AstTopLvlStmt;
 
-
 struct Ast {
     // to be nonnull at the end of parsing
     AstTLSSpan body;
@@ -251,7 +249,7 @@ enum IrrecoverableParseError : u8 {
     IRRECOVERABLE_PARSE_ERROR_LIMIT_REACHED,
 } typedef IrrecoverableParseError;
 
-#define AST_ERROR_LIST_TEMPLATE(m) \
+#define AST_ERROR_LIST_TEMPLATE(m)                                             \
     m(ParseErrorList, parse_error_list, ParseError)
 DARRAY_HEADER(AST_ERROR_LIST_TEMPLATE);
 

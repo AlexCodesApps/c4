@@ -22,9 +22,7 @@ bool buffered_write(BufferedWriter buffer[ref], const u8 *, usize size);
 bool buffered_flush(BufferedWriter buffer[ref]);
 Writer buffered_writer_writer(BufferedWriter buffer[ref]);
 
-static Buffer buffer_new(u8 * data, usize size) {
-    return (Buffer){ data, size };
-}
+static Buffer buffer_new(u8 * data, usize size) { return (Buffer){data, size}; }
 
 static u8 * buffer_at(Buffer buffer, usize index) {
     assert(index < buffer.size);
@@ -42,9 +40,8 @@ static Str buffer_as_str(Buffer buffer) {
     return str_new((const char *)buffer.data, buffer.size);
 }
 
-#define foreach_buffer(addr, iter) \
-for (u8 * iter = (addr)->data, * _end_ = iter + (addr)->size; \
-    iter != _end_; \
-    ++iter)
+#define foreach_buffer(addr, iter)                                             \
+    for (u8 * iter = (addr)->data, *_end_ = iter + (addr)->size;               \
+         iter != _end_; ++iter)
 
 #define b(array) buffer_new((array), sizeof(array))

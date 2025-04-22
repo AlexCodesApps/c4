@@ -5,7 +5,7 @@
 #include <string.h>
 
 StrBuilder str_builder_new(Allocator allocator) {
-    return (StrBuilder) {
+    return (StrBuilder){
         .allocator = allocator,
         .data = nullptr,
         .size = 0,
@@ -30,7 +30,8 @@ bool str_builder_append(StrBuilder str[ref], Str src) {
     usize new_size = src.size + str->size;
     if (new_size > str->capacity) {
         usize new_capacity = (str->capacity + src.size) * 2;
-        void * alloc = allocator_alloc_uninit_n(str->allocator, u8, new_capacity);
+        void * alloc =
+            allocator_alloc_uninit_n(str->allocator, u8, new_capacity);
         if (!alloc) {
             return false;
         }
@@ -48,7 +49,8 @@ bool str_builder_append(StrBuilder str[ref], Str src) {
 bool str_builder_push(StrBuilder str[ref], char c) {
     if (str->size == str->capacity) {
         usize new_capacity = (str->capacity + 1) * 2;
-        void * alloc = allocator_alloc_uninit_n(str->allocator, u8, new_capacity);
+        void * alloc =
+            allocator_alloc_uninit_n(str->allocator, u8, new_capacity);
         if (!alloc) {
             return false;
         }
@@ -63,15 +65,13 @@ bool str_builder_push(StrBuilder str[ref], char c) {
 }
 
 Str str_builder_slice(const StrBuilder str[ref]) {
-    return (Str) {
+    return (Str){
         .data = str->data,
         .size = str->size,
     };
 }
 
-const char * str_builder_cstr(const StrBuilder str[ref]) {
-    return str->data;
-}
+const char * str_builder_cstr(const StrBuilder str[ref]) { return str->data; }
 
 bool str_eq(Str a, Str b) {
     if (a.size != b.size) {
@@ -80,17 +80,16 @@ bool str_eq(Str a, Str b) {
     return memcmp(a.data, b.data, a.size) == 0;
 }
 
-bool str_empty(Str a) {
-    return a.size == 0;
-}
+bool str_empty(Str a) { return a.size == 0; }
 
 bool str_starts_with(Str str, Str prefix) {
-    if (str.size < prefix.size) return false;
+    if (str.size < prefix.size)
+        return false;
     return memcmp(str.data, prefix.data, prefix.size) == 0;
 }
 
 Str str_slice_start(Str str, usize size) {
-    return (Str){ .data = str.data, .size = MIN(str.size, size) };
+    return (Str){.data = str.data, .size = MIN(str.size, size)};
 }
 
 Str str_slice_end(Str str, usize start) {
@@ -98,7 +97,7 @@ Str str_slice_end(Str str, usize start) {
     if (!ckd_sub(str.size, start, &size)) {
         size = 0;
     }
-    return (Str) {
+    return (Str){
         .data = str.data + start,
         .size = size,
     };
@@ -113,7 +112,7 @@ Str str_slice(Str str, usize start, usize count) {
         return EMPTY_STR;
     }
     size = MIN(size, count);
-    return (Str) {
+    return (Str){
         .data = str.data + start,
         .size = size,
     };
@@ -124,7 +123,7 @@ Str str_slice_iter(Str str, usize start, usize end) {
         return EMPTY_STR;
     }
     usize size = MIN(end - start, str.size - start);
-    return (Str) {
+    return (Str){
         .data = str.data + start,
         .size = size,
     };
@@ -142,7 +141,7 @@ bool str_split_char(Str src, Str begin[ref], Str end[ref], char c) {
 }
 
 isize str_find_char(Str str, char c) {
-    for (usize i  = 0; i < str.size; ++i) {
+    for (usize i = 0; i < str.size; ++i) {
         if (str_at_value_s(str, i) == c) {
             return i;
         }

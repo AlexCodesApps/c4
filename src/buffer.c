@@ -3,7 +3,7 @@
 #include <string.h>
 
 BufferedWriter buffered_writer_new(Writer writer, Buffer buffer) {
-    return (BufferedWriter) {
+    return (BufferedWriter){
         .writer = writer,
         .buffer = buffer,
         .cursor = 0,
@@ -37,7 +37,8 @@ bool buffered_flush(BufferedWriter buffer[ref]) {
     return true;
 }
 
-WriterResult buffered_writer_write_(WriterPayload payload, const void * data, usize size) {
+WriterResult buffered_writer_write_(WriterPayload payload, const void * data,
+                                    usize size) {
     BufferedWriter * writer = payload.pdata;
     return buffered_write(writer, data, size);
 }
@@ -48,7 +49,7 @@ WriterResult buffered_writer_flush_(WriterPayload payload) {
 }
 
 Writer buffered_writer_writer(BufferedWriter buffer[ref]) {
-    return (Writer) {
+    return (Writer){
         .write = buffered_writer_write_,
         .flush = buffered_writer_flush_,
         .payload.pdata = buffer,

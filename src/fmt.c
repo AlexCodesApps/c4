@@ -1,8 +1,8 @@
 #include "include/fmt.h"
 #include "include/checked_math.h"
+#include "include/file.h"
 #include "include/str.h"
 #include "include/writer.h"
-#include "include/file.h"
 #include <stdio.h>
 
 bool fmt_u64(Writer writer, Str fmt, u64 u) {
@@ -49,9 +49,7 @@ bool fmt_f64(Writer writer, Str fmt, f64 f) {
     return writer_write(writer, buff, len);
 }
 
-bool fmt_f32(Writer writer, Str fmt, f32 f) {
-    return fmt_f64(writer, fmt, f);
-}
+bool fmt_f32(Writer writer, Str fmt, f32 f) { return fmt_f64(writer, fmt, f); }
 
 bool fmt_ptr(Writer writer, Str fmt, const void * ptr) {
     char buff[64];

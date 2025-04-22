@@ -9,8 +9,9 @@ union WriterPayload {
     usize udata;
 } typedef WriterPayload;
 
-typedef WriterResult(*WriterWriteCallback)(WriterPayload, const void * data, usize size);
-typedef WriterResult(*WriterFlushCallback)(WriterPayload);
+typedef WriterResult (*WriterWriteCallback)(WriterPayload, const void * data,
+                                            usize size);
+typedef WriterResult (*WriterFlushCallback)(WriterPayload);
 
 struct Writer {
     WriterWriteCallback write;
@@ -25,6 +26,4 @@ WriterResult writer_byte(Writer writer, u8 c);
 WriterResult writer_str(Writer writer, Str str);
 void writer_flush(Writer writer);
 
-static WriterResult noop_writer_flush(WriterPayload _) {
-    return true;
-}
+static WriterResult noop_writer_flush(WriterPayload _) { return true; }

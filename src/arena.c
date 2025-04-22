@@ -1,18 +1,18 @@
 #include "include/arena.h"
-#include "include/utility.h"
 #include "include/fmt.h"
+#include "include/utility.h"
 #include <assert.h>
 #ifdef __GNUC__
 #define __USE_MISC 1 // clangd won't stop complaining otherwise
 #endif
 #include <sys/mman.h>
-
 int arena_new(Arena * arena, usize size) {
     usize aligned_size;
     if (!align_usize(size, 4096, &aligned_size)) {
         return -1;
     }
-    void * mem = mmap(nullptr, aligned_size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    void * mem =
+        mmap(nullptr, aligned_size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
     if (mem == MAP_FAILED) {
         return -1;
     }
@@ -57,11 +57,11 @@ void * arena_alloc_bytes(Arena * arena, usize size, usize alignment) {
 }
 
 void arena_reset(Arena * arena) {
-    usize size = as(arena->commited, usize) - as(arena->begin, usize);
+    usize size = ((usize)arena->commited) - ((usize)arena->begin);
     mprotect(arena->begin, size, PROT_NONE);
     madvise(arena->begin, size, MADV_FREE);
 }
 
 void arena_free(Arena * arena) {
-    munmap(arena, as(arena->end, usize) - as(arena->begin, usize));
+    munmap(arena, ((usize)arena->end) - ((usize)arena->begin));
 }

@@ -1,13 +1,13 @@
 #include "include/lexer.h"
 #include "include/allocator.h"
 #include "include/common.h"
+#include "include/fmt.h"
 #include "include/generic/darray.h"
 #include "include/ints.h"
 #include "include/str.h"
 #include "include/utility.h"
-#include "include/fmt.h"
-#include <setjmp.h>
 #include <ctype.h>
+#include <setjmp.h>
 
 struct _str_ttype_pair {
     Str str;
@@ -15,34 +15,24 @@ struct _str_ttype_pair {
 };
 
 static const struct _str_ttype_pair keywords[] = {
-    {s("fn"), TOKEN_TYPE_FN},
-    {s("as"), TOKEN_TYPE_AS},
-    {s("let"), TOKEN_TYPE_LET},
-    {s("const"), TOKEN_TYPE_CONST},
-    {s("return"), TOKEN_TYPE_RETURN},
-    {s("mod"), TOKEN_TYPE_MOD},
+    {s("fn"), TOKEN_TYPE_FN},         {s("as"), TOKEN_TYPE_AS},
+    {s("let"), TOKEN_TYPE_LET},       {s("const"), TOKEN_TYPE_CONST},
+    {s("return"), TOKEN_TYPE_RETURN}, {s("mod"), TOKEN_TYPE_MOD},
     {s("pub"), TOKEN_TYPE_PUB},
 };
 
 static const struct _str_ttype_pair operators[] = {
-    {s(";"), TOKEN_TYPE_SEMICOLON},
-    {s(".*"), TOKEN_TYPE_DOTSTAR},
-    {s("("), TOKEN_TYPE_LPAREN},
-    {s(")"), TOKEN_TYPE_RPAREN},
-    {s(","), TOKEN_TYPE_COMMA},
-    {s("::"), TOKEN_TYPE_SCOPE},
-    {s(":"), TOKEN_TYPE_COLON},
-    {s("{"), TOKEN_TYPE_LBRACE},
-    {s("}"), TOKEN_TYPE_RBRACE},
-    {s("."), TOKEN_TYPE_DOT},
-    {s("*"), TOKEN_TYPE_STAR},
-    {s("+"), TOKEN_TYPE_PLUS},
-    {s("-"), TOKEN_TYPE_MINUS},
-    {s("="), TOKEN_TYPE_EQ},
+    {s(";"), TOKEN_TYPE_SEMICOLON}, {s(".*"), TOKEN_TYPE_DOTSTAR},
+    {s("("), TOKEN_TYPE_LPAREN},    {s(")"), TOKEN_TYPE_RPAREN},
+    {s(","), TOKEN_TYPE_COMMA},     {s("::"), TOKEN_TYPE_SCOPE},
+    {s(":"), TOKEN_TYPE_COLON},     {s("{"), TOKEN_TYPE_LBRACE},
+    {s("}"), TOKEN_TYPE_RBRACE},    {s("."), TOKEN_TYPE_DOT},
+    {s("*"), TOKEN_TYPE_STAR},      {s("+"), TOKEN_TYPE_PLUS},
+    {s("-"), TOKEN_TYPE_MINUS},     {s("="), TOKEN_TYPE_EQ},
     {s("&"), TOKEN_TYPE_AMPERSAND},
 };
 
-[[noreturn]]static void throw(Lexer lexer[ref], LexError error) {
+[[noreturn]] static void throw(Lexer lexer[ref], LexError error) {
     lexer->err = error;
     longjmp(lexer->catch_site, 1);
 }
@@ -87,15 +77,13 @@ static char peek_advance(Lexer * lexer) {
     return c;
 }
 
-static SrcPos lexer_get_pos(Lexer * lexer) {
-    return lexer->pos;
-}
+static SrcPos lexer_get_pos(Lexer * lexer) { return lexer->pos; }
 
 static void lexer_push_token(Lexer * lexer, Token tok) {
     if (!token_list_push(&lexer->tokens, tok)) {
-        throw(lexer, (LexError) {
-            .type = LEX_ERROR_OOM,
-        });
+        throw(lexer, (LexError){
+                         .type = LEX_ERROR_OOM,
+                     });
     }
 }
 
@@ -127,16 +115,16 @@ static bool lexer_get_number(Lexer * lexer, SrcSpan * span) {
     usize size = 1;
     while (isalnum(c = peek(lexer))) {
         if (isalpha(c)) {
-            throw(lexer, (LexError) {
-                .type = LEX_ERROR_UNEXPECTED_CHAR,
-                .unexpected_char = c,
-                .pos = lexer_get_pos(lexer),
-            });
+            throw(lexer, (LexError){
+                             .type = LEX_ERROR_UNEXPECTED_CHAR,
+                             .unexpected_char = c,
+                             .pos = lexer_get_pos(lexer),
+                         });
         }
         advance(lexer);
         ++size;
     }
-    *span = (SrcSpan) {
+    *span = (SrcSpan){
         .pos = pos,
         .len = size,
     };
@@ -162,11 +150,12 @@ static void lex_main(Lexer * lexer) {
             SrcPos pos = lexer_get_pos(lexer);
             advance_by(lexer, pair->str.size);
             TokenType ttype = pair->ttype;
-            Token tok = (Token) {
-                .span = {
-                    .pos = pos,
-                    .len = pair->str.size,
-                },
+            Token tok = (Token){
+                .span =
+                    {
+                        .pos = pos,
+                        .len = pair->str.size,
+                    },
                 .type = ttype,
             };
             lexer_push_token(lexer, tok);
@@ -180,22 +169,24 @@ static void lex_main(Lexer * lexer) {
             const struct _str_ttype_pair * pair = keywords + i;
             if (str_eq(iden, pair->str)) {
                 TokenType ttype = pair->ttype;
-                Token tok = (Token) {
-                    .span = {
-                        .pos = pos,
-                        .len = iden.size,
-                    },
+                Token tok = (Token){
+                    .span =
+                        {
+                            .pos = pos,
+                            .len = iden.size,
+                        },
                     .type = ttype,
                 };
                 lexer_push_token(lexer, tok);
                 return;
             }
         }
-        Token tok = (Token) {
-            .span = {
-                .pos = pos,
-                .len = iden.size,
-            },
+        Token tok = (Token){
+            .span =
+                {
+                    .pos = pos,
+                    .len = iden.size,
+                },
             .type = TOKEN_TYPE_IDENTIFIER,
         };
         lexer_push_token(lexer, tok);
@@ -203,18 +194,18 @@ static void lex_main(Lexer * lexer) {
     }
     SrcSpan span;
     if (lexer_get_number(lexer, &span)) {
-        Token tok = (Token) {
+        Token tok = (Token){
             .span = span,
             .type = TOKEN_TYPE_INTEGER,
         };
         lexer_push_token(lexer, tok);
         return;
     }
-    throw(lexer, (LexError) {
-        .type = LEX_ERROR_UNEXPECTED_CHAR,
-        .unexpected_char = peek(lexer),
-        .pos = lexer_get_pos(lexer),
-    });
+    throw(lexer, (LexError){
+                     .type = LEX_ERROR_UNEXPECTED_CHAR,
+                     .unexpected_char = peek(lexer),
+                     .pos = lexer_get_pos(lexer),
+                 });
 }
 
 LexResult lex(Allocator allocator, Str src) {
@@ -227,27 +218,26 @@ LexResult lex(Allocator allocator, Str src) {
             .err = lexer.err,
         };
     }
-    lexer = (Lexer) {
+    lexer = (Lexer){
         .src = src,
-        .pos = {
-            .row = 1,
-            .col = 1,
-            .index = 0,
-        },
+        .pos =
+            {
+                .row = 1,
+                .col = 1,
+                .index = 0,
+            },
         .catch_site = *buff,
         .tokens = token_list_new(allocator),
     };
     while (!lex_eof(&lexer)) {
         lex_main(&lexer);
     }
-    lexer_push_token(&lexer, (Token) {
-        .type = TOKEN_TYPE_EOF,
-        .span = (SrcSpan) {
-            .pos = lexer_get_pos(&lexer),
-            .len = 0,
-        }
-    });
-    return (LexResult) {
+    lexer_push_token(&lexer, (Token){.type = TOKEN_TYPE_EOF,
+                                     .span = (SrcSpan){
+                                         .pos = lexer_get_pos(&lexer),
+                                         .len = 0,
+                                     }});
+    return (LexResult){
         .succeeded = true,
         .list = lexer.tokens,
     };

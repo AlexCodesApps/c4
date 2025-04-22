@@ -19,9 +19,7 @@ static Str src_span_slice(SrcSpan span, Str str) {
     return str_slice(str, span.pos.index, span.len);
 }
 
-
-#define STR_LIST_TEMPLATE(m) \
-    m(StrList, str_list, Str)
+#define STR_LIST_TEMPLATE(m) m(StrList, str_list, Str)
 DARRAY_HEADER(STR_LIST_TEMPLATE);
 
 struct StrSpan {
@@ -30,7 +28,7 @@ struct StrSpan {
 } typedef StrSpan;
 
 static StrSpan str_list_to_span(const StrList list[ref]) {
-    return (StrSpan) {
+    return (StrSpan){
         .data = list->data,
         .size = list->size,
     };
@@ -49,7 +47,7 @@ struct PathBuilder {
 } typedef PathBuilder;
 
 static Path path_builder_to_path(const PathBuilder builder[ref]) {
-    return (Path) {
+    return (Path){
         .span = builder->span,
         .is_global = builder->is_global,
         .list = str_list_to_span(&builder->list),

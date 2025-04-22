@@ -3,19 +3,19 @@
 #include "src/include/ast.h"
 #include "src/include/common.h"
 #include "src/include/file.h"
+#include "src/include/fmt.h"
 #include "src/include/lexer.h"
 #include "src/include/str.h"
 #include "src/include/utility.h"
 #include "src/include/writer.h"
-#include "src/include/fmt.h"
 
 void print_token_list(Writer writer, Str src, const TokenList list[ref]) {
     for (usize i = 0; i < list->size; ++i) {
         Token tok = list->data[i];
         Str slice = str_slice(src, tok.span.pos.index, tok.span.len);
         fmt(writer, "(token {}, row {}, col {}, src \"{}\")\n",
-            token_type_to_str(tok.type), tok.span.pos.row,
-            tok.span.pos.col, slice);
+            token_type_to_str(tok.type), tok.span.pos.row, tok.span.pos.col,
+            slice);
     }
 }
 
@@ -42,14 +42,14 @@ void print_type(Writer writer, const AstType * type, usize padding) {
     switch (type->type) {
     case AST_TYPE_REFERENCE:
         fmt(writer, "&\n");
-        print_type(writer, type->next, padding + 1);
+        print_type(writer, type->as.pointer, padding + 1);
         break;
     case AST_TYPE_POINTER:
         fmt(writer, "*\n");
-        print_type(writer, type->next, padding + 1);
+        print_type(writer, type->as.reference, padding + 1);
         break;
     case AST_TYPE_PATH:
-        print_path(writer, type->path);
+        print_path(writer, type->as.path);
         fmt(writer, "\n");
         break;
     case AST_TYPE_FN:
@@ -57,13 +57,13 @@ void print_type(Writer writer, const AstType * type, usize padding) {
         fmt(writer, "fn\n");
         pad(writer, padding);
         fmt(writer, "(params)\n");
-        foreach_span(&type->function.parameters, i) {
+        foreach_span(&type->as.function.parameters, i) {
             print_type(writer, i, padding + 1);
         }
-        if (type->function.has_return_type) {
+        if (type->as.function.has_return_type) {
             pad(writer, padding);
             fmt(writer, "(returns)\n");
-            print_type(writer, type->function.return_type, padding + 1);
+            print_type(writer, type->as.function.return_type, padding + 1);
         }
         break;
     case AST_TYPE_POISONED:
@@ -100,7 +100,8 @@ void print_stmt(Writer writer, const AstStmt * stmt, usize padding) {
         print_expr(writer, &stmt->expr, padding + 1);
         break;
     case AST_STMT_DECL:
-        fmt(writer, "{} {}\n", stmt->decl->is_const ? s("const") : s("let"),  stmt->decl->iden);
+        fmt(writer, "{} {}\n", stmt->decl->is_const ? s("const") : s("let"),
+            stmt->decl->iden);
         if (stmt->decl->has_type) {
             print_type(writer, &stmt->decl->type, padding + 1);
         }
@@ -121,40 +122,41 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
         fmt(writer, "fn\n");
         pad(writer, padding + 1);
         fmt(writer, "(parameters)\n");
-        foreach_span(&expr->function->params, param) {
+        foreach_span(&expr->as.function->params, param) {
             pad(writer, padding + 1);
-            fmt(writer, "{} :\n", !str_empty(param->iden) ? param->iden : s("!"));
+            fmt(writer, "{} :\n",
+                !str_empty(param->iden) ? param->iden : s("!"));
             print_type(writer, &param->type, padding + 2);
         }
         pad(writer, padding + 1);
         fmt(writer, "(returns)\n");
-        if (expr->function->has_return_type) {
-            print_type(writer, &expr->function->return_type, padding + 1);
+        if (expr->as.function->has_return_type) {
+            print_type(writer, &expr->as.function->return_type, padding + 1);
         } else {
             pad(writer, padding + 1);
             fmt(writer, "(void)\n");
         }
         pad(writer, padding + 1);
         fmt(writer, "(body)\n");
-        foreach_span(&expr->function->body, stmt) {
+        foreach_span(&expr->as.function->body, stmt) {
             print_stmt(writer, stmt, padding + 1);
         }
         break;
     case AST_EXPR_AS:
         fmt(writer, "as\n");
-        print_expr(writer, expr->as.next, padding + 1);
-        print_type(writer, &expr->as.type, padding + 1);
+        print_expr(writer, expr->as.as.next, padding + 1);
+        print_type(writer, &expr->as.as.type, padding + 1);
         break;
     case AST_EXPR_PATH:
-        print_path(writer, expr->path);
+        print_path(writer, expr->as.path);
         fmt(writer, "\n");
         break;
     case AST_EXPR_FUNCALL:
         fmt(writer, "function call\n");
-        print_expr(writer, expr->funcall.function, padding + 1);
+        print_expr(writer, expr->as.funcall.function, padding + 1);
         pad(writer, padding + 1);
         fmt(writer, "(parameters)\n");
-        foreach_span(&expr->funcall.args, arg) {
+        foreach_span(&expr->as.funcall.args, arg) {
             print_expr(writer, arg, padding + 1);
         }
         break;
@@ -165,17 +167,17 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
         fmt(writer, "(poisoned nested)\n");
         break;
     case AST_EXPR_INTEGER:
-        fmt(writer, "{}\n", expr->integer.value);
+        fmt(writer, "{}\n", expr->as.integer.value);
         break;
     case AST_EXPR_FIELD_ACCESS:
         fmt(writer, ".\n");
-        print_expr(writer, expr->field_access.next, padding + 1);
+        print_expr(writer, expr->as.field_access.next, padding + 1);
         pad(writer, padding + 1);
-        print_path(writer, expr->field_access.name);
+        print_path(writer, expr->as.field_access.name);
         fmt(writer, "\n");
         break;
     case AST_EXPR_UNARY:
-        switch (expr->unary.type) {
+        switch (expr->as.unary.type) {
         case AST_EXPR_UNARY_MINUS:
             fmt(writer, "-\n");
             break;
@@ -186,10 +188,10 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
             fmt(writer, ".*\n");
             break;
         }
-        print_expr(writer, expr->unary.next, padding + 1);
+        print_expr(writer, expr->as.unary.next, padding + 1);
         break;
     case AST_EXPR_BINARY:
-        switch (expr->binary.type) {
+        switch (expr->as.binary.type) {
         case AST_EXPR_BINARY_ADD:
             fmt(writer, "+\n");
             break;
@@ -197,8 +199,8 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
             fmt(writer, "-\n");
             break;
         }
-        print_expr(writer, expr->binary.a, padding + 1);
-        print_expr(writer, expr->binary.b, padding + 1);
+        print_expr(writer, expr->as.binary.a, padding + 1);
+        print_expr(writer, expr->as.binary.b, padding + 1);
         break;
     }
 }
@@ -213,7 +215,8 @@ void print_tls_list(Writer writer, const AstTLSSpan * ast, usize padding) {
             print_tls_list(writer, &tls->mod.body, padding + 1);
             break;
         case AST_TLS_TYPE_DECL:
-            fmt(writer, "{} {}\n", tls->decl.is_const ? s("const") : s("let"),  tls->decl.iden);
+            fmt(writer, "{} {}\n", tls->decl.is_const ? s("const") : s("let"),
+                tls->decl.iden);
             if (tls->decl.has_type) {
                 print_type(writer, &tls->decl.type, padding + 1);
             }
@@ -239,12 +242,12 @@ int main(int argc, char ** argv) {
         return 1;
     }
     const char * file_name = argv[1];
-    File file = file_open_with_cstr(file_name, (FileMode) {
-        .read = true,
-        .write = false,
-        .create = false,
-        .truncate = false,
-    });
+    File file = file_open_with_cstr(file_name, (FileMode){
+                                                   .read = true,
+                                                   .write = false,
+                                                   .create = false,
+                                                   .truncate = false,
+                                               });
     if (!file_is_valid(file)) {
         fmt(stderrw, "unable to open file : {}\n", file_name);
         return 1;
@@ -261,7 +264,8 @@ int main(int argc, char ** argv) {
         return 1;
     }
     if (file_read(file, alloc, file_size) == FILE_IO_ERROR) {
-        fmt(stderrw, "unable to read file into memory : {}, size: {}\n", file_name, file_size);
+        fmt(stderrw, "unable to read file into memory : {}, size: {}\n",
+            file_name, file_size);
         return 1;
     }
     file_close(file);
@@ -269,7 +273,8 @@ int main(int argc, char ** argv) {
     Arena arena;
     usize reserved_size = MB(20);
     if (arena_new(&arena, reserved_size) != 0) {
-        fmt(stderrw, "unable to reserve address space with size : {}\n", reserved_size);
+        fmt(stderrw, "unable to reserve address space with size : {}\n",
+            reserved_size);
         return 1;
     }
     Allocator allocator = arena_allocator(&arena);
@@ -278,11 +283,11 @@ int main(int argc, char ** argv) {
         LexError err = result.err;
         switch (err.type) {
         case LEX_ERROR_OOM:
-            fmt(stderrw, "arena used to capacity with size : {}\n", reserved_size);
+            fmt(stderrw, "arena used to capacity with size : {}\n",
+                reserved_size);
             break;
         case LEX_ERROR_UNEXPECTED_CHAR:
-            fmt(stderrw,
-                "unexpected character : '{}', row: {}, col: {}\n",
+            fmt(stderrw, "unexpected character : '{}', row: {}, col: {}\n",
                 err.unexpected_char, err.pos.row, err.pos.col);
             break;
         }
@@ -293,18 +298,20 @@ int main(int argc, char ** argv) {
     print_token_list(stdoutw, src, &list);
     writer_flush(stdoutw);
 
-    const ParseResult parse_result = parse(allocator, src, token_list_to_span(&list));
+    const ParseResult parse_result =
+        parse(allocator, src, token_list_to_span(&list));
 
     foreach_span(&parse_result.errors, err) {
         Token tok = err->unexpected_token;
         fmt(stderrw, "ERROR (token {}, row {}, col {}, src \"{}\")\n",
-            token_type_to_str(tok.type), tok.span.pos.row,
-            tok.span.pos.col, token_get_str(tok, src));
+            token_type_to_str(tok.type), tok.span.pos.row, tok.span.pos.col,
+            token_get_str(tok, src));
     }
     if (parse_result.irrecoverable) {
         switch (parse_result.irrecoverable_error) {
         case IRRECOVERABLE_PARSE_ERROR_OOM:
-            fmt(stderrw, "arena used to capacity with size : {}\n", reserved_size);
+            fmt(stderrw, "arena used to capacity with size : {}\n",
+                reserved_size);
             break;
         case IRRECOVERABLE_PARSE_ERROR_LIMIT_REACHED:
             fmt(stderrw, "to many errors emmited, stopping now\n");

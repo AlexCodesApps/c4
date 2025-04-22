@@ -1,15 +1,28 @@
 #pragma once
-#include "ints.h"
-#include "macros.h"
-#include "list_macros.h"
 #include "checked_math.h"
+#include "ints.h"
+#include "list_macros.h"
+#include "macros.h"
 #include <assert.h>
 #define ref static 1
-#define MAX(x, y) ({ auto _x = x; auto _y = y; _x > _y ? _x : _y; })
-#define MIN(x, y) ({ auto _x = x; auto _y = y; _x < _y ? _x : _y; })
-#define ABS(x) ({ auto _x = x; _x < 0 ? -_x : _x; })
+#define MAX(x, y)                                                              \
+    ({                                                                         \
+        auto _x = x;                                                           \
+        auto _y = y;                                                           \
+        _x > _y ? _x : _y;                                                     \
+    })
+#define MIN(x, y)                                                              \
+    ({                                                                         \
+        auto _x = x;                                                           \
+        auto _y = y;                                                           \
+        _x < _y ? _x : _y;                                                     \
+    })
+#define ABS(x)                                                                 \
+    ({                                                                         \
+        auto _x = x;                                                           \
+        _x < 0 ? -_x : _x;                                                     \
+    })
 #define DISCARD_H(arg) (void)(arg);
-#define as(value, type) ((type)(value))
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*(arr)))
 #define DISCARD(...) FOREACH_MACRO(DISCARD_H, __VA_ARGS__)
 static inline bool align_usize(usize integer, usize alignment, usize * out) {
@@ -50,12 +63,12 @@ static inline void bitwise_index_set(byte * memory, usize index, bool set) {
 #define MB(n) ((n) * 1024 * 1024)
 #define GB(n) ((n) * 1024 * 1024 * 1024)
 
-#define foreach_span(addr, i) \
-for (typeof_unqual((addr)->data) i =  (addr)->data, MACRO_VAR(end) = i + (addr)->size; \
-    i != MACRO_VAR(end); \
-    ++i \
-)
+#define foreach_span(addr, i)                                                  \
+    for (typeof_unqual((addr)->data) i = (addr)->data,                         \
+                                     MACRO_VAR(end) = i + (addr)->size;        \
+         i != MACRO_VAR(end); ++i)
 #define span_index_in_bounds(addr, i) ((i) < (addr)->size)
-#define span_at(addr, i) (assert(span_index_in_bounds(addr, i)), (addr)->data + (i))
+#define span_at(addr, i)                                                       \
+    (assert(span_index_in_bounds(addr, i)), (addr)->data + (i))
 #define span_back(addr) span_at(addr, (addr)->size - 1)
 #define span_front(addr) span_at(addr, 0)
