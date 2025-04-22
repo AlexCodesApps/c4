@@ -21,6 +21,7 @@ struct FileMode {
 
 
 File  file_open(Str path, FileMode mode);
+File  file_open_with_cstr(const char *, FileMode mode);
 File  file_from_descriptor(FileDescriptor descriptor);
 bool  file_is_valid(File file);
 void  file_close(File file);

@@ -238,8 +238,8 @@ int main(int argc, char ** argv) {
         fmt(stderrw, "usage : {} <file_name>\n", argv[0]);
         return 1;
     }
-    Str file_name = cstr(argv[1]);
-    File file = file_open(file_name, (FileMode) {
+    const char * file_name = argv[1];
+    File file = file_open_with_cstr(file_name, (FileMode) {
         .read = true,
         .write = false,
         .create = false,

@@ -139,8 +139,8 @@ static AstStmtSpan ast_stmt_list_to_span(const AstStmtList list[ref]) {
 }
 
 enum AstStmtType : u8 {
-    AST_STMT_RETURN,
     AST_STMT_POISONED,
+    AST_STMT_RETURN,
     AST_STMT_BLOCK,
     AST_STMT_DECL,
     AST_STMT_EXPR,

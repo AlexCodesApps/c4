@@ -71,6 +71,8 @@ Writer stderr_writer() {
     return file_writer(stderr_file());
 }
 
+
+// TODO: make thread_safe!
 Writer stdout_writer() {
     static u8 buffer[4096];
     static BufferedWriter buffered_writer = {

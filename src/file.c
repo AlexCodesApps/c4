@@ -2,16 +2,21 @@
 #include <linux/limits.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <threads.h>
 #include <unistd.h>
 #include <string.h>
 
 File file_open(Str path, FileMode mode) {
-    static char buffer[PATH_MAX + 1];
+    static thread_local char buffer[PATH_MAX + 1];
     if (path.size > PATH_MAX) {
         return (File){ -1 };
     }
     memcpy(buffer, path.data, path.size);
     buffer[path.size] = '\0';
+    return file_open_with_cstr(buffer, mode);
+}
+
+File file_open_with_cstr(const char * path, FileMode mode) {
     int unix_mode = 0;
     if (mode.read && mode.write) {
         unix_mode |= O_RDWR;
@@ -29,7 +34,7 @@ File file_open(Str path, FileMode mode) {
     } else {
         unix_mode |= O_APPEND;
     }
-    int fd = open(buffer, unix_mode, 0777);
+    int fd = open(path, unix_mode, 0777);
     return file_from_descriptor(fd);
 }
 

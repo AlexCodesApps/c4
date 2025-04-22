@@ -44,8 +44,6 @@ static inline void bitwise_index_set(byte * memory, usize index, bool set) {
     *b = (*b & ~mask) | (set << shiftl);
 }
 
-static inline void dummy(...) {}
-
 #define TODO (assert(false && "todo reached!"))
 
 #define KB(n) ((n) * 1024)
