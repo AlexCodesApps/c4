@@ -18,4 +18,8 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 $(OBJ_DIR):
 	mkdir -p build/obj
 
+.PHONY: format
+format:
+	find -name *.c -o -name *.h | xargs clang-format -i
+
 -include $(BUILD_OBJS:.o=.d)

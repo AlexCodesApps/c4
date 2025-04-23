@@ -9,8 +9,9 @@ union WriterPayload {
     usize udata;
 } typedef WriterPayload;
 
-typedef WriterResult (*WriterWriteCallback)(WriterPayload, const void * data,
-                                            usize size);
+typedef WriterResult (*WriterWriteCallback)(
+    WriterPayload, const void * data, usize size
+);
 typedef WriterResult (*WriterFlushCallback)(WriterPayload);
 
 struct Writer {

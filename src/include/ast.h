@@ -7,9 +7,9 @@
 #include "str.h"
 
 enum AstTLSType {
+    AST_TLS_TYPE_POISONED,
     AST_TLS_TYPE_DECL,
     AST_TLS_TYPE_MOD,
-    AST_TLS_TYPE_POISONED,
 } typedef AstTLSType;
 
 #define AST_TYPE_LIST_TEMPLATE(m) m(AstTypeList, ast_type_list, struct AstType)

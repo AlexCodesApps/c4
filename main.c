@@ -242,12 +242,15 @@ int main(int argc, char ** argv) {
         return 1;
     }
     const char * file_name = argv[1];
-    File file = file_open_with_cstr(file_name, (FileMode){
-                                                   .read = true,
-                                                   .write = false,
-                                                   .create = false,
-                                                   .truncate = false,
-                                               });
+    File file = file_open_with_cstr(
+        file_name,
+        (FileMode){
+            .read = true,
+            .write = false,
+            .create = false,
+            .truncate = false,
+        }
+    );
     if (!file_is_valid(file)) {
         fmt(stderrw, "unable to open file : {}\n", file_name);
         return 1;
