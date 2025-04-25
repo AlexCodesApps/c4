@@ -62,7 +62,6 @@ static inline void bitwise_index_set(byte * memory, usize index, bool set) {
 #define KB(n) ((n) * 1024)
 #define MB(n) ((n) * 1024 * 1024)
 #define GB(n) ((n) * 1024 * 1024 * 1024)
-
 #define foreach_span(addr, i)                                                  \
     for (typeof_unqual((addr)->data) i = (addr)->data,                         \
                                      MACRO_VAR(end) = i + (addr)->size;        \

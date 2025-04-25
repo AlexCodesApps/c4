@@ -20,7 +20,11 @@
         template(DARRAY_UPPER_NAME) array[ref], template(DARRAY_TYPE) value    \
     );                                                                         \
     void CONCAT(template(DARRAY_LOWER_NAME), _free)(template(DARRAY_UPPER_NAME \
-    ) array[ref]);
+    ) array[ref]);                                                             \
+    bool CONCAT(template(DARRAY_LOWER_NAME), _new_with_capacity)(              \
+        usize capacity, Allocator allocator,                                   \
+        template(DARRAY_UPPER_NAME) out[ref]                                   \
+    );
 #define DARRAY_IMPL(template)                                                  \
     template(DARRAY_UPPER_NAME)                                                \
         CONCAT(template(DARRAY_LOWER_NAME), _new)(Allocator allocator) {       \
@@ -50,4 +54,20 @@
     void CONCAT(template(DARRAY_LOWER_NAME), _free)(template(DARRAY_UPPER_NAME \
     ) array[ref]) {                                                            \
         allocator_deallocate(array->allocator, array->data);                   \
+    }                                                                          \
+    bool CONCAT(template(DARRAY_LOWER_NAME), _new_with_capacity)(              \
+        usize capacity, Allocator allocator,                                   \
+        template(DARRAY_UPPER_NAME) out[ref]                                   \
+    ) {                                                                        \
+        template(DARRAY_TYPE) * data =                                         \
+            allocator_alloc_n(allocator, template(DARRAY_TYPE), capacity);     \
+        if (!data) {                                                           \
+            return false;                                                      \
+        }                                                                      \
+        *out = (template(DARRAY_UPPER_NAME)                                    \
+        ){.data = data,                                                        \
+          .size = 0,                                                           \
+          .capacity = capacity,                                                \
+          .allocator = allocator};                                             \
+        return true;                                                           \
     }

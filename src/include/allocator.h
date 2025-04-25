@@ -78,4 +78,12 @@ static AllocationRequest allocation_request_new(usize size, usize alignment) {
     )
 extern Allocator general_purpose_allocator();
 extern Allocator arena_allocator(Arena[ref]);
-static void noop_deallocate(AllocatorPayload _, void * _2) {}
+static void * noop_allocate(AllocatorPayload _, AllocationRequest _2) {
+    return nullptr;
+}
+static void noop_deallocate(AllocatorPayload _, void * _2){}
+#define NOOP_ALLOCATOR                                                         \
+    (Allocator) {                                                              \
+        .allocator = noop_allocate, .deallocator = noop_deallocate,            \
+        .payload.pdata = nullptr,                                              \
+    }

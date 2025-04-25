@@ -1,8 +1,8 @@
 #include "include/allocator.h"
 #include <stdlib.h>
 
-static void * general_purpose_allocate(AllocatorPayload _,
-                                       AllocationRequest request) {
+static void *
+general_purpose_allocate(AllocatorPayload _, AllocationRequest request) {
     return aligned_alloc(request.alignment, request.size);
 }
 
@@ -10,8 +10,8 @@ static void general_purpose_deallocate(AllocatorPayload _, void * allocation) {
     free(allocation);
 }
 
-static void * arena_allocate(AllocatorPayload payload,
-                             AllocationRequest request) {
+static void *
+arena_allocate(AllocatorPayload payload, AllocationRequest request) {
     Arena * arena = payload.pdata;
     return arena_alloc_bytes(arena, request.size, request.alignment);
 }
