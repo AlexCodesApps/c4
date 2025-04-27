@@ -4,27 +4,26 @@
 #include "include/str.h"
 #include <stdio.h>
 
-static WriterResult file_write_(WriterPayload payload, const void * data,
-                                usize size) {
+static WriterResult
+file_write_(WriterPayload payload, const void * data, usize size) {
     File file = {payload.udata};
     return file_write(file, data, size);
 }
 
-static WriterResult cfile_write(WriterPayload payload, const void * data,
-                                usize size) {
+static WriterResult
+cfile_write(WriterPayload payload, const void * data, usize size) {
     FILE * file = payload.pdata;
-    int r = fwrite(data, size, 1, file);
-    return true;
+    int r = fwrite(data, 1, size, file);
+    return r == size;
 }
 
 static WriterResult cfile_flush(WriterPayload payload) {
     FILE * file = payload.pdata;
-    fflush(file);
-    return true;
+    return fflush(file) == 0;
 }
 
-static WriterResult str_builder_write(WriterPayload payload, const void * data,
-                                      usize size) {
+static WriterResult
+str_builder_write(WriterPayload payload, const void * data, usize size) {
     StrBuilder * str = payload.pdata;
     return str_builder_append(str, str_new(data, size));
 }

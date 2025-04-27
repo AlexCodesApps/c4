@@ -1,3 +1,4 @@
+
 mod foo {
     fn bar(ptr: *int) {}
 }
@@ -45,4 +46,16 @@ fn decls(a: int): &int {
 
 fn test(c: *fn(*fn():void):*fn():int): &fn(int): &int {
     return &decls;
+}
+
+struct Node {
+    entry: Int,
+    next: *Node,
+};
+
+fn new_node(entry: Int): Node {
+    return Node{
+        .entry = 10,
+        .next = nullptr,
+    };
 }

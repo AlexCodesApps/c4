@@ -1,7 +1,6 @@
 #include "include/lexer.h"
 #include "include/allocator.h"
 #include "include/common.h"
-#include "include/fmt.h"
 #include "include/generic/darray.h"
 #include "include/ints.h"
 #include "include/str.h"
@@ -18,10 +17,12 @@ static const struct _str_ttype_pair keywords[] = {
     {s("fn"), TOKEN_TYPE_FN},         {s("as"), TOKEN_TYPE_AS},
     {s("let"), TOKEN_TYPE_LET},       {s("const"), TOKEN_TYPE_CONST},
     {s("return"), TOKEN_TYPE_RETURN}, {s("mod"), TOKEN_TYPE_MOD},
-    {s("pub"), TOKEN_TYPE_PUB},
+    {s("pub"), TOKEN_TYPE_PUB},       {s("struct"), TOKEN_TYPE_STRUCT},
 };
 
 static const struct _str_ttype_pair operators[] = {
+    /* If ordering isn't done right, some operators can override others
+     */
     {s(";"), TOKEN_TYPE_SEMICOLON}, {s(".*"), TOKEN_TYPE_DOTSTAR},
     {s("("), TOKEN_TYPE_LPAREN},    {s(")"), TOKEN_TYPE_RPAREN},
     {s(","), TOKEN_TYPE_COMMA},     {s("::"), TOKEN_TYPE_SCOPE},

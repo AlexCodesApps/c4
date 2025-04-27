@@ -1,7 +1,6 @@
 #pragma once
 #include "allocator.h"
 #include "ints.h"
-#include <assert.h>
 #include <string.h> // IWYU pragma: keep
 
 struct Str {
@@ -41,10 +40,7 @@ bool str_split_char(Str src, Str str[ref], Str out[ref], char c);
 #define NPOS -1;
 isize str_find_char(Str str, char c);
 
-static const char * str_at(Str src[ref], usize index) {
-    assert(index < src->size);
-    return &src->data[index];
-}
+const char * str_at(Str src[ref], usize index);
 
 static char str_at_value_s(Str src, usize index) {
     if (index >= src.size) {

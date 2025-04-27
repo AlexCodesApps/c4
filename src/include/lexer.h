@@ -29,6 +29,7 @@ enum TokenType {
     TOKEN_TYPE_RETURN,
     TOKEN_TYPE_MOD,
     TOKEN_TYPE_PUB,
+    TOKEN_TYPE_STRUCT,
 
     TOKEN_TYPE_IDENTIFIER,
     TOKEN_TYPE_INTEGER,
@@ -83,6 +84,8 @@ static Str token_type_to_str(TokenType type) {
         return s("TOKEN_TYPE_MOD");
     case TOKEN_TYPE_PUB:
         return s("TOKEN_TYPE_PUB");
+    case TOKEN_TYPE_STRUCT:
+        return s("TOKEN_TYPE_STRUCT");
 
     case TOKEN_TYPE_IDENTIFIER:
         return s("TOKEN_TYPE_IDENTIFIER");

@@ -66,7 +66,7 @@ bool fmt_str_builder(Writer writer, Str fmt, const StrBuilder builder[ref]) {
 
 int fmt_helper(Writer writer, Str slice[ref], Str fmt_slice[ref]) {
     Str writer_failed = s("\n<fmt parse error: writer failed>\n");
-    Writer stderrw = cfile_writer(stderr);
+    Writer stderrw = stderr_writer();
     Str str = *slice;
     for (usize index = 0; index < str.size; ++index) {
         char c = *str_at(&str, index);

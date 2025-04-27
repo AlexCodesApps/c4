@@ -12,12 +12,10 @@ union AllocatorPayload {
     u64 udata;
     void * pdata;
 } typedef AllocatorPayload;
-typedef void * (*AllocatorAllocateCallback)(
-    AllocatorPayload, AllocationRequest request
-);
-typedef void (*AllocatorDeallocateCallback)(
-    AllocatorPayload, void * allocation
-);
+typedef void * (*AllocatorAllocateCallback)(AllocatorPayload,
+                                            AllocationRequest request);
+typedef void (*AllocatorDeallocateCallback)(AllocatorPayload,
+                                            void * allocation);
 
 struct Allocator {
     AllocatorAllocateCallback allocator;
@@ -27,26 +25,25 @@ struct Allocator {
 
 void * allocator_alloc_bytes(Allocator allocator, AllocationRequest request);
 void allocator_deallocate(Allocator allocator, void * mem);
-static void *
-allocator_alloc_bytes_zeroed(Allocator allocator, AllocationRequest request) {
+static void * allocator_alloc_bytes_zeroed(Allocator allocator,
+                                           AllocationRequest request) {
     void * mem = allocator_alloc_bytes(allocator, request);
     if (mem) {
         memset(mem, 0, request.size);
     }
     return mem;
 }
-static void * allocator_alloc_bytes_n(
-    Allocator allocator, AllocationRequest request, usize n
-) {
+static void * allocator_alloc_bytes_n(Allocator allocator,
+                                      AllocationRequest request, usize n) {
     if (!ckd_mul(request.size, n, &request.size)) {
         return nullptr;
     }
     return allocator_alloc_bytes(allocator, request);
 }
 
-static void * allocator_alloc_bytes_zeroed_n(
-    Allocator allocator, AllocationRequest request, usize n
-) {
+static void * allocator_alloc_bytes_zeroed_n(Allocator allocator,
+                                             AllocationRequest request,
+                                             usize n) {
     if (!ckd_mul(request.size, n, &request.size)) {
         return nullptr;
     }
@@ -62,20 +59,16 @@ static AllocationRequest allocation_request_new(usize size, usize alignment) {
 
 #define allocator_alloc(allocator, type)                                       \
     (type *)allocator_alloc_bytes_zeroed(                                      \
-        (allocator), allocation_request_new(sizeof(type), alignof(type))       \
-    )
+        (allocator), allocation_request_new(sizeof(type), alignof(type)))
 #define allocator_alloc_uninit(allocator, type)                                \
     (type *)allocator_alloc_bytes(                                             \
-        (allocator), allocation_request_new(sizeof(type), alignof(type))       \
-    )
+        (allocator), allocation_request_new(sizeof(type), alignof(type)))
 #define allocator_alloc_n(allocator, type, n)                                  \
     (type *)allocator_alloc_bytes_zeroed_n(                                    \
-        (allocator), allocation_request_new(sizeof(type), alignof(type)), (n)  \
-    )
+        (allocator), allocation_request_new(sizeof(type), alignof(type)), (n))
 #define allocator_alloc_uninit_n(allocator, type, n)                           \
     (type *)allocator_alloc_bytes_n(                                           \
-        (allocator), allocation_request_new(sizeof(type), alignof(type)), (n)  \
-    )
+        (allocator), allocation_request_new(sizeof(type), alignof(type)), (n))
 extern Allocator general_purpose_allocator();
 extern Allocator arena_allocator(Arena[ref]);
 static void * noop_allocate(AllocatorPayload _, AllocationRequest _2) {

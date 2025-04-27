@@ -2,7 +2,6 @@
 #include "include/allocator.h"
 #include "include/common.h"
 #include "include/file.h"
-#include "include/fmt.h"
 #include "include/generic/darray.h"
 #include "include/lexer.h"
 #include "include/str.h"
@@ -13,11 +12,14 @@ static void recover_nested(Parser * parser);
 static bool parse_tls(Parser * parser, AstTopLvlStmt * out);
 static bool parse_function(Parser * parser, AstDecl * out);
 static bool parse_decl(Parser * parser, AstDecl * out);
+static bool parse_struct(Parser * parser, AstStruct * out);
 static bool parse_stmt_block(Parser * parser, AstStmtList * out);
-static bool parse_function_param(Parser * parser, AstFunParam * out);
-static void parse_function_param_list_recover_invalid_param(Parser * parser);
+static bool parse_param(Parser * parser, AstParam * out);
+static void
+parse_param_list_after_opening_delimiter_recover_invalid_param(Parser * parser,
+                                                               TokenType delim);
 static void parse_function_recover_invalid_return_type(Parser * parser);
-static bool parse_function_param_list(Parser * parser, AstFunParamList * out);
+static bool parse_function_param_list(Parser * parser, AstParamList * out);
 static AstType parse_type(Parser * parser);
 static AstExpr parse_expr(Parser * parser);
 
@@ -38,15 +40,27 @@ static bool type_is_ok(AstType * type) {
 DARRAY_IMPL(AST_TYPE_LIST_TEMPLATE);
 DARRAY_IMPL(AST_TOP_LVL_STMT_LIST_TEMPLATE);
 DARRAY_IMPL(AST_ERROR_LIST_TEMPLATE);
-DARRAY_IMPL(AST_FUN_PARAM_LIST_TEMPLATE);
+DARRAY_IMPL(AST_PARAM_LIST_TEMPLATE);
 DARRAY_IMPL(AST_STMT_LIST_TEMPLATE);
 DARRAY_IMPL(AST_EXPR_LIST_TEMPLATE);
 DARRAY_IMPL(STR_LIST_TEMPLATE);
+DARRAY_IMPL(AST_EXPR_STRUCT_INIT_PARAM_LIST);
 
 [[noreturn]] static void throw(Parser * parser, IrrecoverableParseError err) {
     parser->caught_error_buff = err;
     longjmp(parser->catch_site, 1);
 }
+
+#define ALLOCATE(parser, ...)                                                  \
+    ({                                                                         \
+        auto ptr = allocator_alloc_uninit(parser->allocator,                   \
+                                          typeof_unqual(__VA_ARGS__));         \
+        if (!ptr) {                                                            \
+            throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);                      \
+        }                                                                      \
+        *ptr = (__VA_ARGS__);                                                  \
+        ptr;                                                                   \
+    })
 
 static bool parser_eof(Parser * parser) {
     return parser->index == parser->span.size - 1;
@@ -94,6 +108,32 @@ static void parser_emit_error(Parser * parser, ParseError err) {
     }
 }
 
+static AstType ast_type_pointer(SrcSpan span, AstType * next) {
+    return (AstType){
+        .type = AST_TYPE_POINTER,
+        .span = span,
+        .as.pointer = next,
+    };
+}
+
+static AstType ast_type_reference(SrcSpan span, AstType * next) {
+    return (AstType){
+        .type = AST_TYPE_REFERENCE,
+        .span = span,
+        .as.pointer = next,
+    };
+}
+
+static AstType ast_type_function(SrcSpan span, AstType * nullable_return,
+                                 AstTypeSpan parameters) {
+    return (AstType){
+        .type = AST_TYPE_FN,
+        .span = span,
+        .as.function = {.has_return_type = nullable_return != nullptr,
+                        .return_type = nullable_return,
+                        .parameters = parameters}};
+}
+
 static bool parse_path(Parser * parser, PathBuilder * out) {
     PathBuilder path = {
         .is_global = false,
@@ -137,9 +177,10 @@ static bool parse_function_type_parameters(Parser * parser, AstTypeList * out) {
         if (parser_eof(parser)) {
             return false;
         }
-        AstFunParam param;
-        if (!parse_function_param(parser, &param)) {
-            parse_function_param_list_recover_invalid_param(parser);
+        AstParam param;
+        if (!parse_param(parser, &param)) {
+            parse_param_list_after_opening_delimiter_recover_invalid_param(
+                parser, TOKEN_TYPE_LPAREN);
             if (parser_advance_if(parser, TOKEN_TYPE_COMMA)) {
                 goto parse_param;
             }
@@ -174,22 +215,15 @@ static AstType parse_function_type(Parser * parser) {
     AstType * return_type;
     if (parser_advance_if(parser, TOKEN_TYPE_COLON)) {
         has_return_type = true;
-        return_type = allocator_alloc(parser->allocator, AstType);
-        if (!return_type) {
-            throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
-        }
-        *return_type = parse_type(parser);
-        if (!type_is_ok(return_type)) {
+        AstType return_type_value = parse_type(parser);
+        if (!type_is_ok(&return_type_value)) {
             return poisoned;
         }
+        return_type = ALLOCATE(parser, return_type_value);
     }
-    return (AstType){.type = AST_TYPE_FN,
-                     .span = extend_span_to(begin->span.pos, parser),
-                     .as.function = {
-                         .has_return_type = has_return_type,
-                         .return_type = return_type,
-                         .parameters = ast_type_list_to_span(&list),
-                     }};
+    SrcSpan span = extend_span_to(begin->span.pos, parser);
+    return ast_type_function(span, has_return_type ? return_type : nullptr,
+                             ast_type_list_to_span(&list));
 }
 
 static AstType parse_type(Parser * parser) {
@@ -370,7 +404,7 @@ AstExpr parse_infix_dot(Parser * parser, AstExpr expr) {
                      }};
 }
 
-AstExpr parse_infix_dotstar(Parser * parser, AstExpr expr) {
+static AstExpr parse_infix_dotstar(Parser * parser, AstExpr expr) {
     if (!parser_advance_if(parser, TOKEN_TYPE_DOTSTAR)) {
         return POISONED_EXPR;
     }
@@ -424,22 +458,102 @@ AstExpr parse_infix_as(Parser * parser, AstExpr expr) {
                      }};
 }
 
-AstExpr parse_prefix_path(Parser * parser) {
+static void parse_struct_init_list_recover_invalid_param(Parser * parser) {
+    parser_emit_error(parser, (ParseError){*parser_peek(parser)});
+    while (!parser_eof(parser)) {
+        const Token * const token = parser_peek(parser);
+        switch (token->type) {
+        case TOKEN_TYPE_RBRACE:
+        case TOKEN_TYPE_COMMA:
+            return;
+        default:
+            parser_advance(parser);
+        }
+    }
+}
+
+static bool parse_struct_init(Parser * parser, Path path,
+                              AstExprStructInit * out) {
+    Token * begin_token = parser_advance_if(parser, TOKEN_TYPE_LBRACE);
+    if (!begin_token) {
+        return false;
+    }
+    AstExprStructInitParamList list =
+        ast_expr_struct_init_param_list_new(parser->allocator);
+    forever {
+        if (parser_advance_if(parser, TOKEN_TYPE_RBRACE)) {
+            break;
+        }
+        if (!parser_advance_if(parser, TOKEN_TYPE_DOT)) {
+            parse_struct_init_list_recover_invalid_param(parser);
+            continue;
+        }
+        Token * iden_token = parser_advance_if(parser, TOKEN_TYPE_IDENTIFIER);
+        Str iden = token_get_str(*iden_token, parser->src);
+        if (!iden_token) {
+            parse_struct_init_list_recover_invalid_param(parser);
+            continue;
+        }
+        if (!parser_advance_if(parser, TOKEN_TYPE_EQ)) {
+            parse_struct_init_list_recover_invalid_param(parser);
+            continue;
+        }
+        AstExpr expr = parse_expr(parser);
+        if (!expr_is_ok(&expr)) {
+            parse_struct_init_list_recover_invalid_param(parser);
+            continue;
+        }
+        AstExpr * alloc_expr = ALLOCATE(parser, expr);
+        AstExprStructInitParam arg = {
+            .span = extend_span_to(begin_token->span.pos, parser),
+            .iden = iden,
+            .expr = alloc_expr,
+        };
+        if (!ast_expr_struct_init_param_list_push(&list, arg)) {
+            throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
+        }
+        if (parser_advance_if(parser, TOKEN_TYPE_COMMA)) {
+            continue;
+        } else if (parser_advance_if(parser, TOKEN_TYPE_RBRACE)) {
+            break;
+        } else {
+            return false;
+        }
+    }
+    *out = (AstExprStructInit){
+        .span = extend_span_to(path.span.pos, parser),
+        .path = path,
+        .args = ast_expr_struct_init_param_list_to_span(&list),
+    };
+    return true;
+}
+
+static AstExpr parse_prefix_path(Parser * parser) {
     PathBuilder path;
     if (!parse_path(parser, &path)) {
         return POISONED_EXPR;
     }
-    return (AstExpr){
-        .type = AST_EXPR_PATH,
-        .as.path = path_builder_to_path(&path),
-    };
+    if (parser_peek(parser)->type != TOKEN_TYPE_LBRACE) {
+        return (AstExpr){
+            .type = AST_EXPR_PATH,
+            .span = path.span,
+            .as.path = path_builder_to_path(&path),
+        };
+    }
+    AstExprStructInit init;
+    if (!parse_struct_init(parser, path_builder_to_path(&path), &init)) {
+        return POISONED_EXPR;
+    }
+    return (AstExpr){.type = AST_EXPR_STRUCT_INIT,
+                     .span = init.span,
+                     .as.struct_init = init};
 }
 
-AstExpr parse_prefix_fn(Parser * parser) {
+static AstExpr parse_prefix_fn(Parser * parser) {
     if (!parser_advance_if(parser, TOKEN_TYPE_FN)) {
         return POISONED_EXPR;
     }
-    AstFunParamList params;
+    AstParamList params;
     if (!parse_function_param_list(parser, &params)) {
         return POISONED_EXPR;
     }
@@ -461,7 +575,7 @@ AstExpr parse_prefix_fn(Parser * parser) {
         throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
     }
     *function = (AstFunction){
-        .params = ast_fun_param_list_to_span(&params),
+        .params = ast_param_list_to_span(&params),
         .has_return_type = has_return,
         .return_type = return_type,
         .body = ast_stmt_list_to_span(&body),
@@ -472,7 +586,7 @@ AstExpr parse_prefix_fn(Parser * parser) {
     };
 }
 
-AstExpr parse_prefix_lparen(Parser * parser) {
+static AstExpr parse_prefix_lparen(Parser * parser) {
     if (!parser_advance_if(parser, TOKEN_TYPE_LPAREN)) {
         return POISONED_EXPR;
     }
@@ -529,11 +643,7 @@ AstExpr parse_prefix_minus(Parser * parser) {
     if (!expr_is_ok(&expr)) {
         return expr;
     }
-    AstExpr * next = allocator_alloc(parser->allocator, AstExpr);
-    if (!next) {
-        throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
-    }
-    *next = expr;
+    AstExpr * next = ALLOCATE(parser, expr);
     return (AstExpr){.type = AST_EXPR_UNARY,
                      .as.unary = {
                          .next = next,
@@ -640,12 +750,12 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
                 goto error;
             }
         }
-        *out = (AstStmt){
-            .type = AST_STMT_RETURN,
-            .span = extend_span_to(token->span.pos, parser),
-            .has_return_expr = has_return_expr,
-            .return_expr = return_expr,
-        };
+        *out = (AstStmt){.type = AST_STMT_RETURN,
+                         .span = extend_span_to(token->span.pos, parser),
+                         .as.ret = {
+                             .has_expr = has_return_expr,
+                             .expr = return_expr,
+                         }};
         return true;
     case TOKEN_TYPE_FN:
         AstDecl * decl = allocator_alloc(parser->allocator, AstDecl);
@@ -658,11 +768,11 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
         *out = (AstStmt){
             .type = AST_STMT_DECL,
             .span = extend_span_to(token->span.pos, parser),
-            .decl = decl,
+            .as.decl = decl,
         };
         return true;
-    case TOKEN_TYPE_LET:
     case TOKEN_TYPE_CONST:
+    case TOKEN_TYPE_LET:
         decl = allocator_alloc(parser->allocator, AstDecl);
         if (!decl) {
             throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
@@ -673,7 +783,21 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
         *out = (AstStmt){
             .type = AST_STMT_DECL,
             .span = extend_span_to(token->span.pos, parser),
-            .decl = decl,
+            .as.decl = decl,
+        };
+        return true;
+    case TOKEN_TYPE_STRUCT:
+        AstStruct * struc = allocator_alloc(parser->allocator, AstStruct);
+        if (!struc) {
+            throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
+        }
+        if (!parse_struct(parser, struc)) {
+            goto error;
+        }
+        *out = (AstStmt){
+            .type = AST_STMT_STRUCT,
+            .span = extend_span_to(token->span.pos, parser),
+            .as.struc = struc,
         };
         return true;
     case TOKEN_TYPE_LBRACE:
@@ -684,7 +808,7 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
         *out = (AstStmt){
             .type = AST_STMT_BLOCK,
             .span = extend_span_to(token->span.pos, parser),
-            .block = ast_stmt_list_to_span(&list),
+            .as.block = ast_stmt_list_to_span(&list),
         };
         return true;
     default:
@@ -699,7 +823,7 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
             *out = (AstStmt){
                 .type = AST_STMT_EXPR,
                 .span = extend_span_to(token->span.pos, parser),
-                .expr = expr,
+                .as.expr = expr,
             };
             return true;
         }
@@ -712,7 +836,7 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
         }
         *out = (AstStmt){.type = AST_STMT_ASSIGNMENT,
                          .span = extend_span_to(token->span.pos, parser),
-                         .assign = {
+                         .as.assign = {
                              .to = expr,
                              .from = expr2,
                          }};
@@ -723,9 +847,9 @@ static bool parse_stmt(Parser * parser, AstStmt * out) {
     }
 }
 
-static bool parse_function_param(Parser * parser, AstFunParam * out) {
+static bool parse_param(Parser * parser, AstParam * out) {
     Token * token = parser_peek(parser);
-    AstFunParam param;
+    AstParam param;
     if (token->type == TOKEN_TYPE_IDENTIFIER &&
         parser_peek_by(parser, 1)->type == TOKEN_TYPE_COLON) {
         parser_advance_by(parser, 2);
@@ -742,13 +866,13 @@ static bool parse_function_param(Parser * parser, AstFunParam * out) {
     return true;
 }
 
-static void parse_function_param_list_recover_invalid_param(Parser * parser) {
+static void parse_struct_param_list_recover_invalid_param(Parser * parser) {
     parser_emit_error(parser, (ParseError){*parser_peek(parser)});
     while (!parser_eof(parser)) {
         const Token * const token = parser_peek(parser);
         switch (token->type) {
         case TOKEN_TYPE_COMMA:
-        case TOKEN_TYPE_RPAREN:
+        case TOKEN_TYPE_RBRACE:
             return;
         default:
             parser_advance(parser);
@@ -756,30 +880,39 @@ static void parse_function_param_list_recover_invalid_param(Parser * parser) {
     }
 }
 
-static bool parse_function_param_list(Parser * parser, AstFunParamList * out) {
-    if (!parser_advance_if(parser, TOKEN_TYPE_LPAREN)) {
-        return false;
+static void parse_param_list_after_opening_delimiter_recover_invalid_param(
+    Parser * parser, TokenType delim) {
+    parser_emit_error(parser, (ParseError){*parser_peek(parser)});
+    while (!parser_eof(parser)) {
+        const Token * const token = parser_peek(parser);
+        if (token->type == delim || token->type == TOKEN_TYPE_COMMA) {
+            return;
+        }
+        parser_advance(parser);
     }
-    AstFunParamList list = ast_fun_param_list_new(parser->allocator);
-    while (!parser_advance_if(parser, TOKEN_TYPE_RPAREN)) {
-    parse_param:
+}
+
+static bool parse_param_list_after_opening_delimiter(Parser * parser,
+                                                     TokenType end,
+                                                     AstParamList * out) {
+    AstParamList list = ast_param_list_new(parser->allocator);
+    while (!parser_advance_if(parser, end)) {
         if (parser_eof(parser)) {
             return false;
         }
-        AstFunParam param;
-        if (!parse_function_param(parser, &param)) {
-            parse_function_param_list_recover_invalid_param(parser);
-            if (parser_advance_if(parser, TOKEN_TYPE_COMMA)) {
-                goto parse_param;
-            }
+        AstParam param;
+        if (!parse_param(parser, &param)) {
+            parse_param_list_after_opening_delimiter_recover_invalid_param(
+                parser, end);
+            parser_advance_if(parser, TOKEN_TYPE_COMMA);
             continue;
         }
-        if (!ast_fun_param_list_push(&list, param)) {
+        if (!ast_param_list_push(&list, param)) {
             throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
         }
         if (parser_advance_if(parser, TOKEN_TYPE_COMMA)) {
-            goto parse_param;
-        } else if (parser_advance_if(parser, TOKEN_TYPE_RPAREN)) {
+            continue;
+        } else if (parser_advance_if(parser, end)) {
             break;
         } else {
             return false;
@@ -787,6 +920,14 @@ static bool parse_function_param_list(Parser * parser, AstFunParamList * out) {
     }
     *out = list;
     return true;
+}
+
+static bool parse_function_param_list(Parser * parser, AstParamList * out) {
+    if (!parser_advance_if(parser, TOKEN_TYPE_LPAREN)) {
+        return false;
+    }
+    return parse_param_list_after_opening_delimiter(parser, TOKEN_TYPE_RPAREN,
+                                                    out);
 }
 
 static void parse_function_body_recover_invalid_stmt(Parser * parser) {
@@ -854,11 +995,11 @@ static bool parse_function(Parser * parser, AstDecl * out) {
     }
     decl.iden = token_get_str(*iden_token, parser->src);
     AstFunction function;
-    AstFunParamList list;
+    AstParamList list;
     if (!parse_function_param_list(parser, &list)) {
         return false;
     }
-    function.params = ast_fun_param_list_to_span(&list);
+    function.params = ast_param_list_to_span(&list);
     if (parser_advance_if(parser, TOKEN_TYPE_COLON)) {
         function.has_return_type = true;
         function.return_type = parse_type(parser);
@@ -873,11 +1014,7 @@ static bool parse_function(Parser * parser, AstDecl * out) {
         return false;
     }
     function.body = ast_stmt_list_to_span(&body);
-    AstFunction * fun_alloc = allocator_alloc(parser->allocator, AstFunction);
-    if (!fun_alloc) {
-        throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);
-    }
-    *fun_alloc = function;
+    AstFunction * fun_alloc = ALLOCATE(parser, function);
     decl.expr = (AstExpr){
         .type = AST_EXPR_FUNCTION,
         .span = extend_span_to(begin->span.pos, parser),
@@ -899,6 +1036,32 @@ static void parse_decl_recover_invalid_type(Parser * parser) {
             parser_advance(parser);
         }
     }
+}
+
+static bool parse_struct(Parser * parser, AstStruct * out) {
+    Token * begin_token = parser_advance_if(parser, TOKEN_TYPE_STRUCT);
+    if (!begin_token) {
+        return false;
+    }
+    Token * iden_token = parser_advance_if(parser, TOKEN_TYPE_IDENTIFIER);
+    if (!iden_token) {
+        return false;
+    }
+    Str iden = token_get_str(*iden_token, parser->src);
+    if (!parser_advance_if(parser, TOKEN_TYPE_LBRACE)) {
+        return false;
+    }
+    AstParamList list;
+    if (!parse_param_list_after_opening_delimiter(parser, TOKEN_TYPE_RBRACE,
+                                                  &list)) {
+        return false;
+    }
+    *out = (AstStruct){
+        .span = extend_span_to(begin_token->span.pos, parser),
+        .iden = iden,
+        .params = ast_param_list_to_span(&list),
+    };
+    return true;
 }
 
 static void parse_decl_recover_invalid_expr(Parser * parser) {
@@ -1008,7 +1171,7 @@ static bool parse_tls(Parser * parser, AstTopLvlStmt * out) {
         tls = (AstTopLvlStmt){
             .type = AST_TLS_TYPE_MOD,
         };
-        if (!parse_mod(parser, &tls.mod)) {
+        if (!parse_mod(parser, &tls.as.mod)) {
             *out = poisoned;
             return true;
         }
@@ -1017,7 +1180,7 @@ static bool parse_tls(Parser * parser, AstTopLvlStmt * out) {
         tls = (AstTopLvlStmt){
             .type = AST_TLS_TYPE_DECL,
         };
-        if (!parse_function(parser, &tls.decl)) {
+        if (!parse_function(parser, &tls.as.decl)) {
             *out = poisoned;
             return true;
         }
@@ -1027,7 +1190,14 @@ static bool parse_tls(Parser * parser, AstTopLvlStmt * out) {
         tls = (AstTopLvlStmt){
             .type = AST_TLS_TYPE_DECL,
         };
-        if (!parse_decl(parser, &tls.decl)) {
+        if (!parse_decl(parser, &tls.as.decl)) {
+            *out = poisoned;
+            return true;
+        }
+        break;
+    case TOKEN_TYPE_STRUCT:
+        tls = (AstTopLvlStmt){.type = AST_TLS_TYPE_STRUCT};
+        if (!parse_struct(parser, &tls.as.struc)) {
             *out = poisoned;
             return true;
         }
@@ -1052,6 +1222,7 @@ static void recover_nested(Parser * parser) {
         case TOKEN_TYPE_LET:
         case TOKEN_TYPE_CONST:
         case TOKEN_TYPE_RBRACE:
+        case TOKEN_TYPE_STRUCT:
             return;
         default:
             parser_advance(parser);

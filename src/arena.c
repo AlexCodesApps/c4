@@ -1,7 +1,5 @@
 #include "include/arena.h"
-#include "include/fmt.h"
 #include "include/utility.h"
-#include <assert.h>
 #ifdef __GNUC__
 #define __USE_MISC 1 // clangd won't stop complaining otherwise
 #endif

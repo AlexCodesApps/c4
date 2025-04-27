@@ -3,7 +3,6 @@
 #include "ints.h"
 #include "list_macros.h"
 #include "macros.h"
-#include <assert.h>
 #define ref static 1
 #define MAX(x, y)                                                              \
     ({                                                                         \
@@ -57,7 +56,7 @@ static inline void bitwise_index_set(byte * memory, usize index, bool set) {
     *b = (*b & ~mask) | (set << shiftl);
 }
 
-#define TODO (assert(false && "todo reached!"))
+#define TODO (ASSERT(false, "todo reached!"))
 
 #define KB(n) ((n) * 1024)
 #define MB(n) ((n) * 1024 * 1024)
@@ -68,6 +67,7 @@ static inline void bitwise_index_set(byte * memory, usize index, bool set) {
          i != MACRO_VAR(end); ++i)
 #define span_index_in_bounds(addr, i) ((i) < (addr)->size)
 #define span_at(addr, i)                                                       \
-    (assert(span_index_in_bounds(addr, i)), (addr)->data + (i))
+    (ASSERT(span_index_in_bounds(addr, i)), (addr)->data + (i))
 #define span_back(addr) span_at(addr, (addr)->size - 1)
 #define span_front(addr) span_at(addr, 0)
+#define forever for (;;)

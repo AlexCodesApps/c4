@@ -1,10 +1,10 @@
 #pragma once
 
+#include "assert.h"
 #include "ints.h"
 #include "str.h"
 #include "utility.h"
 #include "writer.h"
-#include <assert.h>
 
 struct Buffer {
     u8 * data;
@@ -25,7 +25,7 @@ Writer buffered_writer_writer(BufferedWriter buffer[ref]);
 static Buffer buffer_new(u8 * data, usize size) { return (Buffer){data, size}; }
 
 static u8 * buffer_at(Buffer buffer, usize index) {
-    assert(index < buffer.size);
+    ASSERT(index < buffer.size);
     return buffer.data + index;
 }
 

@@ -1,5 +1,6 @@
 #include "include/str.h"
 #include "include/allocator.h"
+#include "include/assert.h"
 #include "include/checked_math.h"
 #include "include/utility.h"
 #include <string.h>
@@ -147,4 +148,9 @@ isize str_find_char(Str str, char c) {
         }
     }
     return NPOS;
+}
+
+const char * str_at(Str src[ref], usize index) {
+    ASSERT(index < src->size);
+    return &src->data[index];
 }

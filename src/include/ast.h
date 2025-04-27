@@ -10,6 +10,7 @@ enum AstTLSType {
     AST_TLS_TYPE_POISONED,
     AST_TLS_TYPE_DECL,
     AST_TLS_TYPE_MOD,
+    AST_TLS_TYPE_STRUCT,
 } typedef AstTLSType;
 
 #define AST_TYPE_LIST_TEMPLATE(m) m(AstTypeList, ast_type_list, struct AstType)
@@ -32,6 +33,7 @@ enum AstTypeType : u8 {
     AST_TYPE_REFERENCE,
     AST_TYPE_FN,
     AST_TYPE_PATH,
+    AST_TYPE_BUILTIN,
 } typedef AstTypeType;
 
 struct AstType {
@@ -86,7 +88,36 @@ enum AstExprType : u8 {
     AST_EXPR_AS,
     AST_EXPR_INTEGER,
     AST_EXPR_FIELD_ACCESS,
+    AST_EXPR_STRUCT_INIT,
 } typedef AstExprType;
+
+struct AstExprStructInitParam {
+    SrcSpan span;
+    Str iden;
+    struct AstExpr * expr;
+} typedef AstExprStructInitParam;
+
+#define AST_EXPR_STRUCT_INIT_PARAM_LIST(m)                                     \
+    m(AstExprStructInitParamList, ast_expr_struct_init_param_list,             \
+      AstExprStructInitParam)
+DARRAY_HEADER(AST_EXPR_STRUCT_INIT_PARAM_LIST);
+struct AstExprStructInitParamSpan {
+    AstExprStructInitParam * data;
+    usize size;
+} typedef AstExprStructInitParamSpan;
+static AstExprStructInitParamSpan ast_expr_struct_init_param_list_to_span(
+    const AstExprStructInitParamList list[ref]) {
+    return (AstExprStructInitParamSpan){
+        .data = list->data,
+        .size = list->size,
+    };
+}
+
+struct AstExprStructInit {
+    SrcSpan span;
+    Path path;
+    AstExprStructInitParamSpan args;
+} typedef AstExprStructInit;
 
 struct AstExpr {
     AstExprType type;
@@ -118,6 +149,7 @@ struct AstExpr {
             const struct AstExpr * next;
             Path name;
         } field_access;
+        AstExprStructInit struct_init;
     } as;
 } typedef AstExpr;
 
@@ -143,6 +175,7 @@ enum AstStmtType : u8 {
     AST_STMT_DECL,
     AST_STMT_EXPR,
     AST_STMT_ASSIGNMENT,
+    AST_STMT_STRUCT,
 } typedef AstStmtType;
 
 struct AstStmt {
@@ -150,37 +183,36 @@ struct AstStmt {
     SrcSpan span;
     union {
         const struct AstDecl * decl;
+        const struct AstStruct * struc;
         struct {
-            AstExpr return_expr;
-            bool has_return_expr;
-        };
+            AstExpr expr;
+            bool has_expr;
+        } ret;
         AstStmtSpan block;
         AstExpr expr;
         struct {
             AstExpr to;
             AstExpr from;
         } assign;
-    };
+    } as;
 } typedef AstStmt;
 
-struct AstFunParam {
+struct AstParam {
     SrcSpan span;
     Str iden; // no iden represented by empty string
     AstType type;
-} typedef AstFunParam;
+} typedef AstParam;
 
-#define AST_FUN_PARAM_LIST_TEMPLATE(m)                                         \
-    m(AstFunParamList, ast_fun_param_list, AstFunParam)
-DARRAY_HEADER(AST_FUN_PARAM_LIST_TEMPLATE);
+#define AST_PARAM_LIST_TEMPLATE(m) m(AstParamList, ast_param_list, AstParam)
+DARRAY_HEADER(AST_PARAM_LIST_TEMPLATE);
 
-struct AstFunParamSpan {
-    const AstFunParam * data;
+struct AstParamSpan {
+    const AstParam * data;
     usize size;
-} typedef AstFunParamSpan;
+} typedef AstParamSpan;
 
-static AstFunParamSpan
-ast_fun_param_list_to_span(const AstFunParamList list[ref]) {
-    return (AstFunParamSpan){
+static AstParamSpan ast_param_list_to_span(const AstParamList list[ref]) {
+    return (AstParamSpan){
         .data = list->data,
         .size = list->size,
     };
@@ -188,11 +220,17 @@ ast_fun_param_list_to_span(const AstFunParamList list[ref]) {
 
 struct AstFunction {
     SrcSpan span;
-    AstFunParamSpan params;
+    AstParamSpan params;
     bool has_return_type;
     AstType return_type;
     AstStmtSpan body;
 } typedef AstFunction;
+
+struct AstStruct {
+    SrcSpan span;
+    Str iden;
+    AstParamSpan params;
+} typedef AstStruct;
 
 struct AstDecl {
     SrcSpan span;
@@ -232,7 +270,8 @@ struct AstTopLvlStmt {
     union {
         AstModule mod;
         AstDecl decl;
-    };
+        AstStruct struc;
+    } as;
 } typedef AstTopLvlStmt;
 
 struct Ast {

@@ -1,5 +1,6 @@
 #include "src/include/allocator.h"
 #include "src/include/arena.h"
+#include "src/include/assert.h"
 #include "src/include/ast.h"
 #include "src/include/common.h"
 #include "src/include/file.h"
@@ -30,7 +31,7 @@ void print_path(Writer writer, Path path) {
     if (path.is_global) {
         fmt(writer, "::");
     }
-    assert(path.list.size > 0);
+    ASSERT(path.list.size > 0);
     fmt(writer, "{}", path.list.data[0]);
     for (usize i = 1; i < path.list.size; ++i) {
         fmt(writer, "::{}", path.list.data[i]);
@@ -67,6 +68,7 @@ void print_type(Writer writer, const AstType * type, usize padding) {
         }
         break;
     case AST_TYPE_POISONED:
+    case AST_TYPE_BUILTIN:
         fmt(writer, "(poisoned type)\n");
         break;
     }
@@ -77,8 +79,8 @@ void print_stmt(Writer writer, const AstStmt * stmt, usize padding) {
     switch (stmt->type) {
     case AST_STMT_RETURN:
         fmt(writer, "return\n");
-        if (stmt->has_return_expr) {
-            print_expr(writer, &stmt->return_expr, padding + 1);
+        if (stmt->as.ret.has_expr) {
+            print_expr(writer, &stmt->as.ret.expr, padding + 1);
         } else {
             pad(writer, padding + 1);
             fmt(writer, "(void)\n");
@@ -86,27 +88,36 @@ void print_stmt(Writer writer, const AstStmt * stmt, usize padding) {
         break;
     case AST_STMT_ASSIGNMENT:
         fmt(writer, "assign\n");
-        print_expr(writer, &stmt->assign.to, padding + 1);
-        print_expr(writer, &stmt->assign.from, padding + 1);
+        print_expr(writer, &stmt->as.assign.to, padding + 1);
+        print_expr(writer, &stmt->as.assign.from, padding + 1);
         break;
     case AST_STMT_BLOCK:
         fmt(writer, "block\n");
-        foreach_span(&stmt->block, stmt) {
+        foreach_span(&stmt->as.block, stmt) {
             print_stmt(writer, stmt, padding + 1);
         }
         break;
     case AST_STMT_EXPR:
         fmt(writer, "expr\n");
-        print_expr(writer, &stmt->expr, padding + 1);
+        print_expr(writer, &stmt->as.expr, padding + 1);
         break;
     case AST_STMT_DECL:
-        fmt(writer, "{} {}\n", stmt->decl->is_const ? s("const") : s("let"),
-            stmt->decl->iden);
-        if (stmt->decl->has_type) {
-            print_type(writer, &stmt->decl->type, padding + 1);
+        fmt(writer, "{} {}\n", stmt->as.decl->is_const ? s("const") : s("let"),
+            stmt->as.decl->iden);
+        if (stmt->as.decl->has_type) {
+            print_type(writer, &stmt->as.decl->type, padding + 1);
         }
-        if (stmt->decl->has_expr) {
-            print_expr(writer, &stmt->decl->expr, padding + 1);
+        if (stmt->as.decl->has_expr) {
+            print_expr(writer, &stmt->as.decl->expr, padding + 1);
+        }
+        break;
+    case AST_STMT_STRUCT:
+        fmt(writer, "struct {}\n", stmt->as.struc->iden);
+        foreach_span(&stmt->as.struc->params, param) {
+            pad(writer, padding + 1);
+            fmt(writer, "{} :\n",
+                !str_empty(param->iden) ? param->iden : s("!"));
+            print_type(writer, &param->type, padding + 2);
         }
         break;
     case AST_STMT_POISONED:
@@ -176,6 +187,16 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
         print_path(writer, expr->as.field_access.name);
         fmt(writer, "\n");
         break;
+    case AST_EXPR_STRUCT_INIT:
+        fmt(writer, "init ");
+        print_path(writer, expr->as.struct_init.path);
+        fmt(writer, "\n");
+        foreach_span(&expr->as.struct_init.args, arg) {
+            pad(writer, padding + 1);
+            fmt(writer, "{} =\n", arg->iden);
+            print_expr(writer, arg->expr, padding + 2);
+        }
+        break;
     case AST_EXPR_UNARY:
         switch (expr->as.unary.type) {
         case AST_EXPR_UNARY_MINUS:
@@ -211,17 +232,27 @@ void print_tls_list(Writer writer, const AstTLSSpan * ast, usize padding) {
         pad(writer, padding);
         switch (tls->type) {
         case AST_TLS_TYPE_MOD:
-            fmt(writer, "mod {}\n", tls->mod.iden);
-            print_tls_list(writer, &tls->mod.body, padding + 1);
+            fmt(writer, "mod {}\n", tls->as.mod.iden);
+            print_tls_list(writer, &tls->as.mod.body, padding + 1);
             break;
         case AST_TLS_TYPE_DECL:
-            fmt(writer, "{} {}\n", tls->decl.is_const ? s("const") : s("let"),
-                tls->decl.iden);
-            if (tls->decl.has_type) {
-                print_type(writer, &tls->decl.type, padding + 1);
+            fmt(writer, "{} {}\n",
+                tls->as.decl.is_const ? s("const") : s("let"),
+                tls->as.decl.iden);
+            if (tls->as.decl.has_type) {
+                print_type(writer, &tls->as.decl.type, padding + 1);
             }
-            if (tls->decl.has_expr) {
-                print_expr(writer, &tls->decl.expr, padding + 1);
+            if (tls->as.decl.has_expr) {
+                print_expr(writer, &tls->as.decl.expr, padding + 1);
+            }
+            break;
+        case AST_TLS_TYPE_STRUCT:
+            fmt(writer, "struct {}\n", tls->as.struc.iden);
+            foreach_span(&tls->as.struc.params, param) {
+                pad(writer, padding + 1);
+                fmt(writer, "{} :\n",
+                    !str_empty(param->iden) ? param->iden : s("!"));
+                print_type(writer, &param->type, padding + 2);
             }
             break;
         case AST_TLS_TYPE_POISONED:
@@ -242,15 +273,12 @@ int main(int argc, char ** argv) {
         return 1;
     }
     const char * file_name = argv[1];
-    File file = file_open_with_cstr(
-        file_name,
-        (FileMode){
-            .read = true,
-            .write = false,
-            .create = false,
-            .truncate = false,
-        }
-    );
+    File file = file_open_with_cstr(file_name, (FileMode){
+                                                   .read = true,
+                                                   .write = false,
+                                                   .create = false,
+                                                   .truncate = false,
+                                               });
     if (!file_is_valid(file)) {
         fmt(stderrw, "unable to open file : {}\n", file_name);
         return 1;
