@@ -231,11 +231,11 @@ void print_tls_list(Writer writer, const AstTLSSpan * ast, usize padding) {
     foreach_span(ast, tls) {
         pad(writer, padding);
         switch (tls->type) {
-        case AST_TLS_TYPE_MOD:
+        case AST_TLS_MOD:
             fmt(writer, "mod {}\n", tls->as.mod.iden);
             print_tls_list(writer, &tls->as.mod.body, padding + 1);
             break;
-        case AST_TLS_TYPE_DECL:
+        case AST_TLS_DECL:
             fmt(writer, "{} {}\n",
                 tls->as.decl.is_const ? s("const") : s("let"),
                 tls->as.decl.iden);
@@ -246,7 +246,7 @@ void print_tls_list(Writer writer, const AstTLSSpan * ast, usize padding) {
                 print_expr(writer, &tls->as.decl.expr, padding + 1);
             }
             break;
-        case AST_TLS_TYPE_STRUCT:
+        case AST_TLS_STRUCT:
             fmt(writer, "struct {}\n", tls->as.struc.iden);
             foreach_span(&tls->as.struc.params, param) {
                 pad(writer, padding + 1);
@@ -255,7 +255,7 @@ void print_tls_list(Writer writer, const AstTLSSpan * ast, usize padding) {
                 print_type(writer, &param->type, padding + 2);
             }
             break;
-        case AST_TLS_TYPE_POISONED:
+        case AST_TLS_POISONED:
             fmt(writer, "(poisoned tls)\n");
             break;
         }

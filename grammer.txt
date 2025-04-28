@@ -1,13 +1,14 @@
 program = top_level_statement*
-top_level_statement = 
+top_level_statement =
     ";"
-    | function 
+    | function
     | declaration
     | module;
 identifier = "::"? IDEN ("::" IDEN)*;
 module = "mod" IDEN "{" top_level_statement* "}";
 param_list = ((IDEN ":")? type ("," (IDEN ":")? type)*)?;
 function = "fn" IDEN "(" param_list ")" (":" type)? "{" statement* "}";
+struct = "struct" IDEN "{" param_list "}"
 statement = return
     | assignment
     | function
@@ -15,6 +16,7 @@ statement = return
     | expr ";"
     | "{" statement* "}"
     | ";";
+    | struct
 assignment = identifier "=" expr ";";
 return = "return" expr ";";
 declaration = ("let"| "const") IDEN ":" type ("=" expr)? ";";
@@ -28,9 +30,10 @@ term_expr = unary_expr (("-"|"+") unary_expr)*;
 unary_expr = ("&"|"-") postfix_expr
             | postfix_expr;
 postfix_expr = primary_expr (".*" | "(" (expr ("," expr)*)? ")")*;
-primary_expr = 
+primary_expr =
     INTEGER
     | identifier
+    | identifier "{" ("." IDEN "=" as_expr ",")* }
     | "true"
     | "false"
     | "nullptr"

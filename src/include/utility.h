@@ -56,8 +56,6 @@ static inline void bitwise_index_set(byte * memory, usize index, bool set) {
     *b = (*b & ~mask) | (set << shiftl);
 }
 
-#define TODO (ASSERT(false, "todo reached!"))
-
 #define KB(n) ((n) * 1024)
 #define MB(n) ((n) * 1024 * 1024)
 #define GB(n) ((n) * 1024 * 1024 * 1024)

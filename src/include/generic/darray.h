@@ -22,7 +22,9 @@
                 _free)(template(DARRAY_UPPER_NAME) array[ref]);                \
     bool CONCAT(template(DARRAY_LOWER_NAME),                                   \
                 _new_with_capacity)(usize capacity, Allocator allocator,       \
-                                    template(DARRAY_UPPER_NAME) out[ref]);
+                                    template(DARRAY_UPPER_NAME) out[ref]);     \
+    bool CONCAT(template(DARRAY_LOWER_NAME), _pop)(                            \
+        template(DARRAY_UPPER_NAME) array[ref], template(DARRAY_TYPE) * out);
 #define DARRAY_IMPL(template)                                                  \
     template(DARRAY_UPPER_NAME)                                                \
         CONCAT(template(DARRAY_LOWER_NAME), _new)(Allocator allocator) {       \
@@ -64,5 +66,16 @@
                                              .size = 0,                        \
                                              .capacity = capacity,             \
                                              .allocator = allocator};          \
+        return true;                                                           \
+    }                                                                          \
+    bool CONCAT(template(DARRAY_LOWER_NAME), _pop)(                            \
+        template(DARRAY_UPPER_NAME) array[ref], template(DARRAY_TYPE) * out) { \
+        if (array->size == 0) {                                                \
+            return false;                                                      \
+        }                                                                      \
+        if (out) {                                                             \
+            *out = array->data[array->size - 1];                               \
+        }                                                                      \
+        --array->size;                                                         \
         return true;                                                           \
     }

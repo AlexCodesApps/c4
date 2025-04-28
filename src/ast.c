@@ -53,10 +53,10 @@ DARRAY_IMPL(AST_EXPR_STRUCT_INIT_PARAM_LIST);
 
 #define ALLOCATE(parser, ...)                                                  \
     ({                                                                         \
-        auto ptr = allocator_alloc_uninit(parser->allocator,                   \
+        auto ptr = allocator_alloc_uninit((parser)->allocator,                 \
                                           typeof_unqual(__VA_ARGS__));         \
         if (!ptr) {                                                            \
-            throw(parser, IRRECOVERABLE_PARSE_ERROR_OOM);                      \
+            throw((parser), IRRECOVERABLE_PARSE_ERROR_OOM);                    \
         }                                                                      \
         *ptr = (__VA_ARGS__);                                                  \
         ptr;                                                                   \
@@ -1141,7 +1141,7 @@ static bool parse_mod(Parser * parser, AstModule * out) {
         if (!parse_tls(parser, &tls)) {
             continue;
         }
-        if (tls.type == AST_TLS_TYPE_POISONED) {
+        if (tls.type == AST_TLS_POISONED) {
             recover_nested(parser);
             continue;
         }
@@ -1159,7 +1159,7 @@ static bool parse_mod(Parser * parser, AstModule * out) {
 
 // return value could be null in case of parsing a semicolon.
 static bool parse_tls(Parser * parser, AstTopLvlStmt * out) {
-    static const AstTopLvlStmt poisoned = {.type = AST_TLS_TYPE_POISONED};
+    static const AstTopLvlStmt poisoned = {.type = AST_TLS_POISONED};
     Token * const token = parser_peek(parser);
     if (token->type == TOKEN_TYPE_SEMICOLON) {
         parser_advance(parser);
@@ -1169,7 +1169,7 @@ static bool parse_tls(Parser * parser, AstTopLvlStmt * out) {
     switch (token->type) {
     case TOKEN_TYPE_MOD:
         tls = (AstTopLvlStmt){
-            .type = AST_TLS_TYPE_MOD,
+            .type = AST_TLS_MOD,
         };
         if (!parse_mod(parser, &tls.as.mod)) {
             *out = poisoned;
@@ -1178,7 +1178,7 @@ static bool parse_tls(Parser * parser, AstTopLvlStmt * out) {
         break;
     case TOKEN_TYPE_FN:
         tls = (AstTopLvlStmt){
-            .type = AST_TLS_TYPE_DECL,
+            .type = AST_TLS_DECL,
         };
         if (!parse_function(parser, &tls.as.decl)) {
             *out = poisoned;
@@ -1188,7 +1188,7 @@ static bool parse_tls(Parser * parser, AstTopLvlStmt * out) {
     case TOKEN_TYPE_LET:
     case TOKEN_TYPE_CONST:
         tls = (AstTopLvlStmt){
-            .type = AST_TLS_TYPE_DECL,
+            .type = AST_TLS_DECL,
         };
         if (!parse_decl(parser, &tls.as.decl)) {
             *out = poisoned;
@@ -1196,7 +1196,7 @@ static bool parse_tls(Parser * parser, AstTopLvlStmt * out) {
         }
         break;
     case TOKEN_TYPE_STRUCT:
-        tls = (AstTopLvlStmt){.type = AST_TLS_TYPE_STRUCT};
+        tls = (AstTopLvlStmt){.type = AST_TLS_STRUCT};
         if (!parse_struct(parser, &tls.as.struc)) {
             *out = poisoned;
             return true;
@@ -1271,7 +1271,7 @@ ParseResult parse(Allocator allocator, Str src, TokenSpan tokens) {
         AstTopLvlStmt tls;
         if (!parse_tls(&parser, &tls))
             continue;
-        if (tls.type == AST_TLS_TYPE_POISONED) {
+        if (tls.type == AST_TLS_POISONED) {
             recover_top_lvl(&parser);
             continue;
         }
