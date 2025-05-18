@@ -5,20 +5,9 @@
 #include "src/include/common.h"
 #include "src/include/file.h"
 #include "src/include/fmt.h"
-#include "src/include/lexer.h"
 #include "src/include/str.h"
 #include "src/include/utility.h"
 #include "src/include/writer.h"
-
-void print_token_list(Writer writer, Str src, const TokenList list[ref]) {
-    for (usize i = 0; i < list->size; ++i) {
-        Token tok = list->data[i];
-        Str slice = str_slice(src, tok.span.pos.index, tok.span.len);
-        fmt(writer, "(token {}, row {}, col {}, src \"{}\")\n",
-            token_type_to_str(tok.type), tok.span.pos.row, tok.span.pos.col,
-            slice);
-    }
-}
 
 void pad(Writer writer, usize padding) {
     padding *= 2;
@@ -93,8 +82,8 @@ void print_stmt(Writer writer, const AstStmt * stmt, usize padding) {
         break;
     case AST_STMT_BLOCK:
         fmt(writer, "block\n");
-        foreach_span(&stmt->as.block, stmt) {
-            print_stmt(writer, stmt, padding + 1);
+        foreach_span(&stmt->as.block, stmt_) {
+            print_stmt(writer, stmt_, padding + 1);
         }
         break;
     case AST_STMT_EXPR:
@@ -227,7 +216,6 @@ void print_expr(Writer writer, const AstExpr * expr, usize padding) {
 }
 
 void print_tls_list(Writer writer, const AstTLSSpan * ast, usize padding) {
-    Writer stderrw = file_writer(stderr_file());
     foreach_span(ast, tls) {
         pad(writer, padding);
         switch (tls->type) {
@@ -309,29 +297,9 @@ int main(int argc, char ** argv) {
         return 1;
     }
     Allocator allocator = arena_allocator(&arena);
-    LexResult result = lex(allocator, src);
-    if (!result.succeeded) {
-        LexError err = result.err;
-        switch (err.type) {
-        case LEX_ERROR_OOM:
-            fmt(stderrw, "arena used to capacity with size : {}\n",
-                reserved_size);
-            break;
-        case LEX_ERROR_UNEXPECTED_CHAR:
-            fmt(stderrw, "unexpected character : '{}', row: {}, col: {}\n",
-                err.unexpected_char, err.pos.row, err.pos.col);
-            break;
-        }
-        return 1;
-    }
-    TokenList list = result.list;
-    Writer stdoutw = stdout_writer();
-    print_token_list(stdoutw, src, &list);
-    writer_flush(stdoutw);
-
+	Writer stdoutw = stdout_writer();
     const ParseResult parse_result =
-        parse(allocator, src, token_list_to_span(&list));
-
+        parse(allocator, src);
     foreach_span(&parse_result.errors, err) {
         Token tok = err->unexpected_token;
         fmt(stderrw, "ERROR (token {}, row {}, col {}, src \"{}\")\n",

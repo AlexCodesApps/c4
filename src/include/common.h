@@ -15,6 +15,13 @@ struct SrcSpan {
     usize len;
 } typedef SrcSpan;
 
+static SrcSpan src_span_new(SrcPos pos, usize len) {
+    return (SrcSpan){
+        .pos = pos,
+        .len = len,
+    };
+}
+
 static Str src_span_slice(SrcSpan span, Str str) {
     return str_slice(str, span.pos.index, span.len);
 }

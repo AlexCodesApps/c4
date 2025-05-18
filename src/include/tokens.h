@@ -1,9 +1,6 @@
 #pragma once
-#include "allocator.h"
 #include "common.h"
-#include "generic/darray.h"
 #include "str.h"
-#include <setjmp.h>
 
 enum TokenType {
     TOKEN_TYPE_SEMICOLON,
@@ -102,47 +99,13 @@ struct Token {
     TokenType type;
 } typedef Token;
 
-enum LexErrorType {
-    LEX_ERROR_OOM,
-    LEX_ERROR_UNEXPECTED_CHAR,
-} typedef LexErrorType;
-
-struct LexError {
-    LexErrorType type;
-    char unexpected_char;
-    SrcPos pos;
-} typedef LexError;
-
-#define TOKEN_LIST_TEMPLATE(m) m(TokenList, token_list, Token)
-DARRAY_HEADER(TOKEN_LIST_TEMPLATE);
-
-struct TokenSpan {
-    Token * data;
-    usize size;
-} typedef TokenSpan;
-
-static TokenSpan token_list_to_span(TokenList list[ref]) {
-    return (TokenSpan){.data = list->data, .size = list->size};
+static Token token_new(SrcSpan span, TokenType type) {
+    return (Token){
+        .span = span,
+        .type = type,
+    };
 }
 
-struct LexResult {
-    bool succeeded;
-    union {
-        struct {
-            TokenList list;
-        };
-        LexError err;
-    };
-} typedef LexResult;
-
-struct Lexer {
-    Str src;
-    SrcPos pos;
-    LexError err;
-    jmp_buf catch_site;
-    TokenList tokens;
-} typedef Lexer;
-
-LexResult lex(Allocator allocator, Str src);
-bool validate_ascii(Str src);
-Str token_get_str(Token token, Str src);
+static Str token_get_str(Token token, Str src) {
+    return str_slice(src, token.span.pos.index, token.span.len);
+}

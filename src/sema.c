@@ -5,6 +5,7 @@
 #include "include/str.h"
 #include "include/utility.h"
 #include <setjmp.h>
+DARRAY_IMPL(SEMA_ERROR_LIST_TEMPLATE);
 DARRAY_IMPL(SYMBOL_LIST_TEMPLATE);
 
 [[noreturn]] static void throw(SemaCtx * ctx, SemaException exception) {
@@ -159,6 +160,10 @@ void sema_declare_module(SemaCtx * ctx, const AstModule * in, Module * out) {
             break;
         }
     }
+}
+
+bool sema_complete_decl(SemaCtx * ctx, Decl * type) {
+	TODO;
 }
 
 void sema_complete_module(SemaCtx * ctx, Module * module) {

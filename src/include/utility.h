@@ -56,6 +56,16 @@ static inline void bitwise_index_set(byte * memory, usize index, bool set) {
     *b = (*b & ~mask) | (set << shiftl);
 }
 
+static bool char_is_alpha(char c) {
+    return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_';
+}
+
+static bool char_is_digit(char c) { return '0' <= c && c <= '9'; }
+
+static bool char_is_alnum(char c) {
+    return char_is_alpha(c) || char_is_digit(c);
+}
+
 #define KB(n) ((n) * 1024)
 #define MB(n) ((n) * 1024 * 1024)
 #define GB(n) ((n) * 1024 * 1024 * 1024)

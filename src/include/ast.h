@@ -3,8 +3,9 @@
 #include "allocator.h"
 #include "common.h"
 #include "generic/darray.h"
-#include "lexer.h"
+#include "nlexer.h"
 #include "str.h"
+#include <setjmp.h>
 
 enum AstTLSType {
     AST_TLS_POISONED,
@@ -15,6 +16,7 @@ enum AstTLSType {
 
 #define AST_TYPE_LIST_TEMPLATE(m) m(AstTypeList, ast_type_list, struct AstType)
 DARRAY_HEADER(AST_TYPE_LIST_TEMPLATE);
+
 struct AstTypeSpan {
     const struct AstType * data;
     usize size;
@@ -309,8 +311,9 @@ struct ParseResult {
 
 struct Parser {
     Str src;
-    TokenSpan span;
-    usize index;
+	NLexer lexer;
+	Token fst;
+	Token snd;
     ParseErrorList errors;
     jmp_buf catch_site;
     Allocator allocator;
@@ -320,4 +323,4 @@ struct Parser {
 /* will not free allocations on failure!
     use with virtual memory arena, buffer allocator, ect...
 */
-ParseResult parse(Allocator allocator, Str src, TokenSpan tokens);
+ParseResult parse(Allocator allocator, Str src);

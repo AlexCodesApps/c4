@@ -5,8 +5,8 @@ TARGET_FILE=main
 TARGET=$(BIN_DIR)/$(TARGET_FILE)
 BUILD_OBJS=$(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(wildcard $(SRC_DIR)/*.c)) $(OBJ_DIR)/main.o
 MODE ?= DEBUG
-WARNINGS=-Wimplicit-fallthrough
-CFLAGS_DEBUG=-g
+WARNINGS=-Wimplicit-fallthrough -Wall
+CFLAGS_DEBUG=-g -fsanitize=address
 CFLAGS_RELEASE=-O2 -flto -DNDEBUG
 CFLAGS= $(CFLAGS_$(MODE)) $(WARNINGS) -std=c23
 BUILD_OBJ_COMMAND=$(CC) -MMD -c $< -o $@ $(CFLAGS)
