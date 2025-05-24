@@ -126,3 +126,5 @@ void sema_complete_module(SemaCtx * ctx, Module * module);
 
 bool sema_complete_type(SemaCtx * ctx, Type * type);
 bool sema_complete_decl(SemaCtx * ctx, Decl * type);
+
+bool sema_type_equal(const Type a[ref], const Type b[ref]);

@@ -202,17 +202,69 @@ void sema_complete_module(SemaCtx * ctx, Module * module) {
     }
 }
 
-bool sema_complete_type_impl(SemaCtx * ctx, Type * type, usize level) {
+bool sema_type_equal(const Type a[ref], const Type b[ref]) {
+	TODO;
+}
+
+#define TYPE_WORKLIST(m) \
+	m(TypeWorklist, type_worklist, Type *)
+DARRAY_HEADER(TYPE_WORKLIST);
+DARRAY_IMPL(TYPE_WORKLIST);
+
+static bool sema_complete_type_impl(SemaCtx * ctx, Type * type, usize lvl,
+		TypeWorklist * list) {
     switch (type->type) {
-    case TYPE_STRUCT:
     case TYPE_POINTER:
     case TYPE_REFERENCE:
+		foreach_span(list, otype) { // test type isn't alr queued
+			if (otype == type->as.pointer) {
+				break;	
+			}
+		}
+		if (!type_worklist_push(list, type->as.pointer)) {
+			throw(ctx, SEMA_EXCEPT_OOM); 
+		}
+    case TYPE_STRUCT:
     case TYPE_BUILTIN:
-        return true;
+		break;
     case TYPE_INCOMPLETE_STRUCT:
+		bool ret = true;
+		if (type->recursive_marker == lvl) {
+			TODO; // add suitable error, impossibly sized type detected
+		}
+		usize saved_lvl = type->recursive_marker;
+		type->recursive_marker = lvl;
+		foreach_span(&type->as.incomplete_struc->params, param) {
+			Type * ptype;
+			TODO; // need to implement AstType -> Type lookup op
+			if (!sema_complete_type_impl(ctx, ptype, lvl, list)) {
+				ret = false;
+			}
+		}
+		type->recursive_marker = saved_lvl;
+		return ret;
     }
+	return true;
 }
 
 bool sema_complete_type(SemaCtx * ctx, Type * type) {
-    return sema_complete_type_impl(ctx, type, 0);
+	/*	This algorithm works by recursively defining types with struct definitions
+		using a recursive_marker field to check if there is an
+		impossible recursive dependancy
+		Any a pointer/indirect dependancy is found, the type is put
+		on a worklist to be implemented. This avoids an infinite recursion
+		with an infinitely recursive type def via pointers/ some direction
+		by simply queueing the indirect dependency
+	*/
+	TypeWorklist worklist = type_worklist_new(ctx->allocator);
+	if (!sema_complete_type_impl(ctx, type, 0, &worklist)) {
+		return false;
+	}
+	Type * qtype;
+	while (type_worklist_pop(&worklist, &qtype)) {
+		if (!sema_complete_type_impl(ctx, qtype, 0, &worklist)) {
+			return false; // will edit to allow for showing more errors probs
+		}
+	}
+	return true;
 }
