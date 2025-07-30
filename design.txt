@@ -1,0 +1,16 @@
+let a: int = b;
+let b: int = 10;
+type i32 = int;
+type car = fn(i32): i32;
+let a: i32 = a;
+fn foo(i: i32): car {
+	return i + i + i + i;
+	{
+		 baz();
+	}
+}
+
+fn main(): void {
+	foo(10);
+}
+

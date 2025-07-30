@@ -1,0 +1,26 @@
+- const fns
+- types
+	- pointers
+	- structs
+
+constraints
+- any type used in const fn must not have any direct / indirect dependency on said fn
+- pointer type dependencies are considered indirect
+
+type baz = [bar()]int;
+
+fn foo() {
+	bar();
+	baz b;
+}
+
+foo
+|
+|
+baz
+|  \
+|  	 \
+bar() int
+
+
+type dep_stack = Stack [Decl]
