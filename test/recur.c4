@@ -1,0 +1,7 @@
+fn a(c: int): int {
+	return b(c, c + 1);
+}
+
+fn b(c: int, d: int): int {
+	return a(c + d);
+}

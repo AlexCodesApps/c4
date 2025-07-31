@@ -1,0 +1,9 @@
+type i32 = int;
+type bar = i32;
+let b: i32 = 10;
+
+fn b(a: fn(b: int): int): int {
+	{
+		return a(1);
+	}
+}

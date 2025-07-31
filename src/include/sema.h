@@ -1,9 +1,11 @@
 #pragma once
 #include "ast.h"
 #include "str.h"
+#include "utility.h"
 
 typedef struct SemaDeclNode SemaDeclNode;
 typedef struct SemaVar SemaVar;
+typedef struct SemaFn SemaFn;
 
 typedef struct {
 	SemaDeclNode * begin;
@@ -71,6 +73,7 @@ struct SemaTypePtrNode {
 typedef enum {
 	SEMA_EXPR_VOID,
 	SEMA_EXPR_I32,
+	SEMA_EXPR_FN,
 	SEMA_EXPR_FUNCALL,
 	SEMA_EXPR_PLUS,
 	SEMA_EXPR_VAR,
@@ -85,8 +88,14 @@ typedef struct {
 	usize count;
 } SemaExprList;
 
+typedef struct {
+	SemaExpr * fun;
+	SemaExprList args;
+} SemaExprFunCall;
+
 struct SemaExpr {
 	SemaExprType type;
+	bool visited_by_cnst_expr_reducer;
 	union {
 		struct {
 			SemaExpr * a;
@@ -94,10 +103,8 @@ struct SemaExpr {
 		} plus;
 		i32 i32;
 		SemaVar * var;
-		struct {
-			SemaExpr * fun;
-			SemaExprList args;
-		} funcall;
+		SemaExprFunCall funcall;
+		SemaFn * fn;
 	} as;
 };
 
@@ -119,12 +126,20 @@ typedef enum {
 	SEMA_STMT_BLOCK,
 } SemaStmtType;
 
+typedef struct SemaBlkEnv SemaBlkEnv;
+struct SemaBlkEnv {
+	SemaType * return_type;
+	SemaBlkEnv * parent;
+	SemaDeclList variables;
+	SemaStmtList block;
+};
+
 typedef struct {
 	SemaStmtType type;
 	union {
 		SemaExpr expr;
 		SemaExpr return_;
-		SemaStmtList block;
+		SemaBlkEnv block;
 	} as;
 } SemaStmt;
 
@@ -133,36 +148,30 @@ struct SemaStmtNode {
 	SemaStmtNode * next;
 };
 
-typedef struct SemaFnEnv SemaFnEnv;
-struct SemaFnEnv {
-	SemaDeclList variables;
-	StmtList block;
-};
-
-typedef struct {
-	bool is_complete;
+struct SemaFn {
+	bool has_sema;
 	struct {
 		SemaTypeFn * signature;
 		Str * args; // length is length of signature arg list
 		bool implemented;
 		struct {
-			SemaFnEnv body;
+			SemaBlkEnv body;
 		} unwrap;
-	} complete;
-	const Fn * incomplete;
-} SemaFn;
+	} sema;
+	const Fn * ast;
+};
 
 struct SemaTypeAlias {
-	bool is_complete;
+	bool has_sema;
 	struct {
 		SemaType * aliasing;
-	} complete;
-	const TypeAlias * incomplete;
+	} sema;
+	const TypeAlias * ast;
 };
 
 struct SemaVar {
-	bool is_complete;
-	bool cnst_init;
+	bool has_sema;
+	bool global;
 	VisitStatus visit_status;
 	usize visit_index;
 	struct {
@@ -171,8 +180,8 @@ struct SemaVar {
 		struct {
 			SemaExpr expr;
 		} unwrap;
-	} complete;
-	const Var * incomplete;
+	} sema;
+	const Var * ast;
 };
 
 typedef enum {
@@ -197,6 +206,15 @@ struct SemaDeclNode {
 	SemaDeclNode * next;
 };
 
+typedef struct SemaCtx SemaCtx;
+
+typedef struct {
+	SemaType * (*type_callback)(SemaCtx * ctx, void * payload, Str iden, ReportError report_error);
+	SemaVar * (*var_callback)(SemaCtx * ctx, void * payload, Str iden, ReportError report_error);
+	SemaFn * (*fn_callback)(SemaCtx * ctx, void * payload, Str iden, ReportError report_error);
+	void * payload;
+} SemaDeclLookupStrategy;
+
 typedef struct {
 	SemaType void_type;
 	SemaType i32_type;
@@ -204,14 +222,18 @@ typedef struct {
 	SemaTypePtrNode * tpnl_free_list; // deduped function types have their param list nodes saved for reuse
 } SemaTypeInternTable;
 
-typedef struct {
+struct SemaCtx {
 	SemaTypeInternTable * table;
 	SemaDeclList * env;
 	VMemArena * arena;
-} SemaCtx;
+	SemaDeclLookupStrategy lookup_strategy;
+};
 
 void sema_type_intern_table_init(SemaTypeInternTable * table);
 void sema_ctx_init(SemaCtx * ctx, VMemArena * arena, SemaTypeInternTable * table, SemaDeclList * env);
+SemaType * sema_ctx_lookup_type(SemaCtx * ctx, Str iden, ReportError report_error);
+SemaVar * sema_ctx_lookup_var(SemaCtx * ctx, Str iden, ReportError report_error);
+SemaFn * sema_ctx_lookup_fn(SemaCtx * ctx, Str iden, ReportError report_error);
 bool sema_analyze_ast(SemaCtx * ctx, Ast ast);
 void sema_type_list_init(SemaTypeList * list);
 SemaType * sema_type_list_push_front(VMemArena * arena, SemaTypeList * list, SemaType type);
@@ -223,5 +245,7 @@ bool sema_type_ptr_list_push_front(VMemArena * arena, SemaTypePtrList * list, Se
 void sema_type_ptr_list_pop_front(SemaTypePtrList * list);
 void sema_expr_list_init(SemaExprList * list);
 SemaExpr * sema_expr_list_push(VMemArena * arena, SemaExprList * list, SemaExpr expr);
+void sema_stmt_list_init(SemaStmtList * list);
+SemaStmt * sema_stmt_list_push(VMemArena * arena, SemaStmtList * list, SemaStmt stmt);
 void sema_decl_list_init(SemaDeclList * list);
 SemaDecl * sema_decl_list_push(VMemArena * arena, SemaDeclList * list, SemaDecl decl);

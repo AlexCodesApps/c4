@@ -1,0 +1,4 @@
+let a: int = 10;
+fn foo(a: int): int {
+	return a + a;
+}

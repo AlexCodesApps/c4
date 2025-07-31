@@ -287,7 +287,13 @@ static bool parse_type(Parser * parser, Type * out) {
 			}
 			TypeList params;
 			type_list_init(&params);
-			if (!match(parser, TOKEN_RPAREN)) {
+			if (peek(parser)->type != TOKEN_RPAREN) {
+
+				if (peek(parser)->type == TOKEN_IDEN
+					&& peek1(parser)->type == TOKEN_COLON) {
+					advance(parser);
+					advance(parser);
+				}
 				do {
 					Type type;
 					if (!parse_type(parser, &type)) {

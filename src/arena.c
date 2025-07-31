@@ -45,6 +45,10 @@ void * vmem_arena_alloc_bytes_n(VMemArena * arena, usize size, usize n, usize al
 	return vmem_arena_alloc_bytes(arena, size, align);
 }
 
+void vmem_arena_reset(VMemArena * arena) {
+	arena->current = arena->begin;
+}
+
 void vmem_arena_free(VMemArena * arena) {
 	size_t n_bytes = (uintptr_t)arena->end - (uintptr_t)arena->begin;
 	munmap(arena->begin, n_bytes);
