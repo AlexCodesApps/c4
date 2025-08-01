@@ -1,0 +1,11 @@
+fn foo(a: int): int {
+	fn bar(a: int, b: int): int {
+		let c: i32 = a + b;
+		return c + c;
+	}
+	fn baz(b: int, c: int): int {
+		let a: int = b + c + a;
+		return a + c;
+	}
+	return bar(a, baz(a, a));
+}

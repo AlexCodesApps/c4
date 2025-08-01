@@ -17,11 +17,11 @@ void lower_vars(FILE * file, const SemaDecl * decl) {
 	case SEMA_DECL_FN:
 		return;
 	case SEMA_DECL_VAR:
-		if (decl->as.var.sema.type->type != SEMA_TYPE_I32) {
+		if (decl->as.var.as.sema.type.type->type != SEMA_TYPE_I32) {
 			return;
 		}
-		if (decl->as.var.sema.init_with_expr) {
-			fprintf(file, "%.*s dw: %d\n", (int)decl->iden.size, decl->iden.data, decl->as.var.sema.unwrap.expr.as.i32);
+		if (decl->as.var.as.sema.init_with_expr) {
+			fprintf(file, "%.*s dw: %d\n", (int)decl->iden.size, decl->iden.data, decl->as.var.as.sema.unwrap.expr.as.i32);
 		} else {
 			fprintf(file, "%.*s dw: 0\n", (int)decl->iden.size, decl->iden.data);
 		}

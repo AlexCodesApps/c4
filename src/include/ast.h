@@ -7,10 +7,13 @@ typedef enum {
 	TYPE_VOID,
 	TYPE_IDEN,
 	TYPE_FN,
+	TYPE_MUT,
 } TypeType;
 
 typedef struct Type Type;
 typedef struct TypeNode TypeNode;
+typedef struct Decl Decl;
+typedef struct DeclNode DeclNode;
 typedef struct {
 	TypeNode * begin;
 	TypeNode * end;
@@ -26,6 +29,7 @@ struct Type {
 	union {
 		Str iden;
 		TypeFn fn;
+		Type * mut;
 	} as;
 };
 
@@ -35,6 +39,7 @@ struct TypeNode {
 };
 
 typedef enum {
+	EXPR_POISONED,
 	EXPR_INT,
 	EXPR_IDEN,
 	EXPR_FUNCALL,
@@ -72,7 +77,7 @@ struct Expr {
 extern const Expr poisoned_expr;
 
 struct ExprNode {
-	const Expr * expr;
+	Expr expr;
 	ExprNode * next;
 };
 
@@ -81,12 +86,13 @@ typedef enum {
 	STMT_RETURN,
 	STMT_EXPR,
 	STMT_BLOCK,
+	STMT_DECL,
 } StmtType;
 
 typedef struct {
 	bool has_expr;
 	struct {
-		const Expr * expr;
+		Expr expr;
 	} unwrap;
 } StmtReturn;
 
@@ -100,8 +106,9 @@ typedef struct {
 	StmtType type;
 	union {
 		StmtReturn return_;
-		const Expr * expr;
+		Expr expr;
 		StmtList block;
+		Decl * decl;
 	} as;
 } Stmt;
 
@@ -145,23 +152,20 @@ typedef struct {
 } TypeAlias;
 
 typedef struct {
-	bool init_with_expr;
+	bool init_with_expr : 1;
+	bool is_mut : 1;
 	Str iden;
 	Type type;
 	struct {
-		const Expr * expr;
+		Expr expr;
 	} unwrap;
 } Var;
 
 typedef enum {
-	DECL_POISONED,
 	DECL_FN,
 	DECL_TYPE_ALIAS,
 	DECL_VAR,
 } DeclType;
-
-typedef struct Decl Decl;
-typedef struct DeclNode DeclNode;
 
 typedef struct {
 	DeclNode * begin;
@@ -199,7 +203,7 @@ Ast parser_run(Parser * parser);
 void type_list_init(TypeList * list);
 bool type_list_push(VMemArena * arena, TypeList * list, Type type);
 void expr_list_init(ExprList * list);
-bool expr_list_push(VMemArena * arena, ExprList * list, const Expr * expr);
+bool expr_list_push(VMemArena * arena, ExprList * list, Expr expr);
 void stmt_list_init(StmtList * list);
 bool stmt_list_push(VMemArena * arena, StmtList * list, Stmt stmt);
 void fn_param_list_init(FnParamList * list);

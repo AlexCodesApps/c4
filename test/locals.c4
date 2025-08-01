@@ -1,0 +1,6 @@
+fn main(): int {
+	let a: int = 10;
+	let b: int = 20;
+	let c: int = a + b;
+	return c;
+}

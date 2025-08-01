@@ -4,10 +4,16 @@
 #include "include/ast.h"
 #include "include/utility.h"
 
-const Expr poisoned_expr;
+#define DECL_TOKENS \
+TOKEN_FN: \
+case TOKEN_TYPE: \
+case TOKEN_LET
+
+const Expr poisoned_expr = { .type = EXPR_POISONED };
 const FnParamList poisoned_fn_param_list;
 
 static bool parse_block(Parser * parser, StmtList * out);
+static bool parse_decl(Parser * parser, Decl * out);
 
 static void print_unsanitized_char(char c) {
 	if (c >= 0x20 && c <= 0x7E) {
@@ -124,8 +130,8 @@ typedef enum {
 	EXPR_PREC_PRIMARY,
 } ExprPrecedence;
 
-typedef const Expr *(* PrefixRule)(Parser *);
-typedef const Expr *(* InfixRule)(Parser *, const Expr *);
+typedef Expr (* PrefixRule)(Parser *);
+typedef Expr (* InfixRule)(Parser *, Expr);
 
 typedef struct {
 	PrefixRule prefix;
@@ -133,34 +139,33 @@ typedef struct {
 	ExprPrecedence prec;
 } ExprParseRule;
 
-static const Expr * parse_expr_precedence(Parser * parser, ExprPrecedence prec);
-static const Expr * parse_expr(Parser * parser);
+static Expr parse_expr_precedence(Parser * parser, ExprPrecedence prec);
+static Expr parse_expr(Parser * parser);
 
-static const Expr * expr_int(Parser * parser) {
+static bool expr_is_poisoned(const Expr * expr) {
+	return expr->type == EXPR_POISONED;
+}
+
+static Expr expr_int(Parser * parser) {
 	Str str = lexer_token_str(&parser->lexer, peek(parser));
 	advance(parser);
 	usize accum = 0;
 	for (usize i = 0; i < str.size; ++i) {
-		accum = accum * 10 + (str.data[i] - '0');
+		// TODO: guard against overflow sanely
+		accum = accum * 10 + (usize)(str.data[i] - '0');
 	}
-	Expr * expr = vmem_arena_alloc(parser->arena, Expr);
-	if (!expr) {
-		abort();
-	}
-	expr->type = EXPR_INT;
-	expr->as.int_ = accum;
+	Expr expr;
+	expr.type = EXPR_INT;
+	expr.as.int_ = accum;
 	return expr;
 }
 
-static const Expr * expr_iden(Parser * parser) {
+static Expr expr_iden(Parser * parser) {
 	Str str = lexer_token_str(&parser->lexer, peek(parser));
 	advance(parser);
-	Expr * expr = vmem_arena_alloc(parser->arena, Expr);
-	if (!expr) {
-		abort();
-	}
-	expr->type = EXPR_IDEN;
-	expr->as.iden = str;
+	Expr expr;
+	expr.type = EXPR_IDEN;
+	expr.as.iden = str;
 	return expr;
 }
 
@@ -186,23 +191,23 @@ static void synchronize_expr_in_parens(Parser * parser) {
 	}
 }
 
-static const Expr * expr_grouping(Parser * parser) {
+static Expr expr_grouping(Parser * parser) {
 	advance(parser); // '('
-	const Expr * expr = parse_expr(parser);
+	Expr expr = parse_expr(parser);
 	synchronize_expr_in_parens(parser);
 	if (!expect(parser, TOKEN_RPAREN, "expected ')'")) {
-		return &poisoned_expr;
+		return poisoned_expr;
 	}
 	return expr;
 }
 
-static const Expr * expr_funcall(Parser * parser, const Expr * prefix) {
+static Expr expr_funcall(Parser * parser, Expr prefix) {
 	advance(parser); // '('
 	ExprList expr_list;
 	expr_list_init(&expr_list);
 	if (peek(parser)->type != TOKEN_RPAREN) {
 		do {
-			const Expr * expr = parse_expr(parser);
+			Expr expr = parse_expr(parser);
 			synchronize_expr_in_parens(parser);
 			if (!expr_list_push(parser->arena, &expr_list, expr)) {
 				abort();
@@ -210,28 +215,30 @@ static const Expr * expr_funcall(Parser * parser, const Expr * prefix) {
 		} while (match(parser, TOKEN_COMMA));
 	}
 	if (!expect(parser, TOKEN_RPAREN, "expected ')'")) {
-		return &poisoned_expr;
+		return poisoned_expr;
 	}
-	Expr * new_expr = vmem_arena_alloc(parser->arena, Expr);
-	if (!new_expr) {
+	Expr new_expr;
+	Expr * fun = vmem_arena_alloc(parser->arena, Expr);
+	if (!fun) {
 		abort();
 	}
-	new_expr->type = EXPR_FUNCALL;
-	new_expr->as.funcall.fun = prefix;
-	new_expr->as.funcall.args = expr_list;
+	*fun = prefix;
+	new_expr.type = EXPR_FUNCALL;
+	new_expr.as.funcall.fun = fun;
+	new_expr.as.funcall.args = expr_list;
 	return new_expr;
 }
 
-static const Expr * expr_plus(Parser * parser, const Expr * prefix) {
+static Expr expr_plus(Parser * parser, Expr prefix) {
 	advance(parser); // '+'
-	const Expr * expr = parse_expr_precedence(parser, EXPR_PREC_FUNCALL);
-	Expr * new_expr = vmem_arena_alloc(parser->arena, Expr);
-	if (!new_expr) {
-		abort();
-	}
-	new_expr->type = EXPR_PLUS;
-	new_expr->as.plus.a = prefix;
-	new_expr->as.plus.b = expr;
+	Expr * a = vmem_arena_alloc(parser->arena, Expr);
+	Expr * b = vmem_arena_alloc(parser->arena, Expr);
+	*a = prefix;
+	*b = parse_expr_precedence(parser, EXPR_PREC_FUNCALL);
+	Expr new_expr;
+	new_expr.type = EXPR_PLUS;
+	new_expr.as.plus.a = a;
+	new_expr.as.plus.b = b;
 	return new_expr;
 }
 
@@ -242,15 +249,15 @@ static ExprParseRule expr_parse_rules[TOKEN_EOF] = {
 	[TOKEN_IDEN]   = {expr_iden,     nullptr,         EXPR_PREC_NONE   },
 };
 
-static const Expr * parse_expr_precedence(Parser * parser, ExprPrecedence prec) {
+static Expr parse_expr_precedence(Parser * parser, ExprPrecedence prec) {
 	ExprParseRule * rule = expr_parse_rules + peek(parser)->type;
 	if (!rule->prefix) {
 		expect_error(parser, "expected expression");
-		return &poisoned_expr;
+		return poisoned_expr;
 	}
-	const Expr * expr = rule->prefix(parser);
-	if (!expr) {
-		return &poisoned_expr;
+	Expr expr = rule->prefix(parser);
+	if (expr_is_poisoned(&expr)) {
+		return expr;
 	}
 	for (;;) {
 		ExprParseRule * rule = expr_parse_rules + peek(parser)->type;
@@ -258,14 +265,14 @@ static const Expr * parse_expr_precedence(Parser * parser, ExprPrecedence prec) 
 			break;
 		}
 		expr = rule->infix(parser, expr);
-		if (expr == &poisoned_expr) {
-			return &poisoned_expr;
+		if (expr_is_poisoned(&expr)) {
+			return expr;
 		}
 	}
 	return expr;
 }
 
-static const Expr * parse_expr(Parser * parser) {
+static Expr parse_expr(Parser * parser) {
 	return parse_expr_precedence(parser, EXPR_PREC_TERM);
 }
 
@@ -327,13 +334,25 @@ static bool parse_type(Parser * parser, Type * out) {
 			out->as.fn.return_type = return_type;
 			out->as.fn.params = params;
 			return true;
+		case TOKEN_MUT:
+			advance(parser);
+			Type * mut = vmem_arena_alloc(parser->arena, Type);
+			if (!mut) {
+				abort();
+			}
+			if (!parse_type(parser, mut)) {
+				return false;
+			}
+			out->type = TYPE_MUT;
+			out->as.mut = mut;
+			return true;
 		default:
 			expect_error(parser, "expected type");
 			return false;
 	}
 }
 
-static bool parse_stmt(Parser * parser, Stmt * out) {
+static bool parse_stmt(Parser * parser, Stmt * out, bool allow_decls) {
 	switch (peek(parser)->type) {
 	case TOKEN_SEMICOLON:
 		advance(parser);
@@ -344,7 +363,7 @@ static bool parse_stmt(Parser * parser, Stmt * out) {
 		StmtReturn return_stmt;
 		return_stmt.has_expr = false;
 		if (peek(parser)->type != TOKEN_SEMICOLON) {
-			const Expr * expr = parse_expr(parser);
+			Expr expr = parse_expr(parser);
 			if (parser->panic_mode) {
 				return false;
 			}
@@ -363,8 +382,25 @@ static bool parse_stmt(Parser * parser, Stmt * out) {
 		}
 		out->type = STMT_BLOCK;
 		return true;
+	case DECL_TOKENS:
+		// second clause is to make space for anonymous fn's
+	    if (!allow_decls || (peek(parser)->type == TOKEN_FN &&
+				peek1(parser)->type != TOKEN_IDEN)) {
+			goto default_;
+	    }
+		Decl * decl = vmem_arena_alloc(parser->arena, Decl);
+		if (!decl) {
+			abort();
+		}
+		if (!parse_decl(parser, decl)) {
+			return false;
+		}
+		out->type = STMT_DECL;
+		out->as.decl = decl;
+		return true;
+	default_:
 	default:
-		const Expr * expr = parse_expr(parser);
+		Expr expr = parse_expr(parser);
 		if (parser->panic_mode) {
 			return false;
 		}
@@ -377,7 +413,7 @@ static bool parse_stmt(Parser * parser, Stmt * out) {
 	}
 }
 
-static void synchronize_stmt(Parser * parser) {
+static void synchronize_stmt(Parser * parser, bool allow_decls) {
 	if (!parser->panic_mode) {
 		return;
 	}
@@ -386,10 +422,11 @@ static void synchronize_stmt(Parser * parser) {
 		case TOKEN_RBRACE:
 		case TOKEN_SEMICOLON:
 			parser->panic_mode = false;
-			[[fallthrough]];
-		case TOKEN_FN:
-		case TOKEN_TYPE:
-		case TOKEN_LET:
+			return;
+		case DECL_TOKENS:
+			if (allow_decls) {
+				parser->panic_mode = false;
+			}
 			return;
 		default:
 			advance(parser);
@@ -405,8 +442,8 @@ static bool parse_block(Parser * parser, StmtList * out) {
 	stmt_list_init(out);
 	while (!match(parser, TOKEN_RBRACE)) {
 		Stmt stmt;
-		if (!parse_stmt(parser, &stmt)) {
-			synchronize_stmt(parser);
+		if (!parse_stmt(parser, &stmt, true)) {
+			synchronize_stmt(parser, true);
 			continue;
 		}
 		if (stmt.type == STMT_SEMICOLON) {
@@ -532,6 +569,10 @@ static bool parse_type_alias(Parser * parser, TypeAlias * out) {
 
 static bool parse_var(Parser * parser, Var * out) {
 	advance(parser); // 'let'
+	out->is_mut = false;
+	if (match(parser, TOKEN_MUT)) {
+		out->is_mut = true;
+	}
 	Token iden_token;
 	if (!match_out(parser, TOKEN_IDEN, &iden_token)) {
 		expect_error(parser, "expected identifier");
@@ -545,7 +586,7 @@ static bool parse_var(Parser * parser, Var * out) {
 	}
 	out->init_with_expr = false;
 	if (match(parser, TOKEN_EQ)) {
-		const Expr * expr = parse_expr(parser);
+		Expr expr = parse_expr(parser);
 		out->unwrap.expr = expr;
 		out->init_with_expr = true;
 	}
@@ -574,46 +615,48 @@ static void synchronize_decl(Parser * parser) {
 	}
 }
 
-DeclList parser_run(Parser * parser) {
-	DeclList list;
-	Decl decl;
+bool parse_decl(Parser * parser, Decl * out) {
 	Fn fn;
-	TypeAlias alias;
 	Var var;
+	TypeAlias alias;
+	switch (peek(parser)->type) {
+		case TOKEN_FN:
+			if (!parse_fn(parser, &fn)) {
+				return false;
+			}
+			out->type = DECL_FN;
+			out->as.fn = fn;
+			break;
+		case TOKEN_TYPE:
+			if (!parse_type_alias(parser, &alias)) {
+				return false;
+			}
+			out->type = DECL_TYPE_ALIAS;
+			out->as.alias = alias;
+			break;
+		case TOKEN_LET:
+			if (!parse_var(parser, &var)) {
+				return false;
+			}
+			out->type = DECL_VAR;
+			out->as.var = var;
+			break;
+		default:
+			expect_error(parser, "expected 'fn','type' or 'let'");
+			return false;
+	}
+	return true;
+}
+
+DeclList parser_run(Parser * parser) {
+	Decl decl;
+	DeclList list;
 	decl_list_init(&list);
 	while (!eof(parser)) {
-		decl.type = DECL_POISONED;
-		switch (peek(parser)->type) {
-			case TOKEN_FN:
-				if (parse_fn(parser, &fn)) {
-					decl.type = DECL_FN;
-					decl.as.fn = fn;
-				}
-				if (!decl_list_push(parser->arena, &list, decl)) {
-					abort();
-				}
-				break;
-			case TOKEN_TYPE:
-				if (parse_type_alias(parser, &alias)) {
-					decl.type = DECL_TYPE_ALIAS;
-					decl.as.alias = alias;
-				}
-				if (!decl_list_push(parser->arena, &list, decl)) {
-					abort();
-				}
-				break;
-			case TOKEN_LET:
-				if (parse_var(parser, &var)) {
-					decl.type = DECL_VAR;
-					decl.as.var = var;
-				}
-				if (!decl_list_push(parser->arena, &list, decl)) {
-					abort();
-				}
-				break;
-			default:
-				expect_error(parser, "expected 'fn','type' or 'let'");
-				break;
+		if (parse_decl(parser, &decl)) {
+			if (!decl_list_push(parser->arena, &list, decl)) {
+				abort();
+			}
 		}
 		synchronize_decl(parser);
 	}
@@ -645,7 +688,7 @@ void expr_list_init(ExprList * list) {
 	ZERO(list);
 }
 
-bool expr_list_push(VMemArena * arena, ExprList * list, const Expr * expr) {
+bool expr_list_push(VMemArena * arena, ExprList * list, Expr expr) {
 	auto node = vmem_arena_alloc(arena, ExprNode);
 	if (!node) {
 		return false;

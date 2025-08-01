@@ -1,8 +1,9 @@
 type i32 = int;
 type bar = i32;
-let b: i32 = 10;
+let b: int = 10 + 20;
+let c: int = b + 20;
 
-fn b(a: fn(b: int): int): int {
+fn f(a: fn(b: int): int): int {
 	{
 		return a(1);
 	}

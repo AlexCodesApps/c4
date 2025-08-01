@@ -1,4 +1,5 @@
 #include "include/lexer.h"
+#include <assert.h>
 
 Lexer lexer_new(Str src) {
 	Lexer lexer;
@@ -78,14 +79,16 @@ static char skip_ws(Lexer * lexer) {
 }
 
 static TokenIndex begin_token(Lexer * lexer) {
-	return lexer->index;
+	assert(lexer->index <= TOKEN_INDEX_MAX);
+	return (TokenIndex)lexer->index;
 }
 
 static Token make_token(Lexer * lexer, TokenIndex start, TokenType type) {
 	Token token;
 	token.type = type;
 	token.start = start;
-	token.end = lexer->index;
+	assert(lexer->index <= TOKEN_INDEX_MAX);
+	token.end = (TokenIndex)lexer->index;
 	return token;
 }
 
@@ -127,6 +130,9 @@ static Token make_iden(Lexer * lexer, TokenIndex start) {
 	}
 	if (str_equal(iden, s("let"))) {
 		return make_token(lexer, start, TOKEN_LET);
+	}
+	if (str_equal(iden, s("mut"))) {
+		return make_token(lexer, start, TOKEN_MUT);
 	}
 	if (str_equal(iden, s("return"))) {
 		return make_token(lexer, start, TOKEN_RETURN);

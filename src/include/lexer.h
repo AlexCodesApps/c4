@@ -15,6 +15,7 @@ typedef enum : u32 {
 
 	TOKEN_FN,
 	TOKEN_LET,
+	TOKEN_MUT,
 	TOKEN_RETURN,
 	TOKEN_TYPE,
 	TOKEN_VOID,
@@ -27,6 +28,7 @@ typedef enum : u32 {
 } TokenType;
 
 typedef u32 TokenIndex;
+#define TOKEN_INDEX_MAX UINT32_MAX
 
 typedef struct {
 	TokenType type;

@@ -39,9 +39,10 @@ void dump_tokens(Str src) {
 				dump_token(&lexer, &token, s("FN")); break;
 			case TOKEN_LET:
 				dump_token(&lexer, &token, s("LET")); break;
+			case TOKEN_MUT:
+				dump_token(&lexer, &token, s("MUT")); break;
 			case TOKEN_RETURN:
 				dump_token(&lexer, &token, s("RETURN")); break;
-
 			case TOKEN_TYPE:
 				dump_token(&lexer, &token, s("TYPE")); break;
 			case TOKEN_VOID:
@@ -64,6 +65,8 @@ static void pad_indent(u32 indent) {
 	}
 }
 
+static void dump_decl(u32 indent, const Decl * decl);
+
 static void dump_type(u32 indent, const Type * type) {
 	pad_indent(indent);
 	switch (type->type) {
@@ -83,16 +86,20 @@ static void dump_type(u32 indent, const Type * type) {
 		pad_indent(indent + 1);
 		fprintf(stderr, "returning\n");
 		dump_type(indent + 2, type->as.fn.return_type);
+		break;
+	case TYPE_MUT:
+		fputs("mut\n", stderr);
+		dump_type(indent + 1, type->as.mut);
+		break;
 	}
 }
 
 static void dump_expr(u32 indent, const Expr * expr) {
 	pad_indent(indent);
-	if (expr == &poisoned_expr) {
-		fputs("<poisoned>\n", stderr);
-		return;
-	}
 	switch (expr->type) {
+		case EXPR_POISONED:
+			fputs("<poisoned>\n", stderr);
+			break;
 		case EXPR_INT:
 			fprintf(stderr, "%"PRIu64"\n", expr->as.int_);
 			break;
@@ -107,7 +114,7 @@ static void dump_expr(u32 indent, const Expr * expr) {
 			for (ExprNode * node = expr->as.funcall.args.begin; 
 				node;
 				node = node->next) {
-				dump_expr(indent + 2, node->expr);
+				dump_expr(indent + 2, &node->expr);
 			}
 			break;
 		case EXPR_PLUS:
@@ -128,13 +135,13 @@ static void dump_stmt(u32 indent, Stmt stmt) {
 			pad_indent(indent);
 			fputs("return\n", stderr);
 			if (stmt.as.return_.has_expr) {
-				dump_expr(indent + 1, stmt.as.return_.unwrap.expr);
+				dump_expr(indent + 1, &stmt.as.return_.unwrap.expr);
 			}
 			break;
 		case STMT_EXPR:
 			pad_indent(indent);
 			fputs("expr\n", stderr);
-			dump_expr(indent + 1, stmt.as.expr);
+			dump_expr(indent + 1, &stmt.as.expr);
 			break;
 		case STMT_BLOCK:
 			pad_indent(indent);
@@ -142,6 +149,11 @@ static void dump_stmt(u32 indent, Stmt stmt) {
 			for (auto node = stmt.as.block.begin; node; node = node->next) {
 				dump_stmt(indent + 1, node->stmt);
 			}
+			break;
+		case STMT_DECL:
+			pad_indent(indent);
+			fputs("decl\n", stderr);
+			dump_decl(indent, stmt.as.decl);
 			break;
 	}
 }
@@ -181,27 +193,30 @@ static void dump_var(u32 indent, const Var * var) {
 	fprintf(stderr, "var %.*s\n", (int)var->iden.size, var->iden.data);
 	dump_type(indent + 1, &var->type);
 	if (var->init_with_expr) {
-		dump_expr(indent + 1, var->unwrap.expr);
+		dump_expr(indent + 1, &var->unwrap.expr);
 	}
+}
+
+static void dump_decl(u32 indent, const Decl * decl) {
+		switch (decl->type) {
+			case DECL_FN:
+				dump_fn(indent, &decl->as.fn);
+				break;
+			case DECL_TYPE_ALIAS:
+				pad_indent(indent);
+				fprintf(stderr, "type %.*s\n", (int)decl->as.alias.iden.size,
+											 decl->as.alias.iden.data);
+				dump_type(indent + 1, &decl->as.alias.type);
+				break;
+			case DECL_VAR:
+				dump_var(indent, &decl->as.var);
+				break;
+		}
 }
 
 void dump_ast(Ast ast) {
 	fprintf(stderr, "== AST ==\n");
 	for (DeclNode * node = ast.begin; node; node = node->next) {
-		switch (node->decl.type) {
-			case DECL_POISONED:
-				fprintf(stderr, "<poisoned>\n");
-				break;
-			case DECL_FN:
-				dump_fn(0, &node->decl.as.fn);
-				break;
-			case DECL_TYPE_ALIAS:
-				fprintf(stderr, "type %.*s\n", (int)node->decl.as.alias.iden.size,
-											 node->decl.as.alias.iden.data);
-				dump_type(1, &node->decl.as.alias.type);
-				break;
-			case DECL_VAR:
-				dump_var(0, &node->decl.as.var);
-		}
+		dump_decl(0, &node->decl);
 	}
 }

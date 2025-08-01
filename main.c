@@ -4,8 +4,8 @@
 #include "src/include/sema.h"
 #include "src/include/utility.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <dirent.h>
+#include <stdlib.h>
 
 bool read_file(VMemArena * arena, const char * path, Str * out) {
 	bool status = false;
@@ -42,7 +42,7 @@ cleanup:
 }
 
 bool process_src(VMemArena * arena, Str src) {
-	dump_tokens(src);
+	// dump_tokens(src);
 	Parser parser;
 	parser_init(&parser, src, arena);
 	Ast ast = parser_run(&parser);
@@ -121,6 +121,7 @@ int main(int argc, char ** argv) {
 				return 1;
 			}
 			Str src;
+			fprintf(stderr, "processing file : %s\n", path);
 			if (!read_file(&arena, path, &src)) {
 				fprintf(stderr, "error: unable to open file '%s'\n", path);
 				vmem_arena_free(&arena);
