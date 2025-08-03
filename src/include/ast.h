@@ -8,6 +8,8 @@ typedef enum {
 	TYPE_IDEN,
 	TYPE_FN,
 	TYPE_MUT,
+	TYPE_PTR,
+	TYPE_REF,
 } TypeType;
 
 typedef struct Type Type;
@@ -30,6 +32,8 @@ struct Type {
 		Str iden;
 		TypeFn fn;
 		Type * mut;
+		Type * ptr;
+		Type * ref;
 	} as;
 };
 
@@ -41,9 +45,11 @@ struct TypeNode {
 typedef enum {
 	EXPR_POISONED,
 	EXPR_INT,
+	EXPR_NULLPTR,
 	EXPR_IDEN,
 	EXPR_FUNCALL,
 	EXPR_PLUS,
+	EXPR_ADDR,
 } ExprType;
 
 typedef struct Expr Expr;
@@ -71,6 +77,7 @@ struct Expr {
 		Str iden;
 		ExprPlus plus;
 		ExprFuncall funcall;
+		Expr * addr;
 	} as;
 };
 

@@ -35,12 +35,18 @@ void dump_tokens(Str src) {
 				dump_token(&lexer, &token, s("COMMA")); break;
 			case TOKEN_EQ:
 				dump_token(&lexer, &token, s("EQ")); break;
+			case TOKEN_STAR:
+				dump_token(&lexer, &token, s("*")); break;
+			case TOKEN_AMPERSAND:
+				dump_token(&lexer, &token, s("&")); break;
 			case TOKEN_FN:
 				dump_token(&lexer, &token, s("FN")); break;
 			case TOKEN_LET:
 				dump_token(&lexer, &token, s("LET")); break;
 			case TOKEN_MUT:
 				dump_token(&lexer, &token, s("MUT")); break;
+			case TOKEN_NULLPTR:
+				dump_token(&lexer, &token, s("NULLPTR")); break;
 			case TOKEN_RETURN:
 				dump_token(&lexer, &token, s("RETURN")); break;
 			case TOKEN_TYPE:
@@ -91,6 +97,14 @@ static void dump_type(u32 indent, const Type * type) {
 		fputs("mut\n", stderr);
 		dump_type(indent + 1, type->as.mut);
 		break;
+	case TYPE_PTR:
+		fputs("*\n", stderr);
+		dump_type(indent + 1, type->as.ptr);
+		break;
+	case TYPE_REF:
+		fputs("&\n", stderr);
+		dump_type(indent + 1, type->as.ref);
+		break;
 	}
 }
 
@@ -116,6 +130,13 @@ static void dump_expr(u32 indent, const Expr * expr) {
 				node = node->next) {
 				dump_expr(indent + 2, &node->expr);
 			}
+			break;
+		case EXPR_NULLPTR:
+			fputs("nullptr\n", stderr);
+			break;
+		case EXPR_ADDR:
+			fputs("&\n", stderr);
+			dump_expr(indent + 1, expr->as.addr);
 			break;
 		case EXPR_PLUS:
 			fputs("+\n", stderr);

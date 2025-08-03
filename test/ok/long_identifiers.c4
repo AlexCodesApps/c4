@@ -1,0 +1,2 @@
+let supercalifragilisticexpialadocious: int = 10;
+let eventhoughthesoundofitissimplyquiteatrocious: int = supercalifragilisticexpialadocious + supercalifragilisticexpialadocious;

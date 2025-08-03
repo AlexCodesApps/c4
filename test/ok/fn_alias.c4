@@ -1,0 +1,7 @@
+type A = int;
+fn b(a: A): A {
+	return a;
+}
+fn c(a: int): int {
+	return b(a);
+}

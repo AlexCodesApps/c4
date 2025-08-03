@@ -1,0 +1,2 @@
+let b: int = 10;
+let a: &int = &b;

@@ -3,7 +3,7 @@ project(c4)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED TRUE)
-add_executable(c4 main.c src/debug.c src/lexer.c src/str.c src/arena.c src/ast.c src/sema.c src/asm.c)
+add_executable(c4 main.c src/debug.c src/lexer.c src/str.c src/arena.c src/ast.c src/sema.c)
 
 if (CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
 	target_compile_options(c4 PRIVATE -Wall -Wextra -Wpedantic -Wimplicit-fallthrough -Wconversion)

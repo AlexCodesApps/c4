@@ -1,0 +1,4 @@
+let a: *mut void = nullptr;
+let b: *mut void = a;
+let c: *void = b;
+// let d: *mut void = c; // error

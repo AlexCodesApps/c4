@@ -126,6 +126,7 @@ void parser_init(Parser * parser, Str src, VMemArena * arena) {
 typedef enum {
 	EXPR_PREC_NONE = 0,
 	EXPR_PREC_TERM,
+	EXPR_PREC_PREFIX,
 	EXPR_PREC_FUNCALL,
 	EXPR_PREC_PRIMARY,
 } ExprPrecedence;
@@ -160,12 +161,32 @@ static Expr expr_int(Parser * parser) {
 	return expr;
 }
 
+static Expr expr_nullptr(Parser * parser) {
+	advance(parser); // 'nullptr'
+	Expr expr;
+	expr.type = EXPR_NULLPTR;
+	return expr;
+}
+
 static Expr expr_iden(Parser * parser) {
 	Str str = lexer_token_str(&parser->lexer, peek(parser));
 	advance(parser);
 	Expr expr;
 	expr.type = EXPR_IDEN;
 	expr.as.iden = str;
+	return expr;
+}
+
+static Expr expr_addr(Parser * parser) {
+	advance(parser); // '&'
+	Expr * next = vmem_arena_alloc(parser->arena, Expr);
+	if (!next) {
+		abort();
+	}
+	*next = parse_expr_precedence(parser, EXPR_PREC_PREFIX);
+	Expr expr;
+	expr.type = EXPR_ADDR;
+	expr.as.addr = next;
 	return expr;
 }
 
@@ -243,10 +264,12 @@ static Expr expr_plus(Parser * parser, Expr prefix) {
 }
 
 static ExprParseRule expr_parse_rules[TOKEN_EOF] = {
-	[TOKEN_LPAREN] = {expr_grouping, expr_funcall,    EXPR_PREC_FUNCALL},
-	[TOKEN_PLUS]   = {nullptr,       expr_plus,       EXPR_PREC_TERM   },
-	[TOKEN_INT]    = {expr_int,      nullptr,         EXPR_PREC_NONE   },
-	[TOKEN_IDEN]   = {expr_iden,     nullptr,         EXPR_PREC_NONE   },
+	[TOKEN_LPAREN]    = {expr_grouping, expr_funcall,    EXPR_PREC_FUNCALL},
+	[TOKEN_PLUS]      = {nullptr,       expr_plus,       EXPR_PREC_TERM   },
+	[TOKEN_AMPERSAND] = {expr_addr,     nullptr,         EXPR_PREC_NONE   },
+	[TOKEN_INT]       = {expr_int,      nullptr,         EXPR_PREC_NONE   },
+	[TOKEN_NULLPTR]   = {expr_nullptr,  nullptr,         EXPR_PREC_NONE   },
+	[TOKEN_IDEN]      = {expr_iden,     nullptr,         EXPR_PREC_NONE   },
 };
 
 static Expr parse_expr_precedence(Parser * parser, ExprPrecedence prec) {
@@ -345,6 +368,30 @@ static bool parse_type(Parser * parser, Type * out) {
 			}
 			out->type = TYPE_MUT;
 			out->as.mut = mut;
+			return true;
+		case TOKEN_STAR:
+			advance(parser);
+			Type * ptr = vmem_arena_alloc(parser->arena, Type);
+			if (!ptr) {
+				abort();
+			}
+			if (!parse_type(parser, ptr)) {
+				return false;
+			}
+			out->type = TYPE_PTR;
+			out->as.ptr = ptr;
+			return true;
+		case TOKEN_AMPERSAND:
+			advance(parser);
+			ptr = vmem_arena_alloc(parser->arena, Type);
+			if (!ptr) {
+				abort();
+			}
+			if (!parse_type(parser, ptr)) {
+				return false;
+			}
+			out->type = TYPE_REF;
+			out->as.ref = ptr;
 			return true;
 		default:
 			expect_error(parser, "expected type");

@@ -134,6 +134,9 @@ static Token make_iden(Lexer * lexer, TokenIndex start) {
 	if (str_equal(iden, s("mut"))) {
 		return make_token(lexer, start, TOKEN_MUT);
 	}
+	if (str_equal(iden, s("nullptr"))) {
+		return make_token(lexer, start, TOKEN_NULLPTR);
+	}
 	if (str_equal(iden, s("return"))) {
 		return make_token(lexer, start, TOKEN_RETURN);
 	}
@@ -179,6 +182,12 @@ Token lexer_next(Lexer * lexer) {
 	case '=':
 		advance(lexer);
 		return make_token(lexer, start, TOKEN_EQ);
+	case '*':
+		advance(lexer);
+		return make_token(lexer, start, TOKEN_STAR);
+	case '&':
+		advance(lexer);
+		return make_token(lexer, start, TOKEN_AMPERSAND);
 	default:
 		if (is_digit(c)) {
 			return make_number(lexer, start);

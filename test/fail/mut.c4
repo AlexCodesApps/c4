@@ -1,0 +1,2 @@
+let a: * void = nullptr;
+let b: * mut void = a;
