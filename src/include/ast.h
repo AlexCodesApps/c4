@@ -58,6 +58,7 @@ typedef struct ExprNode ExprNode;
 typedef struct {
 	ExprNode * begin;
 	ExprNode * end;
+	usize count;
 } ExprList;
 
 typedef struct {
@@ -137,6 +138,7 @@ typedef struct FnParamNode FnParamNode;
 typedef struct {
 	FnParamNode * begin;
 	FnParamNode * end;
+	usize count;
 } FnParamList;
 
 extern const FnParamList poisoned_fn_param_list;

@@ -1,0 +1,161 @@
+mod Vector;
+use std::Alloc{alloc_n, free};
+use std::Mem{memcpy}; // rust like modules
+use std::Debug{assert};
+
+/* Despite visual similarity to rust,
+    c4 is not a memory safe language and instead aims to
+    be a more sane c!
+*/
+
+pub struct vector[T] {
+    /* c4 uses the subscript operator as opposed to "<" and ">",
+        making generics easier to parse while eliminating,
+        any need for the turbofish.
+    */
+    ptr: *mut T; // immutability by default
+    size: usize;
+    cap: usize;
+    pub fn new(): vector {
+        /* When in the namespace of a generic struct,
+            c4 can automatically infer template parameters without
+            the programmer needing to specify them.
+        */
+        return {
+            .ptr = nullptr,
+            .size = 0,
+            .cap = 0,
+        };
+        /* c4 keeps c style struct initialization,
+            with type inference capability and removes the need
+            for the awkward paranthesis around the type.
+        */
+    }
+    pub fn size(self: &vector): usize {
+        return self.*size;
+        /* c4 deviates from c in how dereferencing is done.
+            postfix ".*" chains much better and completely
+            invalidates the need for a special "->" operator,
+            as well as minimizing any pain from not having Rust's,
+            auto dereferencing, allowing for code more explicit in what it is doing.
+        */
+    }
+    pub fn at(self: &vector, index: usize): &T {
+        assert(self.*size > index);
+        return self.*ptr + index;
+    }
+    // perhaps a single &fwd type to replace this "foo", "foo_mut" boilerplate?
+    // if it were to work like a normal function
+    // maybe it would be sorta like lifetimes
+    // like,
+    // fn max(&'a fwd A, &'b fwd B): &'a'b fwd B;
+    // and then the mutability of the output can just be tracked by the signature
+    // lifetime syntax can be ugly so perhaps a better solution?
+    // also it would be effectively a normal ref
+    // within the function body
+    // also, maybe it should probably allow for arbitrary ref casting
+    pub fn at_mut(self: &mut vector, index: usize): &mut T {
+        assert(self.*size > index);
+        return self.*ptr + index;
+    }
+    pub fn push(self: &mut vector, v: T): bool {
+        let size = self.*size;
+        /* type inferred shorthand for
+            let size: usize = self.*size;
+        */
+        let cap = self.*cap;
+        if (size >= cap) {
+            /* c4 still requires parenthesis around the condition to avoid ambiguity from
+                the curly braces of a struct initialization and the curly braces of a block.
+                whether or not to support just one statement as a body is still
+                up in the air.
+            */
+            let cap = cap * 2 + 1; // immutable variable shadowing
+            let ptr = alloc_n::<T>(cap);
+            if (!ptr) {
+                return false;
+            }
+            memcpy(ptr, self.*ptr, size * sizeof(T));
+            free(self.*ptr);
+            self.*ptr = ptr;
+            self.*cap = cap;
+        }
+        (self.*ptr + size).* = v;
+        self.*size += 1;
+        /*  c4 purposefully lacks increment/decrement operators
+            because their proclivity for making code hard to read.
+            Besides, optimizing "+= 1" to a increment instruction is
+            rather trivial for any compiler.
+        */
+        return true;
+    }
+    pub fn free(self: &vector) {
+        free(self.*ptr);
+    }
+}
+
+/*  Some sort of first class testing feature hasn't been designed,
+    yet?
+    Perhaps a good avenue to explore.
+*/
+pub fn test() {
+    let vec = vector[i32]::new();
+    defer vec.free();
+    /* c4's defer mechanism runs at the end of the current scope,
+        and "captures" variables by reference.
+    */
+    /*
+        c4 uses UFCS(Universal Function Call Syntax),
+        which enables any function to be called as a method of any object / value
+        as long as
+        The function takes a pointer, reference, or value parameter of the objects type
+        as the first parameter.
+        Functions in the class namespace of an object are just as regular as any other function
+        with the exception of first class namespace lookup for UFCS. otherwise it uses normal
+        namespacing rules.
+
+        example:
+        ``
+        use std::Fmt::{to_string}; // generic
+        use std::Io::{puts};
+
+        fn foo(value: int) {
+            puts(value.to_string()); // works
+            puts(0.to_string()); // also works
+        }
+        ``
+    */
+
+    assert(vec.push(1));
+    assert(vec.size() == 1);
+    assert(vec.at(0).* == 1);
+    assert(vec.push(2));
+    assert(vec.size() == 2);
+    assert(vec.at(1).* == 2);
+}
+
+/* How the standard println function should be
+    implemented isn't actually a very easy decision.
+    I could,
+    1. Use c runtime variadic arguments
+        with printf styling formatting,
+    but,
+        this solution is unsafe at least without special compiler treatment
+        and potentially slower than it needs to be, as well as hard to extend.
+    I could also
+    2. Use macros to implement println,
+    but
+        this solution requires the design of a potentially code
+        obfuscating macro system on top of the language,
+        but could be extensible with a language level feature.
+    Finally, I could
+    3. Use c++ style generic variadic arguments,
+    but,
+        that would entail a likely turing complete compile time computation
+        feature which could not only greatly increase the complexity of the language,
+        but also slow compile times.
+    Technically, I could
+    4. Use builtin compiler magic,
+    but that's just lame. Programmers should be able to implement
+    most of everything the standard can.
+*/

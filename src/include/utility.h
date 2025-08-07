@@ -42,3 +42,24 @@ static inline bool align_ptr(void * ptr, usize alignment, void ** out) {
 #define KB(n) ((n) * 1024)
 #define MB(n) ((n) * 1024 * 1024)
 #define GB(n) ((n) * 1024 * 1024 * 1024)
+
+// shield your eyes
+#ifdef __clang__
+#define PRIVATE [[deprecated("private")]]
+#define PRIVATE_IMPL_BEGIN \
+	_Pragma("clang diagnostic push") \
+	_Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")
+#define PRIVATE_IMPL_END \
+	_Pragma("clang diagnostic pop")
+#elif defined(__GNUC__)
+#define PRIVATE [[deprecated("private")]]
+#define PRIVATE_IMPL_BEGIN \
+	_Pragma("GCC diagnostic push") \
+	_Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")
+#define PRIVATE_IMPL_END \
+	_Pragma("GCC diagnostic pop")
+#else
+#define PRIVATE
+#define PRIVATE_IMPL_BEGIN
+#define PRIVATE_IMPL_END
+#endif

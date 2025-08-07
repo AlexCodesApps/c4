@@ -5,8 +5,9 @@
 
 bool vmem_arena_init(VMemArena * arena, usize size) {
 	bool ok = align_usize(size, 4096, &size);
+	if (UNLIKELY(!ok)) return false;
 	void * pages = mmap(nullptr, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
-	ok &= pages != (void *)-1;
+	ok = pages != (void *)-1;
 	if (UNLIKELY(!ok)) return false;
 	arena->begin = pages;
 	arena->current = pages;

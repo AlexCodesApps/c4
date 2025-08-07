@@ -573,7 +573,6 @@ static bool parse_fn(Parser * parser, Fn * out) {
 			fprintf(stderr, "hint : functions returning void always have ': void'\n");
 		}
 		return false;
-	
 	}
 
 	Type return_type;
@@ -749,6 +748,7 @@ bool expr_list_push(VMemArena * arena, ExprList * list, Expr expr) {
 		list->end->next = node;
 	}
 	list->end = node;
+	++list->count;
 	return true;
 }
 
@@ -791,6 +791,7 @@ bool fn_param_list_push(VMemArena * arena, FnParamList * list, FnParam param) {
 		list->end->next = node;
 	}
 	list->end = node;
+	++list->count;
 	return true;
 }
 
