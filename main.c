@@ -170,6 +170,7 @@ int main(int argc, char ** argv) {
 			abort();
 		}
 		bool result = run_tests(&arena, "test/fail", "test/ok");
+		vmem_arena_free(&arena);
 		if (result) {
 			fprintf(stderr, "all tests succeeded\n");
 		} else {

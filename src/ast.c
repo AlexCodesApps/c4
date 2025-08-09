@@ -58,7 +58,6 @@ static Token next_token(Parser * parser) {
 	}
 }
 
-
 static const Token * peek(const Parser * parser) {
 	return &parser->current;
 }
@@ -113,6 +112,18 @@ static bool expect(Parser * parser, TokenType type, const char * msg) {
 	return false;
 }
 
+static TokenIndex src_span_start(const Parser * parser) {
+	return peek(parser)->start;
+}
+
+static SrcSpan src_span_end(const Parser * parser, TokenIndex start) {
+	TokenIndex end = peek(parser)->end;
+	return (SrcSpan) {
+		.start = start,
+		.end = end,
+	};
+}
+
 void parser_init(Parser * parser, Str src, VMemArena * arena) {
 	parser->arena = arena;
 	parser->lexer = lexer_new(src);
@@ -149,12 +160,22 @@ static bool expr_is_poisoned(const Expr * expr) {
 
 static Expr expr_int(Parser * parser) {
 	Str str = lexer_token_str(&parser->lexer, peek(parser));
-	advance(parser);
 	usize accum = 0;
 	for (usize i = 0; i < str.size; ++i) {
 		// TODO: guard against overflow sanely
+		usize digit = (usize)(str.data[i] - '0');
+		bool ok = ckd_mul(accum, 10, &accum);
+		ok &= ckd_add(accum, digit, &accum);
+		if (!ok) {
+			print_error_header(parser);
+			fprintf(stderr, "integer overflow, ");
+			print_token(parser, peek(parser));
+			fputc('\n', stderr);
+			return poisoned_expr;
+		}
 		accum = accum * 10 + (usize)(str.data[i] - '0');
 	}
+	advance(parser);
 	Expr expr;
 	expr.type = EXPR_INT;
 	expr.as.int_ = accum;

@@ -1,11 +1,13 @@
 #pragma once
 #include "ints.h"
 #include "checked_math.h"
+#include "assert.h"
 #include <stdbool.h>
 #include <memory.h>
 
 #define BREAKPOINT() asm("int3\n""nop\n") // not portable but program is borked anyways
 #define ZERO(ptr) memset(ptr, 0, sizeof(*ptr))
+#define UNREACHABLE() assert(false && "unreachable")
 #ifdef __GNUC__
 #define UNLIKELY(...) __builtin_expect(!!(__VA_ARGS__), 0)
 #define LIKELY(...) __builtin_expect(!!(__VA_ARGS__), 1)

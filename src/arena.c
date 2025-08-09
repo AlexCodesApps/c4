@@ -21,16 +21,16 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 	bool ok = align_ptr(arena->current, align, &alloc_start);
 	void * new_current;
 	ok &= ckd_add_ptr(alloc_start, size, &new_current);
+	ok &= new_current < arena->end;
 	void * new_commited = arena->commited;
 	if (new_commited < new_current) {
 		ok &= align_ptr(new_current, 4096, &new_commited);
+		if (UNLIKELY(!ok)) {
+			return nullptr;
+		}
+		size_t n_commited_bytes = (uintptr_t)new_commited - (uintptr_t)arena->commited;
+		ok = mprotect(arena->commited, n_commited_bytes, PROT_READ | PROT_WRITE) == 0;
 	}
-	ok &= new_current < arena->end;
-	if (UNLIKELY(!ok)) {
-		return nullptr;
-	}
-	size_t n_commited_bytes = (uintptr_t)new_commited - (uintptr_t)arena->commited;
-	ok = mprotect(arena->commited, n_commited_bytes, PROT_READ | PROT_WRITE) == 0;
 	if (UNLIKELY(!ok)) {
 		return nullptr;
 	}

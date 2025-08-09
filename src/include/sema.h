@@ -21,7 +21,7 @@ typedef struct SemaTypeAlias SemaTypeAlias;
 // The main purposes of these stages is to enforce state invariants cleanly in a way that some dodgy passes
 // can't, and to make compile time function evaluation very natural and flow with the rest of the code
 
-typedef enum {
+typedef enum : u8 {
 	SEMA_PASS_ERROR, // signifies that the object isn't in a valid state
 	SEMA_PASS_AST, // signifies that the object is an AST stub
 	SEMA_PASS_CYCLE_UNCHECKED, // signifies that the object has been filled with a workable sema node
@@ -70,6 +70,7 @@ typedef struct {
 struct SemaType {
 	SemaTypeType type;
 	SemaPass pass;
+	bool deduped: 1;
 	u32 visit_index;
 	union {
 		SemaTypeFn fn;
@@ -253,6 +254,7 @@ struct SemaStmtNode {
 
 struct SemaFn {
 	SemaPass pass;
+	bool visited_by_emmiter; // to avoid excessive reimplementing
 	struct {
 		SemaTypeFn * signature;
 		Str * args; // length is length of signature arg list

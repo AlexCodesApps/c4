@@ -1,6 +1,6 @@
 fn foo(a: int): int {
 	fn bar(a: int, b: int): int {
-		let c: i32 = a + b;
+		let c: int = a + b;
 		return c + c;
 	}
 	fn baz(b: int, c: int): int {

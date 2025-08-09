@@ -1,6 +1,9 @@
 - [ ] Support const fns
-    - [ ] Design and implement fn ir
+    - [X] Design and implement fn ir
     - [ ] Implement const fn interpreter
     - [ ] Add support in syntax for const functions
-- [ ] Reimplement intern type with deduplicating complete types in mind
+- [ ] Rewrite type and fn completion to use work queue
+    - [ ] Rewrite type completion to use work queue
+    - [ ] Rewrite fn completion to use work queue
+- [X] Reimplement intern type with deduplicating complete types in mind
 - [ ] Implement addition with ptr offset support

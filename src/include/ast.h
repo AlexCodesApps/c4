@@ -198,12 +198,17 @@ struct DeclNode {
 typedef DeclList Ast;
 
 typedef struct {
+	TokenIndex start;
+	TokenIndex end;
+} SrcSpan;
+
+typedef struct {
 	VMemArena * arena;
 	Lexer lexer;
 	Token current;
 	Token next;
-	bool panic_mode;
-	bool had_error;
+	bool panic_mode : 1;
+	bool had_error  : 1;
 } Parser;
 
 void parser_init(Parser * parser, Str src, VMemArena * arena);

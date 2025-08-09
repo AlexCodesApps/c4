@@ -61,7 +61,7 @@ static void emit_load(SemaCtx * ctx, IrFn * fn, SemaTypeHandle to_type) {
 		emit_byte(ctx, fn, IR_INST_LOAD_I64);
 		break;
 	case SEMA_TYPE_TYPE_ALIAS:
-		unreachable();
+		UNREACHABLE();
 	}
 }
 
@@ -236,6 +236,10 @@ bool emit_fn(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) {
 		}
 		[[fallthrough]];
 	case SEMA_PASS_CYCLE_CHECKED: {
+			if (fn->visited_by_emmiter) {
+				return true;
+			}
+			fn->visited_by_emmiter = true;
 			SemaType * fn_type = sema_type_from_interned_fn(fn->sema.signature);
 			if (!ensure_type_ptr_is_implemented(ctx, visitor, &fn_type)) {
 				goto error;
@@ -244,14 +248,28 @@ bool emit_fn(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) {
 			SemaEnv env;
 			IrFn ir = {0};
 			sema_env_init_push_fn_blk_env(ctx, &env, fn_type->as.fn.return_type);
+			usize i = 0;
+			for (auto node = fn->sema.signature->params.begin; node; node = node->next) {
+				Str iden;
+				if (!str_copy(ctx->arena, fn->sema.args[i], &iden)) {
+					sema_ctx_oom(ctx);
+				}
+				++i;
+				SemaDecl decl;
+				sema_decl_init(&decl, SEMA_DECL_VAR, symbol_pos_local(fn), iden);
+				sema_var_init(&decl.as.var, node->type, nullptr, false);
+				if (!sema_ctx_add_decl(ctx, decl)) {
+					sema_ctx_oom(ctx);
+				}
+			}
 			bool result = emit_blk(ctx, visitor, &ir, fn->ast->body);
 			sema_env_pop(ctx);
 			if (!result) {
 				goto error;
 			}
 			fn->sema.unwrap.fn = ir;
+			fn->pass = SEMA_PASS_IMPLEMENTED; // just the signature is needed
 		}
-		fn->pass = SEMA_PASS_IMPLEMENTED;
 		[[fallthrough]];
 	case SEMA_PASS_IMPLEMENTED:
 		return true;

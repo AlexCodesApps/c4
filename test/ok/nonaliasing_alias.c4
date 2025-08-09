@@ -1,0 +1,14 @@
+type A = int;
+type B = int;
+
+type C = fn(A): A;
+type D = fn(B): B;
+
+fn foo(a: *C): *D {
+	fn var(b: *D): *C {
+		return b;
+	}
+	let mut e: *void = a;
+	let d: &mut*void = &e;
+	return var(a);
+}
