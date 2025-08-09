@@ -2,6 +2,11 @@
     - [X] Design and implement fn ir
     - [ ] Implement const fn interpreter
     - [ ] Add support in syntax for const functions
+- [ ] Revamp semantic error messages
+    - [ ] Embed source information throughout sematic analysis trees
+    - [ ] Write dedicated functions for reporting errors
+        - [ ] Type(s) of expr(s) are wrong error
+        - [ ] Unknown identifier error
 - [ ] Rewrite type and fn completion to use work queue
     - [ ] Rewrite type completion to use work queue
     - [ ] Rewrite fn completion to use work queue
