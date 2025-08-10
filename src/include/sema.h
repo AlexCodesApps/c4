@@ -254,7 +254,11 @@ struct SemaStmtNode {
 
 struct SemaFn {
 	SemaPass pass;
-	bool visited_by_emmiter; // to avoid excessive reimplementing
+	enum {
+		SEMA_FN_UNEMMITED,
+		SEMA_FN_EMMITING,
+		SEMA_FN_EMMITED,
+	} emmiting; // to avoid excessive reimplementing
 	struct {
 		SemaTypeFn * signature;
 		Str * args; // length is length of signature arg list
@@ -328,14 +332,29 @@ typedef struct {
 	SemaTypeHandleNode * tpnl_free_list; // deduped function types have their param list nodes saved for reuse
 } SemaTypeInternTable;
 
+typedef struct SemaTypePtrPtrNode SemaTypePtrPtrNode;
+struct SemaTypePtrPtrNode {
+	SemaType ** payload;
+	SemaTypePtrPtrNode * next;
+};
+
+typedef struct SemaFnPtrNode SemaFnPtrNode;
+struct SemaFnPtrNode {
+	SemaFn * payload;
+	SemaFnPtrNode * next;
+};
+
 struct SemaCtx {
 	SemaTypeInternTable * table;
 	VMemArena * arena;
 	SemaEnv * root;
 	SemaEnv * env;
+	SemaTypePtrPtrNode * free_type_ptrs;
+	SemaFnPtrNode * free_fn_ptrs;
 	jmp_buf oom_handler;
 };
 
+// initializers
 void sema_type_init_uninterned(SemaType * type, SemaTypeType typetype);
 void sema_value_init(SemaValue * value, SemaValueType type);
 void sema_expr_init_implemented(SemaExpr * expr, SemaExpr2Type type);
@@ -350,11 +369,21 @@ SymbolPos symbol_pos_global(void);
 SymbolPos symbol_pos_local(SemaFn * fn);
 void sema_decl_init(SemaDecl * decl, SemaDeclType type, SymbolPos pos, Str iden);
 
-bool sema_analyze_ast(SemaCtx * ctx, Ast ast);
+// mostly ctx functions
+SemaDecl * sema_ctx_add_decl(SemaCtx * ctx, SemaDecl decl);
+void sema_ctx_init(SemaCtx * ctx, VMemArena * arena, SemaTypeInternTable * table, SemaEnv * env);
+SemaTypeHandle sema_ctx_lookup_type(SemaCtx * ctx, Str iden, ReportError report_error);
+SemaVar * sema_ctx_lookup_var(SemaCtx * ctx, Str iden, ReportError report_error);
+SemaFn * sema_ctx_lookup_fn(SemaCtx * ctx, Str iden, ReportError report_error);
+bool sema_ctx_is_global_scope(SemaCtx * ctx);
+bool sema_ctx_is_fn_local(SemaCtx * ctx);
 _Noreturn void sema_ctx_oom(SemaCtx * ctx);
+
+bool sema_analyze_ast(SemaCtx * ctx, Ast ast);
 SemaTypeHandle sema_type_handle_from_ptr(SemaType * type);
 bool coerce_expr_to_type(SemaCtx * ctx, SemaExpr * expr, SemaTypeHandle expr_type, SemaTypeHandle target_type);
 
+// declaration pass functions
 bool ensure_type_alias_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaTypeAlias * alias);
 bool ensure_expr_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaExpr * expr);
 bool ensure_var_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaVar * var);
@@ -376,11 +405,8 @@ void sema_env_pop(SemaCtx * ctx);
 void sema_print_type(FILE * file, SemaTypeHandle type);
 void sema_type_intern_table_init(SemaTypeInternTable * table);
 void sema_env_init(SemaEnv * env);
-SemaDecl * sema_ctx_add_decl(SemaCtx * ctx, SemaDecl decl);
-void sema_ctx_init(SemaCtx * ctx, VMemArena * arena, SemaTypeInternTable * table, SemaEnv * env);
-SemaTypeHandle sema_ctx_lookup_type(SemaCtx * ctx, Str iden, ReportError report_error);
-SemaVar * sema_ctx_lookup_var(SemaCtx * ctx, Str iden, ReportError report_error);
-SemaFn * sema_ctx_lookup_fn(SemaCtx * ctx, Str iden, ReportError report_error);
+
+// lists, lists, and more lists
 void sema_type_list_init(SemaTypeList * list);
 SemaType * sema_type_list_push_front(VMemArena * arena, SemaTypeList * list, SemaType type);
 void sema_type_handle_list_init(SemaTypeHandleList * list);

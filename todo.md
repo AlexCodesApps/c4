@@ -1,14 +1,14 @@
 - [ ] Support const fns
     - [X] Design and implement fn ir
     - [ ] Implement const fn interpreter
-    - [ ] Add support in syntax for const functions
+    - [ ] Add support in syntax for const functions (and variables)
 - [ ] Revamp semantic error messages
     - [ ] Embed source information throughout sematic analysis trees
     - [ ] Write dedicated functions for reporting errors
         - [ ] Type(s) of expr(s) are wrong error
         - [ ] Unknown identifier error
 - [ ] Rewrite type and fn completion to use work queue
-    - [ ] Rewrite type completion to use work queue
+    - [X] Rewrite type completion to use work queue
     - [ ] Rewrite fn completion to use work queue
 - [X] Reimplement intern type with deduplicating complete types in mind
 - [ ] Implement addition with ptr offset support

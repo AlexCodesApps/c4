@@ -3,6 +3,52 @@
 #include <stddef.h>
 #include <assert.h>
 
+typedef struct {
+	SemaFnPtrNode * head;
+	SemaFnPtrNode * tail;
+} FnWorkStack;
+
+bool fn_work_stack_push(SemaCtx * ctx, FnWorkStack * stack, SemaFn * ptr) {
+	SemaFnPtrNode * node;
+	if (ctx->free_fn_ptrs) {
+		node = ctx->free_fn_ptrs;
+		ctx->free_fn_ptrs = node->next;
+	} else {
+		node = vmem_arena_alloc(ctx->arena, SemaFnPtrNode);
+		if (!node) {
+			return false;
+		}
+	}
+	node->next = stack->head;
+	node->payload = ptr;
+	if (!stack->tail) {
+		stack->tail = node;
+	}
+	stack->head = node;
+	return true;
+}
+
+void fn_work_stack_pop(SemaCtx * ctx, FnWorkStack * stack, SemaFn ** out) {
+	SemaFnPtrNode * node = stack->head;
+	if (out) {
+		*out = node->payload;
+	}
+	stack->head = node->next;
+	if (stack->tail == node) {
+		stack->tail = nullptr;
+	}
+	node->next = ctx->free_fn_ptrs;
+	ctx->free_fn_ptrs = node;
+}
+
+void fn_work_stack_free(SemaCtx  * ctx, FnWorkStack * stack) {
+	if (!stack->tail) {
+		return;
+	}
+	stack->tail = ctx->free_fn_ptrs;
+	ctx->free_fn_ptrs = stack->head;
+}
+
 static void emit_byte(SemaCtx * ctx, IrFn * fn, u8 byte) {
 	if (fn->count == fn->capacity) {
 		usize new_cap = (fn->capacity + 1) * 2;
@@ -36,7 +82,7 @@ static void emit_u64(SemaCtx * ctx, IrFn * fn, u64 u) {
 	emit_bytes(ctx, fn, &u, sizeof(u));
 }
 
-static bool emit_blk(SemaCtx * ctx, VisitorState visitor, IrFn * fn, StmtList stmts);
+static bool emit_blk(SemaCtx * ctx, VisitorState visitor, IrFn * fn, StmtList stmts, FnWorkStack * stack);
 
 static void emit_var_ptr(SemaCtx * ctx, IrFn * fn, SemaVar * var) {
 	emit_byte(ctx, fn, IR_INST_VAR);
@@ -65,7 +111,7 @@ static void emit_load(SemaCtx * ctx, IrFn * fn, SemaTypeHandle to_type) {
 	}
 }
 
-static void emit_expr(SemaCtx * ctx, IrFn * fn, SemaExpr * expr, SemaTypeHandle type) {
+static void emit_expr(SemaCtx * ctx, IrFn * fn, SemaExpr * expr, SemaTypeHandle type, FnWorkStack * stack) {
 	switch (expr->type2) {
 	case SEMA_EXPR2_VALUE:
 		switch (expr->as.sema2.value.type) {
@@ -81,6 +127,9 @@ static void emit_expr(SemaCtx * ctx, IrFn * fn, SemaExpr * expr, SemaTypeHandle 
 				// noop
 				break;
 			case SEMA_VALUE_FN:
+				if (!fn_work_stack_push(ctx, stack, expr->as.sema2.value.as.fn)) {
+				
+				}
 				emit_byte(ctx, fn, IR_INST_FN);
 				emit_bytes(ctx, fn, &expr->as.sema2.value.as.fn, sizeof(SemaFn *));
 				break;
@@ -97,8 +146,8 @@ static void emit_expr(SemaCtx * ctx, IrFn * fn, SemaExpr * expr, SemaTypeHandle 
 		}
 		break;
 	case SEMA_EXPR2_ADD_I32:
-		emit_expr(ctx, fn, expr->as.sema2.add.a, type);
-		emit_expr(ctx, fn, expr->as.sema2.add.b, type);
+		emit_expr(ctx, fn, expr->as.sema2.add.a, type, stack);
+		emit_expr(ctx, fn, expr->as.sema2.add.b, type, stack);
 		emit_byte(ctx, fn, IR_INST_ADD_I32);
 		break;
 	case SEMA_EXPR2_LOAD_VAR:
@@ -112,9 +161,9 @@ static void emit_expr(SemaCtx * ctx, IrFn * fn, SemaExpr * expr, SemaTypeHandle 
 			usize i = 0;
 			for (auto node = type.type->as.fn.params.begin; node && i < expr->as.sema2.funcall.args.size; ++i) {
 				SemaExpr * arg = &expr->as.sema2.funcall.args.data[i];
-				emit_expr(ctx, fn, arg, node->type);
+				emit_expr(ctx, fn, arg, node->type, stack);
 			}
-			emit_expr(ctx, fn, expr->as.sema2.funcall.fun, sema_type_handle_from_ptr(type.type->as.fn.return_type));
+			emit_expr(ctx, fn, expr->as.sema2.funcall.fun, sema_type_handle_from_ptr(type.type->as.fn.return_type), stack);
 			emit_byte(ctx, fn, IR_INST_CALL);
 		}
 		break;
@@ -122,7 +171,7 @@ static void emit_expr(SemaCtx * ctx, IrFn * fn, SemaExpr * expr, SemaTypeHandle 
 }
 
 static bool emit_ast_expr(SemaCtx * ctx, VisitorState visitor, IrFn * fn, const Expr * ast,
-		const SemaTypeHandle * expected, SemaTypeHandle * out) {
+		const SemaTypeHandle * expected, SemaTypeHandle * out, FnWorkStack * stack) {
 	SemaExpr expr;
 	SemaTypeHandle handle;
 	sema_expr_init_with_ast(&expr, ast);
@@ -137,11 +186,11 @@ static bool emit_ast_expr(SemaCtx * ctx, VisitorState visitor, IrFn * fn, const 
 	if (out) {
 		*out = handle;
 	}
-	emit_expr(ctx, fn, &expr, handle);
+	emit_expr(ctx, fn, &expr, handle, stack);
 	return true;
 }
 
-static bool emit_decl(SemaCtx * ctx, VisitorState visitor, IrFn * fn, const Decl * ast) {
+static bool emit_decl(SemaCtx * ctx, VisitorState visitor, IrFn * fn, const Decl * ast, FnWorkStack * stack) {
 	// Im don't think its neccesary to emit anything
 	(void)fn;
 	SemaDecl decl;
@@ -171,23 +220,30 @@ static bool emit_decl(SemaCtx * ctx, VisitorState visitor, IrFn * fn, const Decl
 		sema_var_init_with_ast(&decl.as.var, &ast->as.var, false);
 		break;
 	}
-	if (!ensure_decl_is_implemented(ctx, visitor, &decl)) {
-	    return false;
-	}
-	if (!sema_ctx_add_decl(ctx, decl)) {
+	SemaDecl * ndecl = sema_ctx_add_decl(ctx, decl);
+	if (!ndecl) {
 		sema_ctx_oom(ctx);
+	}
+	if (ndecl->type != SEMA_DECL_FN) {
+		if (!ensure_decl_is_implemented(ctx, visitor, ndecl)) {
+			return false;
+		}
+	} else {
+		if (!fn_work_stack_push(ctx, stack, &ndecl->as.fn)) {
+			sema_ctx_oom(ctx);
+		}
 	}
 	return true;
 }
 
-static bool emit_stmt(SemaCtx * ctx, VisitorState visitor, IrFn * fn, const Stmt * stmt) {
+static bool emit_stmt(SemaCtx * ctx, VisitorState visitor, IrFn * fn, const Stmt * stmt, FnWorkStack * stack) {
 	switch (stmt->type) {
 	case STMT_SEMICOLON:
 		return true;
 	case STMT_RETURN:
 		if (stmt->as.return_.has_expr) {
 			const SemaTypeHandle type = sema_type_handle_from_ptr(ctx->env->as.fn.return_type);
-			if (!emit_ast_expr(ctx, visitor, fn, &stmt->as.return_.unwrap.expr, &type, nullptr)) {
+			if (!emit_ast_expr(ctx, visitor, fn, &stmt->as.return_.unwrap.expr, &type, nullptr, stack)) {
 				return false;
 			}
 		}
@@ -196,7 +252,7 @@ static bool emit_stmt(SemaCtx * ctx, VisitorState visitor, IrFn * fn, const Stmt
 	case STMT_EXPR:
 		{
 			SemaTypeHandle handle;
-			if (!emit_ast_expr(ctx, visitor, fn, &stmt->as.expr, nullptr, &handle)) {
+			if (!emit_ast_expr(ctx, visitor, fn, &stmt->as.expr, nullptr, &handle, stack)) {
 				return false;
 			}
 			emit_byte(ctx, fn, IR_INST_POP);
@@ -206,25 +262,25 @@ static bool emit_stmt(SemaCtx * ctx, VisitorState visitor, IrFn * fn, const Stmt
 		{
 			SemaEnv env;
 			sema_env_init_push_fn_blk_env(ctx, &env, ctx->env->as.fn.return_type);
-			bool result = emit_blk(ctx, visitor, fn, stmt->as.block);
+			bool result = emit_blk(ctx, visitor, fn, stmt->as.block, stack);
 			sema_env_pop(ctx);
 			return result;
 		}
 	case STMT_DECL:
-		return emit_decl(ctx, visitor, fn, stmt->as.decl);
+		return emit_decl(ctx, visitor, fn, stmt->as.decl, stack);
 	}
 }
 
-static bool emit_blk(SemaCtx * ctx, VisitorState visitor, IrFn * fn, StmtList stmts) {
+static bool emit_blk(SemaCtx * ctx, VisitorState visitor, IrFn * fn, StmtList stmts, FnWorkStack * stack) {
 	for (StmtNode * node = stmts.begin; node; node = node->next) {
-		if (!emit_stmt(ctx, visitor, fn, &node->stmt)) {
+		if (!emit_stmt(ctx, visitor, fn, &node->stmt, stack)) {
 			return false;
 		}
 	}
 	return true;
 }
 
-bool emit_fn(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) {
+bool emit_fn_iter(SemaCtx * ctx, VisitorState visitor, SemaFn * fn, FnWorkStack * stack) {
 	switch (fn->pass) {
 	case SEMA_PASS_ERROR:
 		return false;
@@ -236,10 +292,10 @@ bool emit_fn(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) {
 		}
 		[[fallthrough]];
 	case SEMA_PASS_CYCLE_CHECKED: {
-			if (fn->visited_by_emmiter) {
+			if (fn->emmiting != SEMA_FN_UNEMMITED) {
 				return true;
 			}
-			fn->visited_by_emmiter = true;
+			fn->emmiting = SEMA_FN_EMMITING;
 			SemaType * fn_type = sema_type_from_interned_fn(fn->sema.signature);
 			if (!ensure_type_ptr_is_implemented(ctx, visitor, &fn_type)) {
 				goto error;
@@ -262,13 +318,14 @@ bool emit_fn(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) {
 					sema_ctx_oom(ctx);
 				}
 			}
-			bool result = emit_blk(ctx, visitor, &ir, fn->ast->body);
+			bool result = emit_blk(ctx, visitor, &ir, fn->ast->body, stack);
 			sema_env_pop(ctx);
 			if (!result) {
 				goto error;
 			}
 			fn->sema.unwrap.fn = ir;
 			fn->pass = SEMA_PASS_IMPLEMENTED; // just the signature is needed
+			fn->emmiting = SEMA_FN_EMMITED;
 		}
 		[[fallthrough]];
 	case SEMA_PASS_IMPLEMENTED:
@@ -277,4 +334,19 @@ bool emit_fn(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) {
 error:
 	fn->pass = SEMA_PASS_ERROR;
 	return false;
+}
+
+bool emit_fn(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) {
+	FnWorkStack stack;
+	ZERO(&stack);
+	if (!emit_fn_iter(ctx, visitor, fn, &stack)) {
+		return false;
+	}
+	while (stack.head) {
+		fn_work_stack_pop(ctx, &stack, &fn);
+		if (!emit_fn_iter(ctx, visitor, fn, &stack)) {
+			return false;
+		}
+	}
+	return true;
 }
