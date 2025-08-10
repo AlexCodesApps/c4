@@ -163,7 +163,7 @@ static void emit_expr(SemaCtx * ctx, IrFn * fn, SemaExpr * expr, SemaTypeHandle 
 				SemaExpr * arg = &expr->as.sema2.funcall.args.data[i];
 				emit_expr(ctx, fn, arg, node->type, stack);
 			}
-			emit_expr(ctx, fn, expr->as.sema2.funcall.fun, sema_type_handle_from_ptr(type.type->as.fn.return_type), stack);
+			emit_expr(ctx, fn, expr->as.sema2.funcall.fun, expr->as.sema2.funcall.fn_type, stack);
 			emit_byte(ctx, fn, IR_INST_CALL);
 		}
 		break;
@@ -292,9 +292,6 @@ bool emit_fn_iter(SemaCtx * ctx, VisitorState visitor, SemaFn * fn, FnWorkStack 
 		}
 		[[fallthrough]];
 	case SEMA_PASS_CYCLE_CHECKED: {
-			if (fn->emmiting != SEMA_FN_UNEMMITED) {
-				return true;
-			}
 			fn->emmiting = SEMA_FN_EMMITING;
 			SemaType * fn_type = sema_type_from_interned_fn(fn->sema.signature);
 			if (!ensure_type_ptr_is_implemented(ctx, visitor, &fn_type)) {

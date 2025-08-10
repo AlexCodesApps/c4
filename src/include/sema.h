@@ -160,6 +160,7 @@ typedef struct {
 typedef struct {
 	SemaExpr * fun;
 	SemaExprFunCallArgs args;
+	SemaTypeHandle fn_type; // only after implementation
 } SemaExprFunCall;
 
 struct SemaExpr {

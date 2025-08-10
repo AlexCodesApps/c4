@@ -91,6 +91,13 @@ SemaType * sema_type_from_interned_fn(SemaTypeFn * fn) {
 	return ptr;
 }
 
+void sema_ctx_init(SemaCtx * ctx, VMemArena * arena, SemaTypeInternTable * table, SemaEnv * env) {
+	ctx->env = env;
+	ctx->root = env;
+	ctx->arena = arena;
+	ctx->table = table;
+}
+
 _Noreturn void sema_ctx_oom(SemaCtx * ctx) {
 	longjmp(ctx->oom_handler, 1);
 }
@@ -538,6 +545,7 @@ bool ensure_type_alias_is_sema(SemaCtx * ctx, SemaTypeAlias * alias) {
 	if (alias->pass > SEMA_PASS_AST) {
 		return true;
 	}
+	alias->pass = SEMA_PASS_CYCLE_UNCHECKED;
 	return declare_ast_type_alias(ctx, alias);
 }
 
@@ -548,6 +556,7 @@ bool ensure_expr_is_sema(SemaCtx * ctx, SemaExpr * expr) {
 	if (expr->pass > SEMA_PASS_AST) {
 		return true;
 	}
+	expr->pass = SEMA_PASS_CYCLE_UNCHECKED;
 	const Expr * ast = expr->as.ast;
 	SemaFn * fn;
 	SemaVar * var;
@@ -638,6 +647,7 @@ bool ensure_expr_is_sema(SemaCtx * ctx, SemaExpr * expr) {
 		sema_expr_init_unimplemented(expr, SEMA_EXPR1_FUNCALL);
 		expr->as.sema1.funcall.fun = a;
 		expr->as.sema1.funcall.args = args;
+		expr->as.sema1.funcall.fn_type = null_sema_type_handle;
 		break;
 	}
 	return true;
@@ -653,6 +663,7 @@ bool ensure_var_is_sema(SemaCtx * ctx, SemaVar * var) {
 	if (var->pass > SEMA_PASS_AST) {
 		return true;
 	}
+	var->pass = SEMA_PASS_CYCLE_UNCHECKED;
 	const Var * ast = var->as.ast;
 	Str iden;
 	if (!str_copy(ctx->arena, ast->iden, &iden)) {
@@ -685,6 +696,7 @@ bool ensure_fn_is_sema(SemaCtx * ctx, SemaFn * fn) {
 	if (fn->pass > SEMA_PASS_AST) {
 		return true;
 	}
+	fn->pass = SEMA_PASS_CYCLE_UNCHECKED;
 	const Fn * ast = fn->ast;
 	if (ast->params == &poisoned_fn_param_list) {
 		fn->pass = SEMA_PASS_ERROR;
@@ -897,9 +909,10 @@ bool ensure_var_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaVar * 
 			fprintf(stderr, "error: cycle detected\n");
 			return false;
 		}
-		var->pass = SEMA_PASS_CYCLE_UNCHECKED;
-		[[fallthrough]];
+		return true;
+		break;
 	case SEMA_PASS_CYCLE_UNCHECKED:
+		var->pass = SEMA_PASS_CYCLE_CHECKING;
 		var->visit_index = visitor.visit_id++;
 		if (!ensure_type_is_cycle_checked(ctx, visitor, var->as.sema.type.type)) {
 			var->pass = SEMA_PASS_ERROR;
@@ -1181,12 +1194,9 @@ ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx,
 	}
 	case SEMA_EXPR1_FN: {
 		if (expr->as.sema1.fn->emmiting == SEMA_FN_UNEMMITED) {
-			expr->pass = SEMA_PASS_CYCLE_CHECKED; // to prevent inconsistent state
-			result = EXPR_EVAL_REDUCED;
-			break;
-		}
-		if (!ensure_fn_is_implemented(ctx, visitor, expr->as.sema1.fn)) {
-			goto error;
+			if (!ensure_fn_is_implemented(ctx, visitor, expr->as.sema1.fn)) {
+				goto error;
+			}
 		}
 	    SemaFn * fn = expr->as.sema1.fn;
 	    sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
@@ -1259,6 +1269,7 @@ ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx,
 				iresult = aresult == EXPR_EVAL_REDUCED ? iresult : EXPR_EVAL_UNREDUCED;
 			}
 			sema_expr_init_implemented(expr, SEMA_EXPR2_FUNCALL);
+			expr->as.sema2.funcall.fn_type = itype;
 			type = sema_type_handle_from_ptr(itype.type->as.fn.return_type);
 			if (expr->as.sema2.funcall.fun->type2 == SEMA_EXPR2_VALUE) {
 				// TODO: const fn evaluation
