@@ -12,8 +12,8 @@
     issues with reducing expressions here, but its more like an "early maybe not optimization"
     that could lead to more fragile code with duplicate logic here and there. therefore it should probably be factored out into another
     function. ``ensure_expr_is_reduced`` or smth. Also consider making distinct passes for each type of node
-    because type safety (yay) and its just awkward to try and fit everything into one pass style and possible
-    renables bugs that the model sought to defeat.
+    because type safety (yay) and its just awkward to try and fit everything into one style of pass and possibly
+    renable bugs that the model sought to defeat.
     - [X] Add support in syntax for const functions (and variables)
     - [ ] Implement const fn interpreter
 - [ ] Revamp semantic error messages
