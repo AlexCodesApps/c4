@@ -676,6 +676,11 @@ bool ensure_var_is_sema(SemaCtx * ctx, SemaVar * var) {
 	}
 	type.is_lvalue = true;
 	type.is_mut |= ast->is_mut;
+	if (type.is_mut && ast->is_const) {
+		fprintf(stderr, "error: attempted to give 'mut' specifier to constant variable\n");
+		var->pass = SEMA_PASS_ERROR;
+		return false;
+	}
 	bool init_with_expr = ast->init_with_expr;
 	SemaExpr expr;
 	if (init_with_expr) {
@@ -685,7 +690,7 @@ bool ensure_var_is_sema(SemaCtx * ctx, SemaVar * var) {
 			return false;
 		}
 	}
-	sema_var_init(var, type, init_with_expr ? &expr : nullptr, sema_ctx_is_global_scope(ctx));
+	sema_var_init(var, type, init_with_expr ? &expr : nullptr, sema_ctx_is_global_scope(ctx), ast->is_const);
 	return true;
 }
 
@@ -739,7 +744,7 @@ bool ensure_fn_is_sema(SemaCtx * ctx, SemaFn * fn) {
 	type_uninterned.as.fn.params = params;
 	SemaType * type = sema_type_intern(ctx, type_uninterned);
 	assert(type);
-	sema_fn_init(fn, &type->as.fn, args);
+	sema_fn_init(fn, &type->as.fn, args, ast->is_const);
 	return true;
 }
 
@@ -759,7 +764,6 @@ bool ensure_type_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaType 
 				visitor.last_indirection_id = type->visit_index;
 				if (!ensure_type_is_cycle_checked(ctx, visitor, type->as.ptr.type)) {
 					goto error;
-					
 				}
 				break;
 			case SEMA_TYPE_REF:
@@ -1272,7 +1276,15 @@ ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx,
 			expr->as.sema2.funcall.fn_type = itype;
 			type = sema_type_handle_from_ptr(itype.type->as.fn.return_type);
 			if (expr->as.sema2.funcall.fun->type2 == SEMA_EXPR2_VALUE) {
-				// TODO: const fn evaluation
+				SemaFn * fn = expr->as.sema2.funcall.fun->as.sema2.value.as.fn;
+				if (fn->is_const && fn->emmiting == SEMA_FN_EMMITED) {
+					SemaValue value;
+					if (!run_implemented_const_fn(ctx, fn, &value)) {
+						goto error;
+					}
+					result = EXPR_EVAL_REDUCED;
+					break;
+				}
 			}
 			result = EXPR_EVAL_UNREDUCED;
 			break;
@@ -1302,19 +1314,20 @@ ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx,
 			}
 			type = var->as.sema.type;
 			if (deref) {
-				if (!var->as.sema.init_with_expr) {
-					if (sema_ctx_is_global_scope(ctx)) {
-						fprintf(stderr, "warning: uninitialized global used in constant expression\n");
+				bool global = sema_ctx_is_global_scope(ctx);
+				if (global || var->is_const) {
+					if (global && !var->as.sema.init_with_expr) {
+						fprintf(stderr, "error: uninitialized global used in constant expression\n");
 						goto error;
 					}
-					sema_expr_init_implemented(expr, SEMA_EXPR2_LOAD_VAR);
-					expr->as.sema2.load_var = var;
-					result = EXPR_EVAL_UNREDUCED;
+					*expr = var->as.sema.unwrap.expr;
+					result = expr->type2 == SEMA_EXPR2_VALUE ? EXPR_EVAL_REDUCED : EXPR_EVAL_UNREDUCED;
 					break;
 				}
-				*expr = var->as.sema.unwrap.expr;
-				result = expr->type2 == SEMA_EXPR2_VALUE ? EXPR_EVAL_REDUCED : EXPR_EVAL_UNREDUCED;
-				// TODO: subtly broken
+				sema_expr_init_implemented(expr, SEMA_EXPR2_LOAD_VAR);
+				expr->as.sema2.load_var = var;
+				result = EXPR_EVAL_UNREDUCED;
+				break;
 			} else {
 				sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
 				sema_value_init(&expr->as.sema2.value, SEMA_VALUE_VAR_REF);
@@ -1374,7 +1387,7 @@ bool ensure_var_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaVar * va
 				}
 			}
 			if (result == EXPR_EVAL_UNREDUCED && var->is_global) {
-				fprintf(stderr, "error: initalization of global variable with non const expression");
+				fprintf(stderr, "error: initalization of global variable with non-constant expression\n");
 				goto error;
 			}
 		}
@@ -1522,11 +1535,13 @@ void sema_stmt_init(SemaStmt * stmt, SemaStmtType type) {
 void sema_var_init_with_ast(SemaVar * var, const Var * ast, bool global) {
 	var->pass = SEMA_PASS_AST;
 	var->is_global = global;
+	var->is_const = ast->is_const;
 	var->as.ast = ast;
 }
 
-void sema_var_init(SemaVar * var, SemaTypeHandle type, SemaExpr * opt_expr, bool global) {
+void sema_var_init(SemaVar * var, SemaTypeHandle type, SemaExpr * opt_expr, bool global, bool is_const) {
 	var->is_global = global;
+	var->is_const = is_const;
 	var->as.sema.init_with_expr = opt_expr != nullptr;
 	var->as.sema.type = type;
 	var->pass = SEMA_PASS_CYCLE_UNCHECKED;
@@ -1535,8 +1550,9 @@ void sema_var_init(SemaVar * var, SemaTypeHandle type, SemaExpr * opt_expr, bool
 	}
 }
 
-void sema_fn_init(SemaFn * fn, SemaTypeFn * sig, Str * args) {
+void sema_fn_init(SemaFn * fn, SemaTypeFn * sig, Str * args, bool is_const) {
 	fn->pass = SEMA_PASS_CYCLE_UNCHECKED;
+	fn->is_const = is_const;
 	fn->sema.signature = sig;
 	fn->sema.args = args;
 	fn->emmiting = SEMA_FN_UNEMMITED;
@@ -1544,6 +1560,7 @@ void sema_fn_init(SemaFn * fn, SemaTypeFn * sig, Str * args) {
 
 void sema_fn_init_with_ast(SemaFn * fn, const Fn * ast) {
 	fn->pass = SEMA_PASS_AST;
+	fn->is_const = ast->is_const;
 	fn->ast = ast;
 	fn->emmiting = SEMA_FN_UNEMMITED;
 }
@@ -1554,10 +1571,11 @@ SymbolPos symbol_pos_global(void) {
 	};
 }
 
-SymbolPos symbol_pos_local(SemaFn * fn) {
+SymbolPos symbol_pos_local(SemaFn * fn, LocalSymbolIndex index) {
 	return (SymbolPos) {
 		.local = true,
 		.fn = fn,
+		.index = index,
 	};
 }
 

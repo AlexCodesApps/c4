@@ -15,6 +15,7 @@ typedef struct SemaType SemaType;
 typedef struct SemaTypeNode SemaTypeNode;
 typedef struct SemaTypeHandleNode SemaTypeHandleNode;
 typedef struct SemaTypeAlias SemaTypeAlias;
+typedef struct SemaValue SemaValue;
 
 // The semantic analyzer is planned to have the various components in stages of declaration
 // These stages are transitioned lazily by need, but are forced evaluated before ending semantic analysis
@@ -128,7 +129,7 @@ typedef enum {
 	SEMA_VALUE_VAR_REF,
 } SemaValueType;
 
-typedef struct { // aka Comptime Expressions
+struct SemaValue { // aka Comptime Expressions
 	SemaValueType type;
 	union {
 		i32 i32;
@@ -144,7 +145,7 @@ typedef struct { // aka Comptime Expressions
 		SemaVar * var_ptr;
 		SemaVar * var_ref;
 	} as;
-} SemaValue;
+};
 
 typedef struct {
 	SemaExprNode * begin;
@@ -254,12 +255,14 @@ struct SemaStmtNode {
 };
 
 struct SemaFn {
-	SemaPass pass;
+	// maybe excessive bit packing...
+	SemaPass pass : 4;
 	enum {
 		SEMA_FN_UNEMMITED,
 		SEMA_FN_EMMITING,
 		SEMA_FN_EMMITED,
-	} emmiting; // to avoid excessive reimplementing
+	} emmiting : 2; // to avoid excessive reimplementing
+	bool is_const: 1;
 	struct {
 		SemaTypeFn * signature;
 		Str * args; // length is length of signature arg list
@@ -279,8 +282,9 @@ struct SemaTypeAlias {
 };
 
 struct SemaVar {
-	bool is_global  :  1;
-	usize visit_index;
+	bool is_global:  1;
+	bool is_const: 1;
+	u32 visit_index;
 	SemaPass pass;
 	union {
 		struct {
@@ -300,9 +304,13 @@ typedef enum {
 	SEMA_DECL_VAR,
 } SemaDeclType;
 
+typedef u32 LocalSymbolIndex;
+#define LOCAL_SYMBOL_INDEX_MAX UINT32_MAX
+
 typedef struct {
 	bool local;
 	SemaFn * fn;
+	LocalSymbolIndex index;
 } SymbolPos;
 
 typedef struct SemaDecl {
@@ -363,11 +371,11 @@ void sema_expr_init_unimplemented(SemaExpr * expr, SemaExpr1Type type);
 void sema_expr_init_with_ast(SemaExpr * expr, const Expr * ast);
 void sema_stmt_init(SemaStmt * stmt, SemaStmtType type);
 void sema_var_init_with_ast(SemaVar * var, const Var * ast, bool global);
-void sema_var_init(SemaVar * var, SemaTypeHandle type, SemaExpr * opt_expr, bool global);
-void sema_fn_init(SemaFn * fn, SemaTypeFn * sig, Str * args);
+void sema_var_init(SemaVar * var, SemaTypeHandle type, SemaExpr * opt_expr, bool global, bool is_const);
+void sema_fn_init(SemaFn * fn, SemaTypeFn * sig, Str * args, bool is_const);
 void sema_fn_init_with_ast(SemaFn * fn, const Fn * ast);
 SymbolPos symbol_pos_global(void);
-SymbolPos symbol_pos_local(SemaFn * fn);
+SymbolPos symbol_pos_local(SemaFn * fn, LocalSymbolIndex index);
 void sema_decl_init(SemaDecl * decl, SemaDeclType type, SymbolPos pos, Str iden);
 
 // mostly ctx functions
@@ -397,7 +405,6 @@ ExprEvalResult ensure_expr_is_implemented(SemaCtx * ctx, VisitorState visitor, S
 bool ensure_var_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaVar * var);
 bool ensure_fn_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaFn * fn);
 bool ensure_decl_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaDecl * decl);
-bool run_implemented_fn(SemaCtx * ctx, VisitorState visitor, SemaFn * fn, SemaValue * out); // the dream
 
 SemaType * sema_type_from_interned_fn(SemaTypeFn * fn);
 void sema_env_init_push_fn_blk_env(SemaCtx * ctx, SemaEnv * env, SemaType * return_type);

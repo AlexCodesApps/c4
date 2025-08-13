@@ -153,6 +153,7 @@ typedef struct {
 	Type return_type;
 	const FnParamList * params;
 	StmtList body;
+	bool is_const;
 } Fn;
 
 typedef struct {
@@ -163,6 +164,7 @@ typedef struct {
 typedef struct {
 	bool init_with_expr : 1;
 	bool is_mut : 1;
+	bool is_const: 1;
 	Str iden;
 	Type type;
 	struct {

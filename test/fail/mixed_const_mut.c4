@@ -1,0 +1,3 @@
+const mut a: int = 10;
+const b: mut int = 20;
+const mut c: mut int = 30;

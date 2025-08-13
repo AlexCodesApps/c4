@@ -7,6 +7,7 @@ typedef struct SemaFn SemaFn;
 typedef struct SemaDecl SemaDecl;
 typedef struct SemaEnv SemaEnv;
 typedef struct SemaCtx SemaCtx;
+typedef struct SemaValue SemaValue;
 
 typedef usize SymbolID;
 
@@ -34,22 +35,5 @@ typedef struct {
 	usize capacity;
 } IrFn;
 
-typedef struct {
-	SemaDecl * original;
-	SymbolID id;
-	union {
-		IrFn fn;
-		struct {
-			u8 * layout;
-			usize size;
-		} cnst;
-	} as;
-} Symbol;
-
-typedef struct {
-	Symbol * syms;
-	usize sym_count;
-	SymbolID id_counter;
-} SymbolTable;
-
 bool emit_fn(SemaCtx * ctx, VisitorState visitor, SemaFn * fn);
+bool run_implemented_const_fn(SemaCtx * ctx, SemaFn * fn, SemaValue * out); // the dream

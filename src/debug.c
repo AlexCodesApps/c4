@@ -39,6 +39,8 @@ void dump_tokens(Str src) {
 				dump_token(&lexer, &token, s("*")); break;
 			case TOKEN_AMPERSAND:
 				dump_token(&lexer, &token, s("&")); break;
+			case TOKEN_CONST:
+				dump_token(&lexer, &token, s("CONST")); break;
 			case TOKEN_FN:
 				dump_token(&lexer, &token, s("FN")); break;
 			case TOKEN_LET:

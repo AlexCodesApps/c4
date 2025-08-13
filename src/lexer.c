@@ -125,6 +125,9 @@ static Token make_iden(Lexer * lexer, TokenIndex start) {
 		advance(lexer);
 	} while(is_alnum(peek(lexer)));
 	Str iden = span_lexer(lexer, start);
+	if (str_equal(iden, s("const"))) {
+		return make_token(lexer, start, TOKEN_CONST);
+	}
 	if (str_equal(iden, s("fn"))) {
 		return make_token(lexer, start, TOKEN_FN);
 	}

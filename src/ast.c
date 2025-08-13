@@ -7,7 +7,8 @@
 #define DECL_TOKENS \
 TOKEN_FN: \
 case TOKEN_TYPE: \
-case TOKEN_LET
+case TOKEN_LET: \
+case TOKEN_CONST
 
 const Expr poisoned_expr = { .type = EXPR_POISONED };
 const FnParamList poisoned_fn_param_list;
@@ -544,7 +545,7 @@ static void synchronize_fn_param_list(Parser * parser) {
 	}
 }
 
-static bool parse_fn(Parser * parser, Fn * out) {
+static bool parse_fn(Parser * parser, Fn * out, bool is_const) {
 	advance(parser); // 'fn'
 	Token iden_token;
 	if (!match_out(parser, TOKEN_IDEN, &iden_token)) {
@@ -610,6 +611,7 @@ static bool parse_fn(Parser * parser, Fn * out) {
 	out->return_type = return_type;
 	out->params = param_list;
 	out->body = body;
+	out->is_const = is_const;
 	return true;
 }
 
@@ -634,9 +636,10 @@ static bool parse_type_alias(Parser * parser, TypeAlias * out) {
 	return true;
 }
 
-static bool parse_var(Parser * parser, Var * out) {
-	advance(parser); // 'let'
+// 'let' or 'const' is preconsumed!
+static bool parse_var(Parser * parser, Var * out, bool is_const) {
 	out->is_mut = false;
+	out->is_const = is_const;
 	if (match(parser, TOKEN_MUT)) {
 		out->is_mut = true;
 	}
@@ -688,7 +691,7 @@ bool parse_decl(Parser * parser, Decl * out) {
 	TypeAlias alias;
 	switch (peek(parser)->type) {
 		case TOKEN_FN:
-			if (!parse_fn(parser, &fn)) {
+			if (!parse_fn(parser, &fn, false)) {
 				return false;
 			}
 			out->type = DECL_FN;
@@ -702,11 +705,36 @@ bool parse_decl(Parser * parser, Decl * out) {
 			out->as.alias = alias;
 			break;
 		case TOKEN_LET:
-			if (!parse_var(parser, &var)) {
+			advance(parser);
+			if (!parse_var(parser, &var, false)) {
 				return false;
 			}
 			out->type = DECL_VAR;
 			out->as.var = var;
+			break;
+		case TOKEN_CONST:
+			advance(parser);
+			switch (peek(parser)->type) {
+				case TOKEN_FN:
+					if (!parse_fn(parser, &fn, true)) {
+						return false;
+					}
+					out->type = DECL_FN;
+					out->as.fn = fn;
+					break;
+				case TOKEN_MUT:
+				case TOKEN_IDEN:
+					if (!parse_var(parser, &var, true)) {
+						return false;
+					}
+					out->type = DECL_VAR;
+					out->as.var = var;
+					break;
+				default:
+					// doesn't account for mut but that is an error in semantic analysis
+					expect_error(parser, "expected 'fn' or identifier");
+					return false;
+			}
 			break;
 		default:
 			expect_error(parser, "expected 'fn','type' or 'let'");
