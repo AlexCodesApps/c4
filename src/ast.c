@@ -1,6 +1,5 @@
 #include <inttypes.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include "include/ast.h"
 #include "include/utility.h"
 
@@ -12,6 +11,10 @@ case TOKEN_CONST
 
 const Expr poisoned_expr = { .type = EXPR_POISONED };
 const FnParamList poisoned_fn_param_list;
+
+_Noreturn static void parser_oom(Parser * parser) {
+	longjmp(parser->oom_handler, 1);
+}
 
 static bool parse_block(Parser * parser, StmtList * out);
 static bool parse_decl(Parser * parser, Decl * out);
@@ -203,7 +206,7 @@ static Expr expr_addr(Parser * parser) {
 	advance(parser); // '&'
 	Expr * next = vmem_arena_alloc(parser->arena, Expr);
 	if (!next) {
-		abort();
+		parser_oom(parser);
 	}
 	*next = parse_expr_precedence(parser, EXPR_PREC_PREFIX);
 	Expr expr;
@@ -253,7 +256,7 @@ static Expr expr_funcall(Parser * parser, Expr prefix) {
 			Expr expr = parse_expr(parser);
 			synchronize_expr_in_parens(parser);
 			if (!expr_list_push(parser->arena, &expr_list, expr)) {
-				abort();
+				parser_oom(parser);
 			}
 		} while (match(parser, TOKEN_COMMA));
 	}
@@ -263,7 +266,7 @@ static Expr expr_funcall(Parser * parser, Expr prefix) {
 	Expr new_expr;
 	Expr * fun = vmem_arena_alloc(parser->arena, Expr);
 	if (!fun) {
-		abort();
+		parser_oom(parser);
 	}
 	*fun = prefix;
 	new_expr.type = EXPR_FUNCALL;
@@ -276,6 +279,9 @@ static Expr expr_plus(Parser * parser, Expr prefix) {
 	advance(parser); // '+'
 	Expr * a = vmem_arena_alloc(parser->arena, Expr);
 	Expr * b = vmem_arena_alloc(parser->arena, Expr);
+	if (!a || !b) {
+		parser_oom(parser);
+	}
 	*a = prefix;
 	*b = parse_expr_precedence(parser, EXPR_PREC_FUNCALL);
 	Expr new_expr;
@@ -285,7 +291,7 @@ static Expr expr_plus(Parser * parser, Expr prefix) {
 	return new_expr;
 }
 
-static ExprParseRule expr_parse_rules[TOKEN_EOF] = {
+static ExprParseRule expr_parse_rules[TOKEN_EOF + 1] = {
 	[TOKEN_LPAREN]    = {expr_grouping, expr_funcall,    EXPR_PREC_FUNCALL},
 	[TOKEN_PLUS]      = {nullptr,       expr_plus,       EXPR_PREC_TERM   },
 	[TOKEN_AMPERSAND] = {expr_addr,     nullptr,         EXPR_PREC_NONE   },
@@ -300,16 +306,20 @@ static Expr parse_expr_precedence(Parser * parser, ExprPrecedence prec) {
 		expect_error(parser, "expected expression");
 		return poisoned_expr;
 	}
+	TokenIndex begin = src_span_start(parser);
 	Expr expr = rule->prefix(parser);
 	if (expr_is_poisoned(&expr)) {
 		return expr;
 	}
+	expr.span = src_span_end(parser, begin);
 	for (;;) {
 		ExprParseRule * rule = expr_parse_rules + peek(parser)->type;
 		if (prec > rule->prec) {
 			break;
 		}
+		TokenIndex begin = src_span_start(parser);
 		expr = rule->infix(parser, expr);
+		expr.span = src_span_end(parser, begin);
 		if (expr_is_poisoned(&expr)) {
 			return expr;
 		}
@@ -322,16 +332,17 @@ static Expr parse_expr(Parser * parser) {
 }
 
 static bool parse_type(Parser * parser, Type * out) {
+	TokenIndex begin = src_span_start(parser);
 	switch (peek(parser)->type) {
 		case TOKEN_VOID:
 			advance(parser);
 			out->type = TYPE_VOID;
-			return true;
+			break;
 		case TOKEN_IDEN:
 			out->type = TYPE_IDEN;
 			out->as.iden = lexer_token_str(&parser->lexer, peek(parser));
 			advance(parser);
-			return true;
+			break;
 		case TOKEN_FN:
 			advance(parser);
 			if (!expect(parser, TOKEN_LPAREN, "expected '('")) {
@@ -352,7 +363,7 @@ static bool parse_type(Parser * parser, Type * out) {
 						return false;
 					}
 					if (!type_list_push(parser->arena, &params, type)) {
-						abort();
+						parser_oom(parser);
 					}
 					if (!match(parser, TOKEN_COMMA)) {
 						break;
@@ -370,7 +381,7 @@ static bool parse_type(Parser * parser, Type * out) {
 			}
 			Type * return_type = vmem_arena_alloc(parser->arena, Type);
 			if (!return_type) {
-				abort();
+				parser_oom(parser);
 			}
 			if (!parse_type(parser, return_type)) {
 				return false;
@@ -378,47 +389,49 @@ static bool parse_type(Parser * parser, Type * out) {
 			out->type = TYPE_FN;
 			out->as.fn.return_type = return_type;
 			out->as.fn.params = params;
-			return true;
+			break;
 		case TOKEN_MUT:
 			advance(parser);
 			Type * mut = vmem_arena_alloc(parser->arena, Type);
 			if (!mut) {
-				abort();
+				parser_oom(parser);
 			}
 			if (!parse_type(parser, mut)) {
 				return false;
 			}
 			out->type = TYPE_MUT;
 			out->as.mut = mut;
-			return true;
+			break;
 		case TOKEN_STAR:
 			advance(parser);
 			Type * ptr = vmem_arena_alloc(parser->arena, Type);
 			if (!ptr) {
-				abort();
+				parser_oom(parser);
 			}
 			if (!parse_type(parser, ptr)) {
 				return false;
 			}
 			out->type = TYPE_PTR;
 			out->as.ptr = ptr;
-			return true;
+			break;
 		case TOKEN_AMPERSAND:
 			advance(parser);
 			ptr = vmem_arena_alloc(parser->arena, Type);
 			if (!ptr) {
-				abort();
+				parser_oom(parser);
 			}
 			if (!parse_type(parser, ptr)) {
 				return false;
 			}
 			out->type = TYPE_REF;
 			out->as.ref = ptr;
-			return true;
+			break;
 		default:
 			expect_error(parser, "expected type");
 			return false;
 	}
+	out->span = src_span_end(parser, begin);
+	return true;
 }
 
 static bool parse_stmt(Parser * parser, Stmt * out, bool allow_decls) {
@@ -459,7 +472,7 @@ static bool parse_stmt(Parser * parser, Stmt * out, bool allow_decls) {
 	    }
 		Decl * decl = vmem_arena_alloc(parser->arena, Decl);
 		if (!decl) {
-			abort();
+			parser_oom(parser);
 		}
 		if (!parse_decl(parser, decl)) {
 			return false;
@@ -519,7 +532,7 @@ static bool parse_block(Parser * parser, StmtList * out) {
 			continue;
 		}
 		if (!stmt_list_push(parser->arena, out, stmt)) {
-			abort();
+			parser_oom(parser);
 		}
 	}
 	return true;
@@ -557,7 +570,7 @@ static bool parse_fn(Parser * parser, Fn * out, bool is_const) {
 	}
 	auto param_list_alloc = vmem_arena_alloc(parser->arena, FnParamList);
 	if (!param_list_alloc) {
-		abort();
+		parser_oom(parser);
 	}
 	fn_param_list_init(param_list_alloc);
 	const FnParamList * param_list = param_list_alloc;
@@ -579,7 +592,7 @@ static bool parse_fn(Parser * parser, Fn * out, bool is_const) {
 				break;
 			}
 			if (!fn_param_list_push(parser->arena, param_list_alloc, param)) {
-				abort();
+				parser_oom(parser);
 			}
 		} while (match(parser, TOKEN_COMMA));
 	}
@@ -747,10 +760,15 @@ DeclList parser_run(Parser * parser) {
 	Decl decl;
 	DeclList list;
 	decl_list_init(&list);
+	if (setjmp(parser->oom_handler) != 0) {
+		fprintf(stderr, "fatal error: OOM\n");
+		parser_declare_error(parser);
+		return list;
+	}
 	while (!eof(parser)) {
 		if (parse_decl(parser, &decl)) {
 			if (!decl_list_push(parser->arena, &list, decl)) {
-				abort();
+				parser_oom(parser);
 			}
 		}
 		synchronize_decl(parser);

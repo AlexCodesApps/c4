@@ -2,6 +2,12 @@
 
 #include "lexer.h"
 #include "arena.h"
+#include <setjmp.h>
+
+typedef struct {
+	TokenIndex start;
+	TokenIndex end;
+} SrcSpan;
 
 typedef enum {
 	TYPE_VOID,
@@ -28,6 +34,7 @@ typedef struct {
 
 struct Type {
 	TypeType type;
+	SrcSpan span;
 	union {
 		Str iden;
 		TypeFn fn;
@@ -73,6 +80,7 @@ typedef struct {
 
 struct Expr {
 	ExprType type;
+	SrcSpan span;
 	union {
 		usize int_;
 		Str iden;
@@ -200,13 +208,9 @@ struct DeclNode {
 typedef DeclList Ast;
 
 typedef struct {
-	TokenIndex start;
-	TokenIndex end;
-} SrcSpan;
-
-typedef struct {
 	VMemArena * arena;
 	Lexer lexer;
+	jmp_buf oom_handler;
 	Token current;
 	Token next;
 	bool panic_mode : 1;
