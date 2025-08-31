@@ -8,7 +8,10 @@
 #define BREAKPOINT() asm("int3\n""nop\n") // not portable but program is borked anyways
 #define ZERO(ptr) memset(ptr, 0, sizeof(*(ptr)))
 #define UNREACHABLE() assert(false && "unreachable")
-#define TODO() assert(false && "todo")
+#define TODO(...) do { \
+	__VA_OPT__(fprintf(stderr, "%s\n", __VA_ARGS__)); \
+	assert(false && "todo"); \
+} while (0)
 #ifdef __GNUC__
 #define UNLIKELY(...) __builtin_expect(!!(__VA_ARGS__), 0)
 #define LIKELY(...) __builtin_expect(!!(__VA_ARGS__), 1)
@@ -45,24 +48,3 @@ static inline bool align_ptr(void * ptr, usize alignment, void ** out) {
 #define KB(n) ((n) * 1024)
 #define MB(n) ((n) * 1024 * 1024)
 #define GB(n) ((n) * 1024 * 1024 * 1024)
-
-// shield your eyes
-#ifdef __clang__
-#define PRIVATE [[deprecated("private")]]
-#define PRIVATE_IMPL_BEGIN \
-	_Pragma("clang diagnostic push") \
-	_Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")
-#define PRIVATE_IMPL_END \
-	_Pragma("clang diagnostic pop")
-#elif defined(__GNUC__)
-#define PRIVATE [[deprecated("private")]]
-#define PRIVATE_IMPL_BEGIN \
-	_Pragma("GCC diagnostic push") \
-	_Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")
-#define PRIVATE_IMPL_END \
-	_Pragma("GCC diagnostic pop")
-#else
-#define PRIVATE
-#define PRIVATE_IMPL_BEGIN
-#define PRIVATE_IMPL_END
-#endif

@@ -123,7 +123,7 @@ static Str span_lexer(Lexer * lexer, TokenIndex start) {
 static Token make_iden(Lexer * lexer, TokenIndex start) {
 	do {
 		advance(lexer);
-	} while(is_alnum(peek(lexer)));
+	} while(is_alnum(peek(lexer)) || peek(lexer) == '_');
 	Str iden = span_lexer(lexer, start);
 	if (str_equal(iden, s("const"))) {
 		return make_token(lexer, start, TOKEN_CONST);

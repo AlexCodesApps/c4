@@ -177,7 +177,6 @@ static Expr expr_int(Parser * parser) {
 			fputc('\n', stderr);
 			return poisoned_expr;
 		}
-		accum = accum * 10 + (usize)(str.data[i] - '0');
 	}
 	advance(parser);
 	Expr expr;

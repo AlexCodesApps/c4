@@ -338,8 +338,7 @@ SemaTypeHandle sema_ctx_lookup_type(SemaCtx * ctx, Str iden, ReportError report_
 	return null_sema_type_handle;
 }
 
-// Callers should handle non const variable in const function edge case
-SemaVar * sema_ctx_lookup_var(SemaCtx * ctx, Str iden, ReportError report_error) {
+SemaVar * sema_ctx_lookup_var_with_pos(SemaCtx * ctx, Str iden, ReportError report_error, SymbolPos * out_pos) {
 	SemaEnv * env = ctx->env;
 	do {
 		for (usize i = 0; i < env->decls.size; ++i) {
@@ -349,6 +348,9 @@ SemaVar * sema_ctx_lookup_var(SemaCtx * ctx, Str iden, ReportError report_error)
 			}
 			switch (decl->type) {
 				case SEMA_DECL_VAR:
+					if (out_pos) {
+						*out_pos = decl->pos;
+					}
 					return &decl->as.var;
 				case SEMA_DECL_TYPE_ALIAS:
 				case SEMA_DECL_FN:
@@ -366,7 +368,12 @@ SemaVar * sema_ctx_lookup_var(SemaCtx * ctx, Str iden, ReportError report_error)
 	return nullptr;
 }
 
-SemaFn * sema_ctx_lookup_fn(SemaCtx * ctx, Str iden, ReportError report_error) {
+// Callers should handle non const variable in const function edge case
+SemaVar * sema_ctx_lookup_var(SemaCtx * ctx, Str iden, ReportError report_error) {
+	return sema_ctx_lookup_var_with_pos(ctx, iden, report_error, nullptr);
+}
+
+SemaFn * sema_ctx_lookup_fn_with_pos(SemaCtx * ctx, Str iden, ReportError report_error, SymbolPos * out_pos) {
 	SemaEnv * env = ctx->env;
 	do {
 		for (usize i = 0; i < env->decls.size; ++i) {
@@ -376,6 +383,9 @@ SemaFn * sema_ctx_lookup_fn(SemaCtx * ctx, Str iden, ReportError report_error) {
 			}
 			switch (decl->type) {
 				case SEMA_DECL_FN:
+					if (out_pos) {
+						*out_pos = decl->pos;
+					}
 					return &decl->as.fn;
 				case SEMA_DECL_VAR:
 				case SEMA_DECL_TYPE_ALIAS:
@@ -391,6 +401,10 @@ SemaFn * sema_ctx_lookup_fn(SemaCtx * ctx, Str iden, ReportError report_error) {
 		fprintf(stderr, "error: unknown identifier '%.*s'\n", (int)iden.size, iden.data);
 	}
 	return nullptr;
+}
+
+SemaFn * sema_ctx_lookup_fn(SemaCtx * ctx, Str iden, ReportError report_error) {
+	return sema_ctx_lookup_fn_with_pos(ctx, iden, report_error, nullptr);
 }
 
 static SemaType * sema_type_intern_ptr_to(SemaCtx * ctx, SemaTypeHandle type) {
@@ -600,6 +614,33 @@ bool ensure_type_alias_is_sema(SemaCtx * ctx, SemaTypeAlias * alias) {
 	return declare_ast_type_alias(ctx, alias);
 }
 
+static bool ensure_var_is_accessible(SemaCtx * ctx, SemaVar * var, SymbolPos pos, ReportError report_error) {
+	SemaFn * current_fn = ctx->env->type == SEMA_ENV_FN_BLK ? ctx->env->as.fn.ptr : nullptr;
+	if (var->is_const) {
+		return true;
+	}
+	if (!pos.local) {
+		if (!current_fn) { // getting address is legal? TODO
+			return true;
+		}
+		if (current_fn->is_const) {
+			if (report_error == DO_REPORT_ERROR) {
+				fprintf(stderr, "error: non-constant global variable used in const fn scope\n");
+			}
+			return false;
+		}
+		return true;
+	}
+	if (pos.fn == current_fn) {
+		return true;
+	}
+	if (report_error == DO_REPORT_ERROR) {
+		fprintf(stderr, "error: closures aren't supported\n");
+		return false;
+	}
+	return true;
+}
+
 bool ensure_expr_is_sema(SemaCtx * ctx, SemaExpr * expr) {
 	if (expr->pass == SEMA_PASS_ERROR) {
 		return false;
@@ -624,40 +665,31 @@ bool ensure_expr_is_sema(SemaCtx * ctx, SemaExpr * expr) {
 	case EXPR_NULLPTR:
 		sema_expr_init_unimplemented(expr, SEMA_EXPR1_NULLPTR);
 		break;
-	case EXPR_IDEN:
-		fn = sema_ctx_lookup_fn(ctx, ast->as.iden, DONT_REPORT_ERROR);
-		if (fn) {
-			if (!fn->is_const &&
-				ctx->env->type == SEMA_ENV_FN_BLK &&
-				ctx->env->as.fn.ptr->is_const) {
-				fprintf(stderr, "error: non-constant variable used in const function");
+	case EXPR_IDEN: {
+			SymbolPos pos;
+			fn = sema_ctx_lookup_fn_with_pos(ctx, ast->as.iden, DONT_REPORT_ERROR, &pos);
+			if (fn) {
+				if (!ensure_fn_is_sema(ctx, fn)) {
+					goto error;
+				}
+				sema_expr_init_unimplemented(expr, SEMA_EXPR1_FN);
+				expr->as.sema1.fn = fn;
+				break;
+			}
+			var = sema_ctx_lookup_var_with_pos(ctx, ast->as.iden, DO_REPORT_ERROR, &pos);
+			if (!var) {
 				goto error;
 			}
-			if (!ensure_fn_is_sema(ctx, fn)) {
+			if (!ensure_var_is_accessible(ctx, var, pos, DO_REPORT_ERROR)) {
 				goto error;
 			}
-			sema_expr_init_unimplemented(expr, SEMA_EXPR1_FN);
-			expr->as.sema1.fn = fn;
+			if (!ensure_var_is_sema(ctx, var)) {
+				goto error;
+			}
+			sema_expr_init_unimplemented(expr, SEMA_EXPR1_VAR);
+			expr->as.sema1.var = var;
 			break;
 		}
-		var = sema_ctx_lookup_var(ctx, ast->as.iden, DO_REPORT_ERROR);
-		if (!var) {
-			goto error;
-		}
-		if (!var->is_const) {
-			if (ctx->env->type == SEMA_ENV_FN_BLK &&
-				ctx->env->as.fn.ptr->is_const) {
-				fprintf(stderr, "error: non-constant variable used in const function");
-				goto error;
-			}
-			// TODO: properly error on "closure" lookups
-		}
-		if (!ensure_var_is_sema(ctx, var)) {
-			goto error;
-		}
-		sema_expr_init_unimplemented(expr, SEMA_EXPR1_VAR);
-		expr->as.sema1.var = var;
-		break;
 	case EXPR_PLUS:
 		a = vmem_arena_alloc(ctx->arena, SemaExpr);
 		b = vmem_arena_alloc(ctx->arena, SemaExpr);
@@ -1812,7 +1844,7 @@ bool ensure_fn_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) 
 	bool ok = true;
 	while (reduction_worklist.begin) {
 		SemaFn * fn = fn_worklist_pop_with_ctx(ctx, &reduction_worklist);
-		if (!reduce_implemented_fn(ctx, fn)) {
+		if (!reduce_implemented_fn(ctx, fn) && fn->is_const) {
 			fn->pass = SEMA_FN_PASS_ERROR;
 			ok = false;
 		}

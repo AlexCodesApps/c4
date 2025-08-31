@@ -1,5 +1,6 @@
 - [ ] Support const fns
     - [ ] Design and implement fn ir
+    - [ ] Make sure assignment in const ctx errors against global variable assignment / not against address grabbing
     I have done some planning and I realize that
     const functions don't actually ensure that everything
     in its body is reduced on one pass, and that the IR
@@ -27,3 +28,7 @@
 - [X] Reimplement intern type with deduplicating complete types in mind
 - [ ] Implement addition with ptr offset support
 - [ ] Implement overflow checking and handling
+- [ ] Make sure variable shadowing works correctly
+
+NOTES:
+- Functions don't need scope checking, at least until lambdas...

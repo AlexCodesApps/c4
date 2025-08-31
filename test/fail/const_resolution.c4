@@ -1,0 +1,12 @@
+let A: int = 10;
+
+const fn cant_access(): int {
+	return A;
+}
+
+const fn cant_access_closure(a: int): int {
+	const fn inner(): int {
+		return a;
+	}
+	return inner();
+}

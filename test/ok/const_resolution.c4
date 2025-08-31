@@ -1,0 +1,7 @@
+const fn outer(param: int): int {
+	const FOO: int = 10;
+	const fn inner(): int {
+		return FOO;
+	}
+	return inner() + param;
+}

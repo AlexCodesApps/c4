@@ -1,0 +1,7 @@
+fn foo(): int {
+	let param: int = 10;
+	fn bar(): int {
+		return param;
+	}
+	return bar();
+}
