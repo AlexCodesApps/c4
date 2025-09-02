@@ -1,232 +1,67 @@
 #pragma once
-
+#include "common.h"
 #include "lexer.h"
-#include "arena.h"
-#include <setjmp.h>
-
-typedef struct {
-	TokenIndex start;
-	TokenIndex end;
-} SrcSpan;
-
-typedef enum {
-	TYPE_VOID,
-	TYPE_IDEN,
-	TYPE_FN,
-	TYPE_MUT,
-	TYPE_PTR,
-	TYPE_REF,
-} TypeType;
 
 typedef struct Type Type;
-typedef struct TypeNode TypeNode;
-typedef struct Decl Decl;
-typedef struct DeclNode DeclNode;
-typedef struct {
-	TypeNode * begin;
-	TypeNode * end;
-} TypeList;
 
-typedef struct {
-	Type * return_type;
-	TypeList params;
-} TypeFn;
+typedef enum {
+	TYPE_PASS_ERROR,
+	TYPE_PASS_PARSED,
+} TypePass;
+
+typedef enum {
+	TYPE_PTR,
+	TYPE_REF,
+	TYPE_IDEN,
+} TypeType;
 
 struct Type {
+	TypePass pass;
 	TypeType type;
-	SrcSpan span;
 	union {
-		Str iden;
-		TypeFn fn;
-		Type * mut;
 		Type * ptr;
 		Type * ref;
+		Str iden;
 	} as;
 };
 
-struct TypeNode {
-	Type type;
-	TypeNode * next;
-};
-
-typedef enum {
-	EXPR_POISONED,
-	EXPR_INT,
-	EXPR_NULLPTR,
-	EXPR_IDEN,
-	EXPR_FUNCALL,
-	EXPR_PLUS,
-	EXPR_ADDR,
-} ExprType;
-
-typedef struct Expr Expr;
-typedef struct ExprNode ExprNode;
-
 typedef struct {
-	ExprNode * begin;
-	ExprNode * end;
-	usize count;
-} ExprList;
-
-typedef struct {
-	const Expr * fun;
-	ExprList args;
-} ExprFuncall;
-
-typedef struct {
-	const Expr * a;
-	const Expr * b;
-} ExprPlus;
-
-struct Expr {
-	ExprType type;
+	Str iden;
 	SrcSpan span;
-	union {
-		usize int_;
-		Str iden;
-		ExprPlus plus;
-		ExprFuncall funcall;
-		Expr * addr;
-	} as;
-};
 
-extern const Expr poisoned_expr;
-
-struct ExprNode {
-	Expr expr;
-	ExprNode * next;
-};
-
-typedef enum {
-	STMT_SEMICOLON,
-	STMT_RETURN,
-	STMT_EXPR,
-	STMT_BLOCK,
-	STMT_DECL,
-} StmtType;
-
-typedef struct {
-	bool has_expr;
-	struct {
-		Expr expr;
-	} unwrap;
-} StmtReturn;
-
-typedef struct StmtNode StmtNode;
-typedef struct {
-	StmtNode * begin;
-	StmtNode * end;
-} StmtList;
-
-typedef struct {
-	StmtType type;
-	union {
-		StmtReturn return_;
-		Expr expr;
-		StmtList block;
-		Decl * decl;
-	} as;
-} Stmt;
-
-struct StmtNode {
-	Stmt stmt;
-	StmtNode * next;
-};
-
-typedef struct {
-	bool has_iden;
-	struct {
-		Str iden;
-	} unwrap;
-	Type type;
-} FnParam;
-
-typedef struct FnParamNode FnParamNode;
-
-typedef struct {
-	FnParamNode * begin;
-	FnParamNode * end;
-	usize count;
-} FnParamList;
-
-extern const FnParamList poisoned_fn_param_list;
-
-struct FnParamNode {
-	FnParam param;
-	FnParamNode * next;
-};
-
-typedef struct {
-	Str iden;
-	Type return_type;
-	const FnParamList * params;
-	StmtList body;
-	bool is_const;
-} Fn;
-
-typedef struct {
-	Str iden;
-	Type type;
 } TypeAlias;
 
+typedef enum {
+	VAR_PASS_ERROR,
+	VAR_PASS_PARSED,
+} VarPass;
+
 typedef struct {
-	bool init_with_expr : 1;
-	bool is_mut : 1;
-	bool is_const: 1;
-	Str iden;
+	VarPass pass;
+	SrcSpan span;
+	bool is_const : 1;
+	bool is_mut: 1;
 	Type type;
-	struct {
-		Expr expr;
-	} unwrap;
 } Var;
 
 typedef enum {
+	DECL_ERROR,
 	DECL_FN,
-	DECL_TYPE_ALIAS,
 	DECL_VAR,
+	DECL_TYPE_ALIAS,
 } DeclType;
 
 typedef struct {
-	DeclNode * begin;
-	DeclNode * end;
-} DeclList;
-
-struct Decl {
 	DeclType type;
-	union {
-		TypeAlias alias;
-		Fn fn;
+	Str iden;
+	struct {
 		Var var;
 	} as;
-};
-
-struct DeclNode {
-	Decl decl;
-	DeclNode * next;
-};
-
-typedef DeclList Ast;
+} Decl;
 
 typedef struct {
-	VMemArena * arena;
-	Lexer lexer;
-	jmp_buf oom_handler;
-	Token current;
-	Token next;
-	bool panic_mode : 1;
-	bool had_error  : 1;
-} Parser;
+	Decl ** data;
+	usize size;
+} Ast;
 
-void parser_init(Parser * parser, Str src, VMemArena * arena);
-Ast parser_run(Parser * parser);
-
-void type_list_init(TypeList * list);
-bool type_list_push(VMemArena * arena, TypeList * list, Type type);
-void expr_list_init(ExprList * list);
-bool expr_list_push(VMemArena * arena, ExprList * list, Expr expr);
-void stmt_list_init(StmtList * list);
-bool stmt_list_push(VMemArena * arena, StmtList * list, Stmt stmt);
-void fn_param_list_init(FnParamList * list);
-bool fn_param_list_push(VMemArena * arena, FnParamList * list, FnParam param);
-void decl_list_init(DeclList * list);
-bool decl_list_push(VMemArena * arena, DeclList * list, Decl decl);
+Decl * ast_at(Ast * ast, usize index);

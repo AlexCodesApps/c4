@@ -1,5 +1,3 @@
-#include "src/include/ast.h"
-#include "src/include/sema.h"
 #include "src/include/utility.h"
 #include "src/include/debug.h" // IWYU pragma: keep
 #include <stdio.h>
@@ -41,27 +39,7 @@ cleanup:
 }
 
 bool process_src(VMemArena * arena, Str src) {
-	// dump_tokens(src);
-	Parser parser;
-	parser_init(&parser, src, arena);
-	Ast ast = parser_run(&parser);
-	bool had_error = parser.had_error;
-	fputs(had_error ? "parse failed\n" : "parse succeded\n", stderr);
-	// dump_ast(ast);
-	SemaTypeInternTable type_table;
-	SemaEnv env;
-	SemaCtx ctx;
-	sema_type_intern_table_init(&type_table);
-	sema_env_init(&env);
-	sema_ctx_init(&ctx, arena, &type_table, &env);
-	bool sema_result = sema_analyze_ast(&ctx, ast);
-	if (!sema_result) {
-		fprintf(stderr, "semantic analysis failed\n");
-		return false;
-	}
-	fprintf(stderr, "semantic analysis succeeded\n");
-	// lower smhow
-	return !had_error;
+	TODO();
 }
 
 int process_path(VMemArena * arena, const char * path) {

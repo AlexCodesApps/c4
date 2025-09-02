@@ -1,5 +1,6 @@
 #pragma once
 #include "ints.h"
+#include "lexer.h"
 
 typedef struct {
 	u32 visit_id; // keeps track of the next available visit node
@@ -8,3 +9,8 @@ typedef struct {
 	u32 last_fn_id; // keep track of the last const function running (any cycle detection with it in a type is an immedate failure
 	u32 recursion_count; // keeps track of the number of const functions in flight
 } VisitorState;
+
+typedef struct {
+	TokenIndex begin;
+	TokenIndex end;
+} SrcSpan;
