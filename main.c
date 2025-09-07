@@ -7,11 +7,11 @@
 #include <stdlib.h>
 
 bool read_file(VMemArena * arena, const char * path, Str * out) {
-	bool status = false;
-	FILE * file = fopen(path, "r");
-	if (!file) {
-		return false;
-	}
+    bool status = false;
+    FILE * file = fopen(path, "r");
+    if (!file) {
+        return false;
+    }
 	if (fseek(file, 0, SEEK_END) != 0) {
 		goto cleanup;
 	}
@@ -41,7 +41,7 @@ cleanup:
 }
 
 bool process_src(VMemArena * arena, Str src) {
-	// dump_tokens(src);
+	dump_tokens(src);
 	Parser parser;
 	parser_init(&parser, src, arena);
 	Ast ast = parser_run(&parser);

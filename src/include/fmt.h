@@ -4,8 +4,8 @@
 #include "ints.h"
 #include "str.h"
 
-typedef bool(*FmtWriteFn)(void * ctx, const void * data, usize size);
-typedef bool(*FmtFlushFn)(void * ctx);
+typedef bool (*FmtWriteFn)(void * ctx, const void * data, usize size);
+typedef bool (*FmtFlushFn)(void * ctx);
 
 typedef struct {
 	FmtWriteFn writefn;

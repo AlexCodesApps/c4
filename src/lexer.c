@@ -10,17 +10,11 @@ Lexer lexer_new(Str src) {
 	return lexer;
 }
 
-usize lexer_row(const Lexer * lexer) {
-	return lexer->row;
-}
+usize lexer_row(const Lexer * lexer) { return lexer->row; }
 
-usize lexer_col(const Lexer * lexer) {
-	return lexer->col;
-}
+usize lexer_col(const Lexer * lexer) { return lexer->col; }
 
-bool lexer_eof(const Lexer * lexer) {
-	return lexer->index >= lexer->src.size;
-}
+bool lexer_eof(const Lexer * lexer) { return lexer->index >= lexer->src.size; }
 
 Str lexer_token_str(const Lexer * lexer, const Token * token) {
 	return str_new(lexer->src.data + token->start, token->end - token->start);
@@ -54,26 +48,26 @@ static char skip_ws(Lexer * lexer) {
 	for (;;) {
 		char c = peek(lexer);
 		switch (c) {
-			case '\n':
-				lexer->col = 1;
-				++lexer->row;
-				[[fallthrough]];
-			case ' ':
-			case '\t':
-			case '\r':
-				advance(lexer);
-				break;
-			case '/':
-				if (peek1(lexer) == '/') {
-					advance2(lexer);
-					while ((c = peek(lexer)) != '\0' && c != '\n') {
-						advance(lexer);
-					}
-					break;
+		case '\n':
+			lexer->col = 1;
+			++lexer->row;
+			[[fallthrough]];
+		case ' ':
+		case '\t':
+		case '\r':
+			advance(lexer);
+			break;
+		case '/':
+			if (peek1(lexer) == '/') {
+				advance2(lexer);
+				while ((c = peek(lexer)) != '\0' && c != '\n') {
+					advance(lexer);
 				}
-				[[fallthrough]];
-			default:
-				return c;
+				break;
+			}
+			[[fallthrough]];
+		default:
+			return c;
 		}
 	}
 }
@@ -92,22 +86,15 @@ static Token make_token(Lexer * lexer, TokenIndex start, TokenType type) {
 	return token;
 }
 
-static inline bool is_digit(char c) {
-	return '0' <= c && c <= '9';
-}
+static inline bool is_digit(char c) { return '0' <= c && c <= '9'; }
 
 static inline bool is_alpha(char c) {
-	return ('a' <= c && c <= 'z')
-		|| ('A' <= c && c <= 'Z');
+	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z');
 }
 
-static inline bool is_alnum(char c) {
-	return is_digit(c) || is_alpha(c);
-}
+static inline bool is_alnum(char c) { return is_digit(c) || is_alpha(c); }
 
-static inline bool is_start_of_iden(char c) {
-	return c == '_'|| is_alnum(c);
-}
+static inline bool is_start_of_iden(char c) { return c == '_' || is_alnum(c); }
 
 static Token make_number(Lexer * lexer, TokenIndex start) {
 	do {
@@ -123,7 +110,7 @@ static Str span_lexer(Lexer * lexer, TokenIndex start) {
 static Token make_iden(Lexer * lexer, TokenIndex start) {
 	do {
 		advance(lexer);
-	} while(is_alnum(peek(lexer)) || peek(lexer) == '_');
+	} while (is_alnum(peek(lexer)) || peek(lexer) == '_');
 	Str iden = span_lexer(lexer, start);
 	if (str_equal(iden, s("const"))) {
 		return make_token(lexer, start, TOKEN_CONST);

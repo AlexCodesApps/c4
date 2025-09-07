@@ -2,16 +2,14 @@
 #include "include/arena.h"
 #include "include/utility.h"
 #include <assert.h>
+#include <stdbit.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <stdbit.h>
 
 static SemaTypeHandle null_sema_type_handle = {0};
 
 SemaTypeHandle sema_type_handle_from_ptr(SemaType * type) {
-	SemaTypeHandle handle = {
-		.type = type
-	};
+	SemaTypeHandle handle = {.type = type};
 	return handle;
 }
 
@@ -26,7 +24,7 @@ static bool sema_type_handle_eq(SemaTypeHandle a, SemaTypeHandle b) {
 }
 
 static VisitorState new_visitor_state(void) {
-	return (VisitorState) {
+	return (VisitorState){
 		.last_fn_id = 0,
 		.last_indirection_id = 0,
 		.last_opaque_id = 0,
@@ -40,9 +38,9 @@ void sema_type_intern_table_init(SemaTypeInternTable * table) {
 	sema_type_init_uninterned(&table->void_ptr_type, SEMA_TYPE_PTR);
 	table->void_ptr_type.as.ptr = sema_type_handle_from_ptr(&table->void_type);
 	table->void_ptr_type.as.ptr.is_mut = true;
-				// TIL that the type of nullptr is actually a *mut void,
-				// ... or its own type. but that machinery
-				// is probably unnessecary
+	// TIL that the type of nullptr is actually a *mut void,
+	// ... or its own type. but that machinery
+	// is probably unnessecary
 	table->tpnl_free_list = nullptr;
 	sema_type_list_init(&table->types);
 	sema_type_handle_list_init(&table->complete_types);
@@ -89,9 +87,7 @@ void sema_env_init_push_fn_blk_env(SemaCtx * ctx, SemaEnv * env) {
 	ctx->env = env;
 }
 
-void sema_env_pop(SemaCtx * ctx) {
-	ctx->env = ctx->env->parent;
-}
+void sema_env_pop(SemaCtx * ctx) { ctx->env = ctx->env->parent; }
 
 bool sema_ctx_is_global_scope(SemaCtx * ctx) {
 	return ctx->env->type == SEMA_ENV_MOD;
@@ -107,7 +103,8 @@ SemaType * sema_type_from_interned_fn(SemaTypeFn * fn) {
 	return ptr;
 }
 
-void sema_ctx_init(SemaCtx * ctx, VMemArena * arena, SemaTypeInternTable * table, SemaEnv * env) {
+void sema_ctx_init(SemaCtx * ctx, VMemArena * arena,
+				   SemaTypeInternTable * table, SemaEnv * env) {
 	ctx->env = env;
 	ctx->root = env;
 	ctx->arena = arena;
@@ -115,11 +112,11 @@ void sema_ctx_init(SemaCtx * ctx, VMemArena * arena, SemaTypeInternTable * table
 	ZERO(&ctx->worklist);
 }
 
-_Noreturn void sema_ctx_oom(SemaCtx * ctx) {
-	longjmp(ctx->oom_handler, 1);
-}
+_Noreturn void sema_ctx_oom(SemaCtx * ctx) { longjmp(ctx->oom_handler, 1); }
 
-static bool sema_type_handle_list_push_with_ctx(SemaCtx * ctx, SemaTypeHandleList * list, SemaTypeHandle type) {
+static bool sema_type_handle_list_push_with_ctx(SemaCtx * ctx,
+												SemaTypeHandleList * list,
+												SemaTypeHandle type) {
 	SemaTypeHandleNode * node;
 	if (ctx->table->tpnl_free_list) {
 		node = ctx->table->tpnl_free_list;
@@ -134,7 +131,8 @@ static bool sema_type_handle_list_push_with_ctx(SemaCtx * ctx, SemaTypeHandleLis
 	return true;
 }
 
-static void sema_type_handle_list_free_with_ctx(SemaCtx * ctx, SemaTypeHandleList * list) {
+static void sema_type_handle_list_free_with_ctx(SemaCtx * ctx,
+												SemaTypeHandleList * list) {
 	if (!list->end) {
 		return;
 	}
@@ -153,13 +151,10 @@ static bool _check_fn(SemaType * type, SemaType * type2) {
 	if (fn->params.count != type->as.fn.params.count) {
 		return false;
 	}
-	for (SemaTypeHandleNode *
-		 node = fn->params.begin,
-		 *node2 = type->as.fn.params.begin;
-		 node;
-		 node = node->next, node2 = node2->next) {
-		if (!sema_type_handle_eq(node->type,
-					 node2->type)) {
+	for (SemaTypeHandleNode *node = fn->params.begin,
+							*node2 = type->as.fn.params.begin;
+		 node; node = node->next, node2 = node2->next) {
+		if (!sema_type_handle_eq(node->type, node2->type)) {
 			return false;
 		}
 	}
@@ -170,76 +165,81 @@ static SemaType * sema_type_intern(SemaCtx * ctx, SemaType type) {
 	SemaTypeInternTable * table = ctx->table;
 	SemaType * ptype;
 	switch (type.type) {
-		case SEMA_TYPE_VOID:
-			return &table->void_type;
-		case SEMA_TYPE_I32:
-			return &table->i32_type;
-		case SEMA_TYPE_FN:
-			for (SemaTypeHandleNode * node = table->complete_types.begin; node; node = node->next) {
-				if (!_check_fn(&type, node->type.type)) {
-					continue;
-				}
-				sema_type_handle_list_free_with_ctx(ctx, &type.as.fn.params);
-				return node->type.type;
+	case SEMA_TYPE_VOID:
+		return &table->void_type;
+	case SEMA_TYPE_I32:
+		return &table->i32_type;
+	case SEMA_TYPE_FN:
+		for (SemaTypeHandleNode * node = table->complete_types.begin; node;
+			 node = node->next) {
+			if (!_check_fn(&type, node->type.type)) {
+				continue;
 			}
-			for (SemaTypeNode * node = table->types.begin; node; node = node->next) {
-				if (!_check_fn(&type, &node->type)) {
-					continue;
-				}
-				// try attach param nodes to free list
-				sema_type_handle_list_free_with_ctx(ctx, &type.as.fn.params);
+			sema_type_handle_list_free_with_ctx(ctx, &type.as.fn.params);
+			return node->type.type;
+		}
+		for (SemaTypeNode * node = table->types.begin; node;
+			 node = node->next) {
+			if (!_check_fn(&type, &node->type)) {
+				continue;
+			}
+			// try attach param nodes to free list
+			sema_type_handle_list_free_with_ctx(ctx, &type.as.fn.params);
+			return &node->type;
+		}
+		ptype = sema_type_list_push_front(ctx->arena, &table->types, type);
+		if (!ptype) {
+			sema_ctx_oom(ctx);
+		}
+		return ptype;
+	case SEMA_TYPE_TYPE_ALIAS:
+		for (SemaTypeNode * node = table->types.begin; node;
+			 node = node->next) {
+			if (node->type.type != SEMA_TYPE_TYPE_ALIAS) {
+				continue;
+			}
+			if (node->type.as.alias == type.as.alias) {
 				return &node->type;
 			}
-			ptype = sema_type_list_push_front(ctx->arena, &table->types, type);
-			if (!ptype) {
-				sema_ctx_oom(ctx);
+		}
+		ptype = sema_type_list_push_front(ctx->arena, &table->types, type);
+		if (!ptype) {
+			sema_ctx_oom(ctx);
+		}
+		return ptype;
+	case SEMA_TYPE_PTR:
+		if (sema_type_handle_eq(type.as.ptr, table->void_ptr_type.as.ptr)) {
+			return &table->void_ptr_type;
+		}
+		for (SemaTypeNode * node = table->types.begin; node;
+			 node = node->next) {
+			if (node->type.type != SEMA_TYPE_PTR) {
+				continue;
 			}
-			return ptype;
-		case SEMA_TYPE_TYPE_ALIAS:
-			for (SemaTypeNode * node = table->types.begin; node; node = node->next) {
-				if (node->type.type != SEMA_TYPE_TYPE_ALIAS) {
-					continue;
-				}
-				if (node->type.as.alias == type.as.alias) {
-					return &node->type;
-				}
+			if (sema_type_handle_eq(node->type.as.ptr, type.as.ptr)) {
+				return &node->type;
 			}
-			ptype = sema_type_list_push_front(ctx->arena, &table->types, type);
-			if (!ptype) {
-				sema_ctx_oom(ctx);
+		}
+		ptype = sema_type_list_push_front(ctx->arena, &table->types, type);
+		if (!ptype) {
+			sema_ctx_oom(ctx);
+		}
+		return ptype;
+	case SEMA_TYPE_REF:
+		for (SemaTypeNode * node = table->types.begin; node;
+			 node = node->next) {
+			if (node->type.type != SEMA_TYPE_REF) {
+				continue;
 			}
-			return ptype;
-		case SEMA_TYPE_PTR:
-			if (sema_type_handle_eq(type.as.ptr, table->void_ptr_type.as.ptr)) {
-				return &table->void_ptr_type;
+			if (sema_type_handle_eq(node->type.as.ref, type.as.ref)) {
+				return &node->type;
 			}
-			for (SemaTypeNode * node = table->types.begin; node; node = node->next) {
-				if (node->type.type != SEMA_TYPE_PTR) {
-					continue;
-				}
-				if (sema_type_handle_eq(node->type.as.ptr, type.as.ptr)) {
-					return &node->type;
-				}
-			}
-			ptype = sema_type_list_push_front(ctx->arena, &table->types, type);
-			if (!ptype) {
-				sema_ctx_oom(ctx);
-			}
-			return ptype;
-		case SEMA_TYPE_REF:
-			for (SemaTypeNode * node = table->types.begin; node; node = node->next) {
-				if (node->type.type != SEMA_TYPE_REF) {
-					continue;
-				}
-				if (sema_type_handle_eq(node->type.as.ref, type.as.ref)) {
-					return &node->type;
-				}
-			}
-			ptype = sema_type_list_push_front(ctx->arena, &table->types, type);
-			if (!ptype) {
-				sema_ctx_oom(ctx);
-			}
-			return ptype;
+		}
+		ptype = sema_type_list_push_front(ctx->arena, &table->types, type);
+		if (!ptype) {
+			sema_ctx_oom(ctx);
+		}
+		return ptype;
 	}
 	UNREACHABLE();
 }
@@ -251,7 +251,8 @@ SemaType * sema_type_dedup_implemented(SemaCtx * ctx, SemaType * type) {
 	}
 	SemaTypeHandleNode * node1;
 	SemaTypeHandleNode * node2;
-	for (auto node = ctx->table->complete_types.begin; node; node = node->next) {
+	for (auto node = ctx->table->complete_types.begin; node;
+		 node = node->next) {
 		SemaType * type2 = node->type.type;
 		if (type->type != type2->type) {
 			continue;
@@ -261,26 +262,30 @@ SemaType * sema_type_dedup_implemented(SemaCtx * ctx, SemaType * type) {
 		case SEMA_TYPE_I32:
 			return type2;
 		case SEMA_TYPE_PTR:
-			type->as.ptr.type = sema_type_dedup_implemented(ctx, type->as.ptr.type);
+			type->as.ptr.type =
+				sema_type_dedup_implemented(ctx, type->as.ptr.type);
 			if (sema_type_handle_eq(type->as.ptr, type2->as.ptr)) {
 				return type2;
 			}
 			break;
 		case SEMA_TYPE_REF:
-			type->as.ref.type = sema_type_dedup_implemented(ctx, type->as.ref.type);
+			type->as.ref.type =
+				sema_type_dedup_implemented(ctx, type->as.ref.type);
 			if (sema_type_handle_eq(type->as.ref, type2->as.ref)) {
 				return type2;
 			}
 			break;
 		case SEMA_TYPE_FN:
-			type->as.fn.return_type = sema_type_dedup_implemented(ctx, type->as.fn.return_type);
+			type->as.fn.return_type =
+				sema_type_dedup_implemented(ctx, type->as.fn.return_type);
 			if (type->as.fn.params.count != type2->as.fn.params.count) {
 				break;
 			}
-			for (node1 = type->as.fn.params.begin, node2 = type2->as.fn.params.begin;
-				node1;
-				node1 = node1->next, node2 = node2->next) {
-				node1->type.type = sema_type_dedup_implemented(ctx, node1->type.type);
+			for (node1 = type->as.fn.params.begin,
+				node2 = type2->as.fn.params.begin;
+				 node1; node1 = node1->next, node2 = node2->next) {
+				node1->type.type =
+					sema_type_dedup_implemented(ctx, node1->type.type);
 				if (!sema_type_handle_eq(node1->type, node2->type)) {
 					goto outer;
 				}
@@ -291,8 +296,8 @@ SemaType * sema_type_dedup_implemented(SemaCtx * ctx, SemaType * type) {
 		}
 	outer:
 	}
-	if (!sema_type_handle_list_push_with_ctx(ctx, 
-				&ctx->table->complete_types, sema_type_handle_from_ptr(type))) {
+	if (!sema_type_handle_list_push_with_ctx(ctx, &ctx->table->complete_types,
+											 sema_type_handle_from_ptr(type))) {
 		sema_ctx_oom(ctx);
 	}
 	type->deduped = true;
@@ -300,7 +305,8 @@ SemaType * sema_type_dedup_implemented(SemaCtx * ctx, SemaType * type) {
 }
 
 // requires stable pointer!
-static SemaTypeHandle sema_type_alias_intern_with_stable_ptr(SemaCtx * ctx, SemaTypeAlias * alias) {
+static SemaTypeHandle
+sema_type_alias_intern_with_stable_ptr(SemaCtx * ctx, SemaTypeAlias * alias) {
 	SemaType type;
 	sema_type_init_uninterned(&type, SEMA_TYPE_TYPE_ALIAS);
 	type.as.alias = alias;
@@ -308,10 +314,11 @@ static SemaTypeHandle sema_type_alias_intern_with_stable_ptr(SemaCtx * ctx, Sema
 	return sema_type_handle_from_ptr(ptype);
 }
 
-SemaTypeHandle sema_ctx_lookup_type(SemaCtx * ctx, Str iden, ReportError report_error) {
+SemaTypeHandle sema_ctx_lookup_type(SemaCtx * ctx, Str iden,
+									ReportError report_error) {
 	SemaEnv * env = ctx->env;
 	if (str_equal(iden, s("int"))) {
-	    return sema_type_handle_from_ptr(&ctx->table->i32_type);
+		return sema_type_handle_from_ptr(&ctx->table->i32_type);
 	}
 	do {
 		for (usize i = 0; i < env->decls.size; ++i) {
@@ -320,25 +327,30 @@ SemaTypeHandle sema_ctx_lookup_type(SemaCtx * ctx, Str iden, ReportError report_
 				continue;
 			}
 			switch (decl->type) {
-				case SEMA_DECL_TYPE_ALIAS:
-					return sema_type_alias_intern_with_stable_ptr(ctx, &decl->as.alias);
-				case SEMA_DECL_FN:
-				case SEMA_DECL_VAR:
-					if (report_error == DO_REPORT_ERROR) {
-						fprintf(stderr, "error: identifier '%.*s' is not a type\n", (int)iden.size, iden.data);
-					}
-					return null_sema_type_handle;
+			case SEMA_DECL_TYPE_ALIAS:
+				return sema_type_alias_intern_with_stable_ptr(ctx,
+															  &decl->as.alias);
+			case SEMA_DECL_FN:
+			case SEMA_DECL_VAR:
+				if (report_error == DO_REPORT_ERROR) {
+					fprintf(stderr, "error: identifier '%.*s' is not a type\n",
+							(int)iden.size, iden.data);
+				}
+				return null_sema_type_handle;
 			}
 		}
 		env = env->parent;
 	} while (env);
 	if (report_error == DO_REPORT_ERROR) {
-		fprintf(stderr, "error: unknown identifier '%.*s'\n", (int)iden.size, iden.data);
+		fprintf(stderr, "error: unknown identifier '%.*s'\n", (int)iden.size,
+				iden.data);
 	}
 	return null_sema_type_handle;
 }
 
-SemaVar * sema_ctx_lookup_var_with_pos(SemaCtx * ctx, Str iden, ReportError report_error, SymbolPos * out_pos) {
+SemaVar * sema_ctx_lookup_var_with_pos(SemaCtx * ctx, Str iden,
+									   ReportError report_error,
+									   SymbolPos * out_pos) {
 	SemaEnv * env = ctx->env;
 	do {
 		for (usize i = 0; i < env->decls.size; ++i) {
@@ -347,33 +359,39 @@ SemaVar * sema_ctx_lookup_var_with_pos(SemaCtx * ctx, Str iden, ReportError repo
 				continue;
 			}
 			switch (decl->type) {
-				case SEMA_DECL_VAR:
-					if (out_pos) {
-						*out_pos = decl->pos;
-					}
-					return &decl->as.var;
-				case SEMA_DECL_TYPE_ALIAS:
-				case SEMA_DECL_FN:
-					if (report_error == DO_REPORT_ERROR) {
-						fprintf(stderr, "error: identifier '%.*s' is not a variable\n", (int)iden.size, iden.data);
-					}
-					return nullptr;
+			case SEMA_DECL_VAR:
+				if (out_pos) {
+					*out_pos = decl->pos;
+				}
+				return &decl->as.var;
+			case SEMA_DECL_TYPE_ALIAS:
+			case SEMA_DECL_FN:
+				if (report_error == DO_REPORT_ERROR) {
+					fprintf(stderr,
+							"error: identifier '%.*s' is not a variable\n",
+							(int)iden.size, iden.data);
+				}
+				return nullptr;
 			}
 		}
 		env = env->parent;
 	} while (env);
 	if (report_error == DO_REPORT_ERROR) {
-		fprintf(stderr, "error: unknown identifier '%.*s'\n", (int)iden.size, iden.data);
+		fprintf(stderr, "error: unknown identifier '%.*s'\n", (int)iden.size,
+				iden.data);
 	}
 	return nullptr;
 }
 
 // Callers should handle non const variable in const function edge case
-SemaVar * sema_ctx_lookup_var(SemaCtx * ctx, Str iden, ReportError report_error) {
+SemaVar * sema_ctx_lookup_var(SemaCtx * ctx, Str iden,
+							  ReportError report_error) {
 	return sema_ctx_lookup_var_with_pos(ctx, iden, report_error, nullptr);
 }
 
-SemaFn * sema_ctx_lookup_fn_with_pos(SemaCtx * ctx, Str iden, ReportError report_error, SymbolPos * out_pos) {
+SemaFn * sema_ctx_lookup_fn_with_pos(SemaCtx * ctx, Str iden,
+									 ReportError report_error,
+									 SymbolPos * out_pos) {
 	SemaEnv * env = ctx->env;
 	do {
 		for (usize i = 0; i < env->decls.size; ++i) {
@@ -382,23 +400,26 @@ SemaFn * sema_ctx_lookup_fn_with_pos(SemaCtx * ctx, Str iden, ReportError report
 				continue;
 			}
 			switch (decl->type) {
-				case SEMA_DECL_FN:
-					if (out_pos) {
-						*out_pos = decl->pos;
-					}
-					return &decl->as.fn;
-				case SEMA_DECL_VAR:
-				case SEMA_DECL_TYPE_ALIAS:
-					if (report_error == DO_REPORT_ERROR) {
-						fprintf(stderr, "error: identifier '%.*s' is not a function\n", (int)iden.size, iden.data);
-					}
-					return nullptr;
+			case SEMA_DECL_FN:
+				if (out_pos) {
+					*out_pos = decl->pos;
+				}
+				return &decl->as.fn;
+			case SEMA_DECL_VAR:
+			case SEMA_DECL_TYPE_ALIAS:
+				if (report_error == DO_REPORT_ERROR) {
+					fprintf(stderr,
+							"error: identifier '%.*s' is not a function\n",
+							(int)iden.size, iden.data);
+				}
+				return nullptr;
 			}
 		}
 		env = env->parent;
 	} while (env);
 	if (report_error == DO_REPORT_ERROR) {
-		fprintf(stderr, "error: unknown identifier '%.*s'\n", (int)iden.size, iden.data);
+		fprintf(stderr, "error: unknown identifier '%.*s'\n", (int)iden.size,
+				iden.data);
 	}
 	return nullptr;
 }
@@ -423,58 +444,60 @@ static SemaType * sema_type_intern_ref_to(SemaCtx * ctx, SemaTypeHandle type) {
 	return sema_type_intern(ctx, type2);
 }
 
-
 static SemaTypeHandle sema_type_from_ast(SemaCtx * ctx, const Type * type) {
 	switch (type->type) {
-		case TYPE_VOID:
-			return sema_type_handle_from_ptr(&ctx->table->void_type);
-		case TYPE_IDEN:
-			return sema_ctx_lookup_type(ctx, type->as.iden, DO_REPORT_ERROR);
-		case TYPE_FN:
-			const TypeFn * ast_fn = &type->as.fn;
-			SemaTypeHandle return_handle = sema_type_from_ast(ctx, ast_fn->return_type);
-			if (!return_handle.type) {
-				return null_sema_type_handle;
-			}
-			SemaTypeHandleList param_types;
-			sema_type_handle_list_init(&param_types);
-			for (auto node = ast_fn->params.begin; node; node = node->next) {
-				SemaTypeHandle handle = sema_type_from_ast(ctx, &node->type);
-				if (!handle.type) {
-					return null_sema_type_handle;
-				}
-				if (!sema_type_handle_list_push_with_ctx(ctx, &param_types, handle)) { // reuses unused nodes
-					sema_ctx_oom(ctx);
-				}
-			}
-			SemaType uninterned_fn_type;
-			sema_type_init_uninterned(&uninterned_fn_type, SEMA_TYPE_FN);
-			uninterned_fn_type.as.fn.return_type = return_handle.type;
-			uninterned_fn_type.as.fn.params = param_types;
-			SemaType * fn_type = sema_type_intern(ctx, uninterned_fn_type);
-			assert(fn_type);
-			return sema_type_handle_from_ptr(fn_type);
-		case TYPE_MUT:
-			SemaTypeHandle handle = sema_type_from_ast(ctx, type->as.mut);
-			handle.is_mut = true;
-			return handle;
-		case TYPE_PTR:
-			handle = sema_type_from_ast(ctx, type->as.ptr);
+	case TYPE_VOID:
+		return sema_type_handle_from_ptr(&ctx->table->void_type);
+	case TYPE_IDEN:
+		return sema_ctx_lookup_type(ctx, type->as.iden, DO_REPORT_ERROR);
+	case TYPE_FN:
+		const TypeFn * ast_fn = &type->as.fn;
+		SemaTypeHandle return_handle =
+			sema_type_from_ast(ctx, ast_fn->return_type);
+		if (!return_handle.type) {
+			return null_sema_type_handle;
+		}
+		SemaTypeHandleList param_types;
+		sema_type_handle_list_init(&param_types);
+		for (auto node = ast_fn->params.begin; node; node = node->next) {
+			SemaTypeHandle handle = sema_type_from_ast(ctx, &node->type);
 			if (!handle.type) {
 				return null_sema_type_handle;
 			}
-			return sema_type_handle_from_ptr(sema_type_intern_ptr_to(ctx, handle));
-		case TYPE_REF:
-			handle = sema_type_from_ast(ctx, type->as.ref);
-			if (!handle.type) {
-				return null_sema_type_handle;
+			if (!sema_type_handle_list_push_with_ctx(
+					ctx, &param_types, handle)) { // reuses unused nodes
+				sema_ctx_oom(ctx);
 			}
-			return sema_type_handle_from_ptr(sema_type_intern_ref_to(ctx, handle));
+		}
+		SemaType uninterned_fn_type;
+		sema_type_init_uninterned(&uninterned_fn_type, SEMA_TYPE_FN);
+		uninterned_fn_type.as.fn.return_type = return_handle.type;
+		uninterned_fn_type.as.fn.params = param_types;
+		SemaType * fn_type = sema_type_intern(ctx, uninterned_fn_type);
+		assert(fn_type);
+		return sema_type_handle_from_ptr(fn_type);
+	case TYPE_MUT:
+		SemaTypeHandle handle = sema_type_from_ast(ctx, type->as.mut);
+		handle.is_mut = true;
+		return handle;
+	case TYPE_PTR:
+		handle = sema_type_from_ast(ctx, type->as.ptr);
+		if (!handle.type) {
+			return null_sema_type_handle;
+		}
+		return sema_type_handle_from_ptr(sema_type_intern_ptr_to(ctx, handle));
+	case TYPE_REF:
+		handle = sema_type_from_ast(ctx, type->as.ref);
+		if (!handle.type) {
+			return null_sema_type_handle;
+		}
+		return sema_type_handle_from_ptr(sema_type_intern_ref_to(ctx, handle));
 	}
 	UNREACHABLE();
 }
 
-static SemaDecl sema_decl_from_ast(SemaCtx * ctx, const Decl * ast, SymbolPos pos) {
+static SemaDecl sema_decl_from_ast(SemaCtx * ctx, const Decl * ast,
+								   SymbolPos pos) {
 	Str iden;
 	SemaDecl decl;
 	switch (ast->type) {
@@ -520,16 +543,19 @@ static bool sema_type_type_is_ptrlike(SemaTypeType type) {
 	return type == SEMA_TYPE_PTR || type == SEMA_TYPE_REF;
 }
 
-bool coerce_expr_to_type(SemaCtx * ctx, SemaExpr * expr, SemaTypeHandle expr_type, SemaTypeHandle target_type) {
+bool coerce_expr_to_type(SemaCtx * ctx, SemaExpr * expr,
+						 SemaTypeHandle expr_type, SemaTypeHandle target_type) {
 	(void)ctx;
 	if (expr_type.type == target_type.type) {
 		return expr;
 	}
-	if (sema_type_type_is_ptrlike(expr_type.type->type) && sema_type_type_is_ptrlike(target_type.type->type)) {
+	if (sema_type_type_is_ptrlike(expr_type.type->type) &&
+		sema_type_type_is_ptrlike(target_type.type->type)) {
 		SemaTypeHandle e = expr_type;
 		SemaTypeHandle t = target_type;
 		do {
-			if (e.type->type == SEMA_TYPE_PTR && t.type->type == SEMA_TYPE_REF) {
+			if (e.type->type == SEMA_TYPE_PTR &&
+				t.type->type == SEMA_TYPE_REF) {
 				goto error;
 			}
 			e = e.type->as.ptr;
@@ -537,7 +563,8 @@ bool coerce_expr_to_type(SemaCtx * ctx, SemaExpr * expr, SemaTypeHandle expr_typ
 			if (!e.is_mut && t.is_mut) {
 				goto error;
 			}
-		} while (sema_type_type_is_ptrlike(e.type->type) && sema_type_type_is_ptrlike(t.type->type));
+		} while (sema_type_type_is_ptrlike(e.type->type) &&
+				 sema_type_type_is_ptrlike(t.type->type));
 		if (e.type != t.type && t.type->type != SEMA_TYPE_VOID) {
 			goto error;
 		}
@@ -552,16 +579,19 @@ error:
 	return false; // for now
 }
 
-static bool check_type_addr(SemaCtx * ctx, SemaTypeHandle type, SemaTypeHandle * out) {
+static bool check_type_addr(SemaCtx * ctx, SemaTypeHandle type,
+							SemaTypeHandle * out) {
 	if (!type.is_lvalue) {
-		fprintf(stderr, "error: attempted to get address of expression that is not an lvalue\n");
+		fprintf(stderr, "error: attempted to get address of expression that is "
+						"not an lvalue\n");
 		return false;
 	}
 	*out = sema_type_handle_from_ptr(sema_type_intern_ref_to(ctx, type));
 	return true;
 }
 
-static bool check_type_deref(SemaCtx * ctx, SemaTypeHandle type, SemaTypeHandle * out) {
+static bool check_type_deref(SemaCtx * ctx, SemaTypeHandle type,
+							 SemaTypeHandle * out) {
 	(void)ctx;
 	if (!sema_type_type_is_ptrlike(type.type->type)) {
 		fprintf(stderr, "error: attemped to deref ");
@@ -588,20 +618,32 @@ bool ensure_expr_is_sema(SemaCtx * ctx, SemaExpr * expr);
 bool ensure_var_is_sema(SemaCtx * ctx, SemaVar * var);
 bool ensure_fn_is_sema(SemaCtx * ctx, SemaFn * fn);
 // Ensure the tree doesn't contain any illegal cycles
-bool ensure_type_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaType * type);
-bool ensure_type_alias_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaTypeAlias * alias);
-bool ensure_expr_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaExpr * expr);
-bool ensure_var_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaVar * var);
+bool ensure_type_is_cycle_checked(SemaCtx * ctx, VisitorState visitor,
+								  SemaType * type);
+bool ensure_type_alias_is_cycle_checked(SemaCtx * ctx, VisitorState visitor,
+										SemaTypeAlias * alias);
+bool ensure_expr_is_cycle_checked(SemaCtx * ctx, VisitorState visitor,
+								  SemaExpr * expr);
+bool ensure_var_is_cycle_checked(SemaCtx * ctx, VisitorState visitor,
+								 SemaVar * var);
 // Ensure the tree is implemented, typechecked and ready for lowering
-bool ensure_type_handle_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaTypeHandle * out_handle);
-bool ensure_type_ptr_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaType ** type);
-bool ensure_type_alias_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaTypeAlias * alias);
-ExprEvalResult ensure_expr_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaExpr * expr, SemaTypeHandle * opt_out);
-bool ensure_var_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaVar * var);
+bool ensure_type_handle_is_implemented(SemaCtx * ctx, VisitorState visitor,
+									   SemaTypeHandle * out_handle);
+bool ensure_type_ptr_is_implemented(SemaCtx * ctx, VisitorState visitor,
+									SemaType ** type);
+bool ensure_type_alias_is_implemented(SemaCtx * ctx, VisitorState visitor,
+									  SemaTypeAlias * alias);
+ExprEvalResult ensure_expr_is_implemented(SemaCtx * ctx, VisitorState visitor,
+										  SemaExpr * expr,
+										  SemaTypeHandle * opt_out);
+bool ensure_var_is_implemented(SemaCtx * ctx, VisitorState visitor,
+							   SemaVar * var);
 bool ensure_fn_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaFn * fn);
-bool run_implemented_fn(SemaCtx * ctx, SemaFn * fn, SemaValue * out, ReportError report_error); // the dream
+bool run_implemented_fn(SemaCtx * ctx, SemaFn * fn, SemaValue * out,
+						ReportError report_error); // the dream
 // (Somewhat)? likely to be factored out
-bool ensure_decl_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaDecl * decl);
+bool ensure_decl_is_implemented(SemaCtx * ctx, VisitorState visitor,
+								SemaDecl * decl);
 
 bool ensure_type_alias_is_sema(SemaCtx * ctx, SemaTypeAlias * alias) {
 	if (alias->pass == SEMA_PASS_ERROR) {
@@ -614,8 +656,10 @@ bool ensure_type_alias_is_sema(SemaCtx * ctx, SemaTypeAlias * alias) {
 	return declare_ast_type_alias(ctx, alias);
 }
 
-static bool ensure_var_is_accessible(SemaCtx * ctx, SemaVar * var, SymbolPos pos, ReportError report_error) {
-	SemaFn * current_fn = ctx->env->type == SEMA_ENV_FN_BLK ? ctx->env->as.fn.ptr : nullptr;
+static bool ensure_var_is_accessible(SemaCtx * ctx, SemaVar * var,
+									 SymbolPos pos, ReportError report_error) {
+	SemaFn * current_fn =
+		ctx->env->type == SEMA_ENV_FN_BLK ? ctx->env->as.fn.ptr : nullptr;
 	if (var->is_const) {
 		return true;
 	}
@@ -625,7 +669,8 @@ static bool ensure_var_is_accessible(SemaCtx * ctx, SemaVar * var, SymbolPos pos
 		}
 		if (current_fn->is_const) {
 			if (report_error == DO_REPORT_ERROR) {
-				fprintf(stderr, "error: non-constant global variable used in const fn scope\n");
+				fprintf(stderr, "error: non-constant global variable used in "
+								"const fn scope\n");
 			}
 			return false;
 		}
@@ -660,36 +705,39 @@ bool ensure_expr_is_sema(SemaCtx * ctx, SemaExpr * expr) {
 		goto error;
 	case EXPR_INT:
 		sema_expr_init_unimplemented(expr, SEMA_EXPR1_I32);
-		expr->as.sema1.i32 = (i32)ast->as.int_; // TODO : more ints and proper handling
+		expr->as.sema1.i32 =
+			(i32)ast->as.int_; // TODO : more ints and proper handling
 		break;
 	case EXPR_NULLPTR:
 		sema_expr_init_unimplemented(expr, SEMA_EXPR1_NULLPTR);
 		break;
 	case EXPR_IDEN: {
-			SymbolPos pos;
-			fn = sema_ctx_lookup_fn_with_pos(ctx, ast->as.iden, DONT_REPORT_ERROR, &pos);
-			if (fn) {
-				if (!ensure_fn_is_sema(ctx, fn)) {
-					goto error;
-				}
-				sema_expr_init_unimplemented(expr, SEMA_EXPR1_FN);
-				expr->as.sema1.fn = fn;
-				break;
-			}
-			var = sema_ctx_lookup_var_with_pos(ctx, ast->as.iden, DO_REPORT_ERROR, &pos);
-			if (!var) {
+		SymbolPos pos;
+		fn = sema_ctx_lookup_fn_with_pos(ctx, ast->as.iden, DONT_REPORT_ERROR,
+										 &pos);
+		if (fn) {
+			if (!ensure_fn_is_sema(ctx, fn)) {
 				goto error;
 			}
-			if (!ensure_var_is_accessible(ctx, var, pos, DO_REPORT_ERROR)) {
-				goto error;
-			}
-			if (!ensure_var_is_sema(ctx, var)) {
-				goto error;
-			}
-			sema_expr_init_unimplemented(expr, SEMA_EXPR1_VAR);
-			expr->as.sema1.var = var;
+			sema_expr_init_unimplemented(expr, SEMA_EXPR1_FN);
+			expr->as.sema1.fn = fn;
 			break;
 		}
+		var = sema_ctx_lookup_var_with_pos(ctx, ast->as.iden, DO_REPORT_ERROR,
+										   &pos);
+		if (!var) {
+			goto error;
+		}
+		if (!ensure_var_is_accessible(ctx, var, pos, DO_REPORT_ERROR)) {
+			goto error;
+		}
+		if (!ensure_var_is_sema(ctx, var)) {
+			goto error;
+		}
+		sema_expr_init_unimplemented(expr, SEMA_EXPR1_VAR);
+		expr->as.sema1.var = var;
+		break;
+	}
 	case EXPR_PLUS:
 		a = vmem_arena_alloc(ctx->arena, SemaExpr);
 		b = vmem_arena_alloc(ctx->arena, SemaExpr);
@@ -698,8 +746,7 @@ bool ensure_expr_is_sema(SemaCtx * ctx, SemaExpr * expr) {
 		}
 		sema_expr_init_with_ast(a, ast->as.plus.a);
 		sema_expr_init_with_ast(b, ast->as.plus.b);
-		if (!ensure_expr_is_sema(ctx, a) ||
-			!ensure_expr_is_sema(ctx, b)) {
+		if (!ensure_expr_is_sema(ctx, a) || !ensure_expr_is_sema(ctx, b)) {
 			goto error;
 		}
 		sema_expr_init_unimplemented(expr, SEMA_EXPR1_PLUS);
@@ -728,7 +775,8 @@ bool ensure_expr_is_sema(SemaCtx * ctx, SemaExpr * expr) {
 			goto error;
 		}
 		ZERO(&args);
-		args.data = vmem_arena_alloc_n(ctx->arena, SemaExpr, ast->as.funcall.args.count);
+		args.data = vmem_arena_alloc_n(ctx->arena, SemaExpr,
+									   ast->as.funcall.args.count);
 		if (!args.data) {
 			sema_ctx_oom(ctx);
 		}
@@ -774,7 +822,9 @@ bool ensure_var_is_sema(SemaCtx * ctx, SemaVar * var) {
 	type.is_lvalue = true;
 	type.is_mut |= ast->is_mut;
 	if (type.is_mut && ast->is_const) {
-		fprintf(stderr, "error: attempted to give 'mut' specifier to constant variable\n");
+		fprintf(
+			stderr,
+			"error: attempted to give 'mut' specifier to constant variable\n");
 		var->pass = SEMA_VAR_PASS_ERROR;
 		return false;
 	}
@@ -787,7 +837,8 @@ bool ensure_var_is_sema(SemaCtx * ctx, SemaVar * var) {
 			return false;
 		}
 	}
-	sema_var_init(var, type, init_with_expr ? &expr : nullptr, sema_ctx_is_global_scope(ctx), ast->is_const);
+	sema_var_init(var, type, init_with_expr ? &expr : nullptr,
+				  sema_ctx_is_global_scope(ctx), ast->is_const);
 	return true;
 }
 
@@ -817,7 +868,7 @@ bool ensure_fn_is_sema(SemaCtx * ctx, SemaFn * fn) {
 	}
 	usize i = 0;
 	for (auto node = ast->params->begin; node; node = node->next) {
-	    FnParam * param = &node->param;
+		FnParam * param = &node->param;
 		args[i] = s("");
 		if (param->has_iden) {
 			if (!str_copy(ctx->arena, param->unwrap.iden, &args[i])) {
@@ -845,7 +896,8 @@ bool ensure_fn_is_sema(SemaCtx * ctx, SemaFn * fn) {
 	return true;
 }
 
-bool ensure_type_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaType * type) {
+bool ensure_type_is_cycle_checked(SemaCtx * ctx, VisitorState visitor,
+								  SemaType * type) {
 	switch (type->pass) {
 	case SEMA_PASS_ERROR:
 		return false;
@@ -854,45 +906,48 @@ bool ensure_type_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaType 
 	case SEMA_PASS_CYCLE_UNCHECKED:
 		type->visit_index = visitor.last_indirection_id++;
 		switch (type->type) {
-			case SEMA_TYPE_I32:
-			case SEMA_TYPE_VOID:
-				break;
-			case SEMA_TYPE_PTR:
-				visitor.last_indirection_id = type->visit_index;
-				if (!ensure_type_is_cycle_checked(ctx, visitor, type->as.ptr.type)) {
+		case SEMA_TYPE_I32:
+		case SEMA_TYPE_VOID:
+			break;
+		case SEMA_TYPE_PTR:
+			visitor.last_indirection_id = type->visit_index;
+			if (!ensure_type_is_cycle_checked(ctx, visitor,
+											  type->as.ptr.type)) {
+				goto error;
+			}
+			break;
+		case SEMA_TYPE_REF:
+			visitor.last_indirection_id = type->visit_index;
+			if (!ensure_type_is_cycle_checked(ctx, visitor,
+											  type->as.ref.type)) {
+				goto error;
+			}
+			break;
+		case SEMA_TYPE_TYPE_ALIAS:
+			if (!ensure_type_alias_is_cycle_checked(ctx, visitor,
+													type->as.alias)) {
+				goto error;
+			}
+			break;
+		case SEMA_TYPE_FN:
+			if (!ensure_type_is_cycle_checked(ctx, visitor,
+											  type->as.fn.return_type)) {
+				goto error;
+			}
+			for (auto node = type->as.fn.params.begin; node;
+				 node = node->next) {
+				if (!ensure_type_is_cycle_checked(ctx, visitor,
+												  node->type.type)) {
 					goto error;
 				}
-				break;
-			case SEMA_TYPE_REF:
-				visitor.last_indirection_id = type->visit_index;
-				if (!ensure_type_is_cycle_checked(ctx, visitor, type->as.ref.type)) {
-					goto error;
-					
-				}
-				break;
-			case SEMA_TYPE_TYPE_ALIAS:
-				if (!ensure_type_alias_is_cycle_checked(ctx, visitor, type->as.alias)) {
-					goto error;
-					
-				}
-				break;
-			case SEMA_TYPE_FN:
-				if (!ensure_type_is_cycle_checked(ctx, visitor, type->as.fn.return_type)) {
-					goto error;
-					
-				}
-				for (auto node = type->as.fn.params.begin; node; node = node->next) {
-					if (!ensure_type_is_cycle_checked(ctx, visitor, node->type.type)) {
-						goto error;
-					}
-				}
-				break;
+			}
+			break;
 		}
 		type->pass = SEMA_PASS_CYCLE_CHECKED;
 		break;
 	case SEMA_PASS_CYCLE_CHECKING:
-		if (!(type->visit_index < visitor.last_indirection_id
-			&& type->visit_index <= visitor.last_opaque_id)) {
+		if (!(type->visit_index < visitor.last_indirection_id &&
+			  type->visit_index <= visitor.last_opaque_id)) {
 			fprintf(stderr, "error: detected cycle\n");
 			goto error;
 		}
@@ -907,7 +962,8 @@ error:
 	return false;
 }
 
-bool ensure_type_alias_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaTypeAlias * alias) {
+bool ensure_type_alias_is_cycle_checked(SemaCtx * ctx, VisitorState visitor,
+										SemaTypeAlias * alias) {
 	switch (alias->pass) {
 	case SEMA_PASS_ERROR:
 		return false;
@@ -918,7 +974,8 @@ bool ensure_type_alias_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, Sem
 		[[fallthrough]];
 	case SEMA_PASS_CYCLE_UNCHECKED:
 	case SEMA_PASS_CYCLE_CHECKING:
-		if (!ensure_type_is_cycle_checked(ctx, visitor, alias->sema.next.type)) {
+		if (!ensure_type_is_cycle_checked(ctx, visitor,
+										  alias->sema.next.type)) {
 			alias->pass = SEMA_PASS_ERROR;
 			return false;
 		}
@@ -930,7 +987,8 @@ bool ensure_type_alias_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, Sem
 	}
 }
 
-bool ensure_expr_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaExpr * expr) {
+bool ensure_expr_is_cycle_checked(SemaCtx * ctx, VisitorState visitor,
+								  SemaExpr * expr) {
 	switch (expr->pass) {
 	case SEMA_PASS_ERROR:
 		return false;
@@ -954,35 +1012,42 @@ bool ensure_expr_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaExpr 
 			break;
 		case SEMA_EXPR1_ADDR:
 			visitor.last_indirection_id = visitor.visit_id++;
-			if (!ensure_expr_is_cycle_checked(ctx, visitor, expr->as.sema1.addr)) {
+			if (!ensure_expr_is_cycle_checked(ctx, visitor,
+											  expr->as.sema1.addr)) {
 				return false;
 			}
 			break;
 		case SEMA_EXPR1_FUNCALL:
-			if (!ensure_expr_is_cycle_checked(ctx, visitor, expr->as.sema1.funcall.fun)) {
+			if (!ensure_expr_is_cycle_checked(ctx, visitor,
+											  expr->as.sema1.funcall.fun)) {
 				return false;
 			}
 			for (usize i = 0; i < expr->as.sema1.funcall.args.size; ++i) {
-				if (!ensure_expr_is_cycle_checked(ctx, visitor, &expr->as.sema1.funcall.args.data[i])) {
+				if (!ensure_expr_is_cycle_checked(
+						ctx, visitor, &expr->as.sema1.funcall.args.data[i])) {
 					return false;
 				}
 			}
 			break;
 		case SEMA_EXPR1_PLUS:
-			if (!ensure_expr_is_cycle_checked(ctx, visitor, expr->as.sema1.plus.a)) {
+			if (!ensure_expr_is_cycle_checked(ctx, visitor,
+											  expr->as.sema1.plus.a)) {
 				return false;
 			}
-			if (!ensure_expr_is_cycle_checked(ctx, visitor, expr->as.sema1.plus.b)) {
+			if (!ensure_expr_is_cycle_checked(ctx, visitor,
+											  expr->as.sema1.plus.b)) {
 				return false;
 			}
 			break;
 		case SEMA_EXPR1_VAR:
-			if (!ensure_var_is_cycle_checked(ctx, visitor, expr->as.sema1.var)) {
+			if (!ensure_var_is_cycle_checked(ctx, visitor,
+											 expr->as.sema1.var)) {
 				return false;
 			}
 			break;
 		case SEMA_EXPR1_DEREF:
-			if (!ensure_expr_is_cycle_checked(ctx, visitor, expr->as.sema1.deref)) {
+			if (!ensure_expr_is_cycle_checked(ctx, visitor,
+											  expr->as.sema1.deref)) {
 				return false;
 			}
 			break;
@@ -995,7 +1060,8 @@ bool ensure_expr_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaExpr 
 	}
 }
 
-bool ensure_var_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaVar * var) {
+bool ensure_var_is_cycle_checked(SemaCtx * ctx, VisitorState visitor,
+								 SemaVar * var) {
 	switch (var->pass) {
 	case SEMA_VAR_PASS_ERROR:
 		return false;
@@ -1014,12 +1080,14 @@ bool ensure_var_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaVar * 
 	case SEMA_VAR_PASS_CYCLE_UNCHECKED:
 		var->pass = SEMA_VAR_PASS_CYCLE_CHECKING;
 		var->visit_index = visitor.visit_id++;
-		if (!ensure_type_is_cycle_checked(ctx, visitor, var->as.sema.type.type)) {
+		if (!ensure_type_is_cycle_checked(ctx, visitor,
+										  var->as.sema.type.type)) {
 			var->pass = SEMA_VAR_PASS_ERROR;
 			return false;
 		}
 		if (var->as.sema.init_with_expr) {
-			if (!ensure_expr_is_cycle_checked(ctx, visitor, &var->as.sema.unwrap.expr)) {
+			if (!ensure_expr_is_cycle_checked(ctx, visitor,
+											  &var->as.sema.unwrap.expr)) {
 				var->pass = SEMA_VAR_PASS_ERROR;
 				return false;
 			}
@@ -1033,7 +1101,8 @@ bool ensure_var_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaVar * 
 	}
 }
 
-bool ensure_fn_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) {
+bool ensure_fn_is_cycle_checked(SemaCtx * ctx, VisitorState visitor,
+								SemaFn * fn) {
 	SemaType * fn_type;
 	switch (fn->pass) {
 	case SEMA_FN_PASS_ERROR:
@@ -1060,7 +1129,8 @@ bool ensure_fn_is_cycle_checked(SemaCtx * ctx, VisitorState visitor, SemaFn * fn
 	}
 }
 
-bool ensure_type_alias_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaTypeAlias * alias) {
+bool ensure_type_alias_is_implemented(SemaCtx * ctx, VisitorState visitor,
+									  SemaTypeAlias * alias) {
 	if (alias->pass == SEMA_PASS_ERROR) {
 		return false;
 	}
@@ -1077,7 +1147,6 @@ bool ensure_type_alias_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaT
 	alias->pass = SEMA_PASS_IMPLEMENTED;
 	return true;
 }
-
 
 typedef struct {
 	SemaTypePtrPtrNode * head;
@@ -1104,7 +1173,8 @@ bool type_worklist_push(SemaCtx * ctx, TypeWorkStack * list, SemaType ** type) {
 	return true;
 }
 
-static void type_worklist_pop(SemaCtx * ctx, TypeWorkStack * list, SemaType *** out)
+static void type_worklist_pop(SemaCtx * ctx, TypeWorkStack * list,
+							  SemaType *** out)
 // my first legimatimit-ish use of a triple pointer
 {
 	SemaTypePtrPtrNode * node = list->head;
@@ -1127,8 +1197,9 @@ static void type_worklist_free(SemaCtx * ctx, TypeWorkStack * list) {
 	ctx->free_type_ptrs = list->head;
 }
 
-bool ensure_type_handle_is_implemented_iter
-	(SemaCtx * ctx, VisitorState visitor, SemaTypeHandle * out_handle, TypeWorkStack * list) {
+bool ensure_type_handle_is_implemented_iter(SemaCtx * ctx, VisitorState visitor,
+											SemaTypeHandle * out_handle,
+											TypeWorkStack * list) {
 	SemaType * type = out_handle->type;
 	if (type->pass == SEMA_PASS_ERROR) {
 		return false;
@@ -1191,13 +1262,14 @@ bool ensure_type_handle_is_implemented_iter
 error:
 	type->pass = SEMA_PASS_ERROR;
 	return false;
-
 }
 
-bool ensure_type_handle_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaTypeHandle * out_handle) {
+bool ensure_type_handle_is_implemented(SemaCtx * ctx, VisitorState visitor,
+									   SemaTypeHandle * out_handle) {
 	TypeWorkStack stack;
 	ZERO(&stack);
-	if (!ensure_type_handle_is_implemented_iter(ctx, visitor, out_handle, &stack)) {
+	if (!ensure_type_handle_is_implemented_iter(ctx, visitor, out_handle,
+												&stack)) {
 		type_worklist_free(ctx, &stack);
 		return false;
 	}
@@ -1207,7 +1279,8 @@ bool ensure_type_handle_is_implemented(SemaCtx * ctx, VisitorState visitor, Sema
 		type_worklist_pop(ctx, &stack, &type);
 		assert(type);
 		handle = sema_type_handle_from_ptr(*type);
-		if (!ensure_type_handle_is_implemented_iter(ctx, visitor, &handle, &stack)) {
+		if (!ensure_type_handle_is_implemented_iter(ctx, visitor, &handle,
+													&stack)) {
 			type_worklist_free(ctx, &stack);
 			return false;
 		}
@@ -1217,7 +1290,8 @@ bool ensure_type_handle_is_implemented(SemaCtx * ctx, VisitorState visitor, Sema
 	return true;
 }
 
-bool ensure_type_ptr_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaType ** type) {
+bool ensure_type_ptr_is_implemented(SemaCtx * ctx, VisitorState visitor,
+									SemaType ** type) {
 	SemaTypeHandle handle = sema_type_handle_from_ptr(*type);
 	if (!ensure_type_handle_is_implemented(ctx, visitor, &handle)) {
 		return false;
@@ -1227,7 +1301,9 @@ bool ensure_type_ptr_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaTyp
 }
 
 ExprEvalResult _implement_add_expr(SemaCtx * ctx, SemaExpr * target,
-		SemaExpr * a, SemaTypeHandle at, SemaExpr * b, SemaTypeHandle bt, SemaTypeHandle * type, bool fst) {
+								   SemaExpr * a, SemaTypeHandle at,
+								   SemaExpr * b, SemaTypeHandle bt,
+								   SemaTypeHandle * type, bool fst) {
 	switch (at.type->type) {
 	case SEMA_TYPE_I32:
 		if (!coerce_expr_to_type(ctx, b, bt, at)) {
@@ -1238,8 +1314,7 @@ ExprEvalResult _implement_add_expr(SemaCtx * ctx, SemaExpr * target,
 			sema_expr_init_implemented(target, SEMA_EXPR2_VALUE);
 			sema_value_init(&target->as.sema2.value, SEMA_VALUE_I32);
 			target->as.sema2.value.as.i32 =
-				a->as.sema2.value.as.i32 +
-				b->as.sema2.value.as.i32;
+				a->as.sema2.value.as.i32 + b->as.sema2.value.as.i32;
 			return EXPR_EVAL_REDUCED;
 		}
 		return EXPR_EVAL_UNREDUCED;
@@ -1253,96 +1328,98 @@ ExprEvalResult _implement_add_expr(SemaCtx * ctx, SemaExpr * target,
 	return EXPR_EVAL_ERROR;
 }
 
-ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx,
-						  VisitorState visitor,
-						  SemaExpr * expr,
-						  SemaTypeHandle * opt_out,
-						  bool deref) {
-    SemaTypeHandle type;
-    ExprEvalResult result;
-    SemaTypeHandle itype;
-    ExprEvalResult iresult;
-    switch (expr->pass) {
-    case SEMA_PASS_ERROR:
-    case SEMA_PASS_AST:
-    case SEMA_PASS_CYCLE_UNCHECKED:
-    case SEMA_PASS_CYCLE_CHECKING:
-	if (!ensure_expr_is_cycle_checked(ctx, visitor, expr)) {
-	    return EXPR_EVAL_ERROR;
-	}
-	[[fallthrough]];
-    case SEMA_PASS_CYCLE_CHECKED:
-	expr->pass = SEMA_PASS_IMPLEMENTED; // if not true this is is corrected anyways
-	switch (expr->type1) {
-	case SEMA_EXPR1_VOID:
-	    sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
-	    sema_value_init(&expr->as.sema2.value, SEMA_VALUE_VOID);
-	    type = sema_type_handle_from_ptr(&ctx->table->void_type);
-	    result = EXPR_EVAL_REDUCED;
-	    break;
-	case SEMA_EXPR1_NULLPTR:
-	    sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
-	    sema_value_init(&expr->as.sema2.value, SEMA_VALUE_NULLPTR);
-	    type = sema_type_handle_from_ptr(&ctx->table->void_ptr_type);
-	    result = EXPR_EVAL_REDUCED;
-	    break;
-	case SEMA_EXPR1_I32: {
-	    i32 i32 = expr->as.sema1.i32;
-	    sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
-	    sema_value_init(&expr->as.sema2.value, SEMA_VALUE_I32);
-	    expr->as.sema2.value.as.i32 = i32;
-	    type = sema_type_handle_from_ptr(&ctx->table->i32_type);
-	    result = EXPR_EVAL_REDUCED;
-		break;
-	}
-	case SEMA_EXPR1_FN: {
-		if (!ensure_fn_is_implemented(ctx, visitor, expr->as.sema1.fn)) {
-			goto error;
+ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx, VisitorState visitor,
+										   SemaExpr * expr,
+										   SemaTypeHandle * opt_out,
+										   bool deref) {
+	SemaTypeHandle type;
+	ExprEvalResult result;
+	SemaTypeHandle itype;
+	ExprEvalResult iresult;
+	switch (expr->pass) {
+	case SEMA_PASS_ERROR:
+	case SEMA_PASS_AST:
+	case SEMA_PASS_CYCLE_UNCHECKED:
+	case SEMA_PASS_CYCLE_CHECKING:
+		if (!ensure_expr_is_cycle_checked(ctx, visitor, expr)) {
+			return EXPR_EVAL_ERROR;
 		}
-	    SemaFn * fn = expr->as.sema1.fn;
-	    sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
-	    sema_value_init(&expr->as.sema2.value, SEMA_VALUE_FN);
-	    expr->as.sema2.value.as.fn = fn;
-	    type = sema_type_handle_from_ptr(
-		sema_type_from_interned_fn(fn->sema.signature));
-	    result = EXPR_EVAL_REDUCED;
-		break;
-	}
-	case SEMA_EXPR1_ADDR: {
-	    iresult = _ensure_expr_is_implemented(
-		ctx, visitor, expr->as.sema1.addr, &itype, false);
-	    if (!iresult) {
-			goto error;
-		}
-	    if (!check_type_addr(ctx, itype, &type)) {
-			goto error;
-	    }
-	    SemaExpr * addr = expr->as.sema1.addr;
-	    *expr = *addr; // correct semantics when vars are pointers
-	    result = iresult;
-	    break;
-	}
-	case SEMA_EXPR1_DEREF: {
-		iresult = _ensure_expr_is_implemented(ctx, visitor, expr->as.sema1.deref, &itype, false);
-		if (!iresult) {
-			goto error;
-		}
-		if (!check_type_deref(ctx, itype, &type)) {
-			goto error;
-		}
-		SemaExpr * derefed_expr = expr->as.sema1.deref;
-		if (deref) {
-			sema_expr_init_implemented(expr, SEMA_EXPR2_DEREF);
-			expr->as.sema2.deref = derefed_expr;
-			result = EXPR_EVAL_UNREDUCED;
-		} else {
-			*expr = *derefed_expr;
+		[[fallthrough]];
+	case SEMA_PASS_CYCLE_CHECKED:
+		expr->pass =
+			SEMA_PASS_IMPLEMENTED; // if not true this is is corrected anyways
+		switch (expr->type1) {
+		case SEMA_EXPR1_VOID:
+			sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
+			sema_value_init(&expr->as.sema2.value, SEMA_VALUE_VOID);
+			type = sema_type_handle_from_ptr(&ctx->table->void_type);
 			result = EXPR_EVAL_REDUCED;
+			break;
+		case SEMA_EXPR1_NULLPTR:
+			sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
+			sema_value_init(&expr->as.sema2.value, SEMA_VALUE_NULLPTR);
+			type = sema_type_handle_from_ptr(&ctx->table->void_ptr_type);
+			result = EXPR_EVAL_REDUCED;
+			break;
+		case SEMA_EXPR1_I32: {
+			i32 i32 = expr->as.sema1.i32;
+			sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
+			sema_value_init(&expr->as.sema2.value, SEMA_VALUE_I32);
+			expr->as.sema2.value.as.i32 = i32;
+			type = sema_type_handle_from_ptr(&ctx->table->i32_type);
+			result = EXPR_EVAL_REDUCED;
+			break;
 		}
-		break;
-	}
-	case SEMA_EXPR1_FUNCALL: {
-			iresult = _ensure_expr_is_implemented(ctx, visitor, expr->as.sema1.funcall.fun, &itype, true);
+		case SEMA_EXPR1_FN: {
+			if (!ensure_fn_is_implemented(ctx, visitor, expr->as.sema1.fn)) {
+				goto error;
+			}
+			SemaFn * fn = expr->as.sema1.fn;
+			sema_expr_init_implemented(expr, SEMA_EXPR2_VALUE);
+			sema_value_init(&expr->as.sema2.value, SEMA_VALUE_FN);
+			expr->as.sema2.value.as.fn = fn;
+			type = sema_type_handle_from_ptr(
+				sema_type_from_interned_fn(fn->sema.signature));
+			result = EXPR_EVAL_REDUCED;
+			break;
+		}
+		case SEMA_EXPR1_ADDR: {
+			iresult = _ensure_expr_is_implemented(
+				ctx, visitor, expr->as.sema1.addr, &itype, false);
+			if (!iresult) {
+				goto error;
+			}
+			if (!check_type_addr(ctx, itype, &type)) {
+				goto error;
+			}
+			SemaExpr * addr = expr->as.sema1.addr;
+			*expr = *addr; // correct semantics when vars are pointers
+			result = iresult;
+			break;
+		}
+		case SEMA_EXPR1_DEREF: {
+			iresult = _ensure_expr_is_implemented(
+				ctx, visitor, expr->as.sema1.deref, &itype, false);
+			if (!iresult) {
+				goto error;
+			}
+			if (!check_type_deref(ctx, itype, &type)) {
+				goto error;
+			}
+			SemaExpr * derefed_expr = expr->as.sema1.deref;
+			if (deref) {
+				sema_expr_init_implemented(expr, SEMA_EXPR2_DEREF);
+				expr->as.sema2.deref = derefed_expr;
+				result = EXPR_EVAL_UNREDUCED;
+			} else {
+				*expr = *derefed_expr;
+				result = EXPR_EVAL_REDUCED;
+			}
+			break;
+		}
+		case SEMA_EXPR1_FUNCALL: {
+			iresult = _ensure_expr_is_implemented(
+				ctx, visitor, expr->as.sema1.funcall.fun, &itype, true);
 			if (!iresult) {
 				goto error;
 			}
@@ -1352,19 +1429,23 @@ ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx,
 				fprintf(stderr, ")\n");
 				goto error;
 			}
-			if (itype.type->as.fn.params.count != expr->as.sema1.funcall.args.size) {
+			if (itype.type->as.fn.params.count !=
+				expr->as.sema1.funcall.args.size) {
 				fprintf(stderr, "error: incorrect arity\n");
 				goto error;
 			}
 			SemaTypeHandleNode * node = itype.type->as.fn.params.begin;
-			for (usize i = 0; i < expr->as.sema1.funcall.args.size; ++i, node = node->next) {
+			for (usize i = 0; i < expr->as.sema1.funcall.args.size;
+				 ++i, node = node->next) {
 				SemaExpr * arg = &expr->as.sema1.funcall.args.data[i];
 				SemaTypeHandle atype;
-				ExprEvalResult aresult = _ensure_expr_is_implemented(ctx, visitor, arg, &atype, true);
+				ExprEvalResult aresult = _ensure_expr_is_implemented(
+					ctx, visitor, arg, &atype, true);
 				if (!aresult) {
 					goto error;
 				}
-				iresult = aresult == EXPR_EVAL_REDUCED ? iresult : EXPR_EVAL_UNREDUCED;
+				iresult = aresult == EXPR_EVAL_REDUCED ? iresult
+													   : EXPR_EVAL_UNREDUCED;
 			}
 			sema_expr_init_implemented(expr, SEMA_EXPR2_FUNCALL);
 			expr->as.sema2.funcall.fn_type = itype;
@@ -1372,25 +1453,23 @@ ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx,
 			result = EXPR_EVAL_UNREDUCED;
 			break;
 		}
-	case SEMA_EXPR1_PLUS: {
+		case SEMA_EXPR1_PLUS: {
 			SemaTypeHandle itype2;
 			ExprEvalResult iresult2;
 			SemaExpr * a = expr->as.sema1.plus.a;
 			SemaExpr * b = expr->as.sema1.plus.b;
-			iresult =
-			    ensure_expr_is_implemented(ctx, visitor, a, &itype);
-			iresult2 =
-				ensure_expr_is_implemented(ctx, visitor, b, &itype2);
+			iresult = ensure_expr_is_implemented(ctx, visitor, a, &itype);
+			iresult2 = ensure_expr_is_implemented(ctx, visitor, b, &itype2);
 			if (!iresult || !iresult2) {
-			    goto error;
+				goto error;
 			}
-			result = _implement_add_expr(ctx, expr, a, itype, b, itype2, &type, true);
+			result = _implement_add_expr(ctx, expr, a, itype, b, itype2, &type,
+										 true);
 			if (!result) {
 				goto error;
 			}
-		}
-		break;
-	case SEMA_EXPR1_VAR: {
+		} break;
+		case SEMA_EXPR1_VAR: {
 			SemaVar * var = expr->as.sema1.var;
 			if (!ensure_var_is_implemented(ctx, visitor, var)) {
 				goto error;
@@ -1400,11 +1479,14 @@ ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx,
 				bool global = sema_ctx_is_global_scope(ctx);
 				if (global || var->is_const) {
 					if (global && !var->as.sema.init_with_expr) {
-						fprintf(stderr, "error: uninitialized global used in constant expression\n");
+						fprintf(stderr, "error: uninitialized global used in "
+										"constant expression\n");
 						goto error;
 					}
 					*expr = var->as.sema.unwrap.expr;
-					result = expr->type2 == SEMA_EXPR2_VALUE ? EXPR_EVAL_REDUCED : EXPR_EVAL_UNREDUCED;
+					result = expr->type2 == SEMA_EXPR2_VALUE
+								 ? EXPR_EVAL_REDUCED
+								 : EXPR_EVAL_UNREDUCED;
 					break;
 				}
 				sema_expr_init_implemented(expr, SEMA_EXPR2_LOAD_VAR);
@@ -1419,28 +1501,31 @@ ExprEvalResult _ensure_expr_is_implemented(SemaCtx * ctx,
 			}
 			break;
 		}
-	}
-	// do work
-	break;
-    case SEMA_PASS_IMPLEMENTED:
+		}
+		// do work
+		break;
+	case SEMA_PASS_IMPLEMENTED:
 		type = null_sema_type_handle;
 		return expr->type2 == SEMA_EXPR2_VALUE ? EXPR_EVAL_REDUCED
-							   : EXPR_EVAL_UNREDUCED;
+											   : EXPR_EVAL_UNREDUCED;
 	}
 	if (opt_out) {
 		*opt_out = type;
 	}
-    return result;
+	return result;
 error:
 	expr->pass = SEMA_PASS_ERROR;
 	return EXPR_EVAL_ERROR;
 }
 
-ExprEvalResult ensure_expr_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaExpr * expr, SemaTypeHandle * opt_out) {
+ExprEvalResult ensure_expr_is_implemented(SemaCtx * ctx, VisitorState visitor,
+										  SemaExpr * expr,
+										  SemaTypeHandle * opt_out) {
 	return _ensure_expr_is_implemented(ctx, visitor, expr, opt_out, true);
 }
 
-bool ensure_var_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaVar * var) {
+bool ensure_var_is_implemented(SemaCtx * ctx, VisitorState visitor,
+							   SemaVar * var) {
 	switch (var->pass) {
 	case SEMA_VAR_PASS_ERROR:
 		return false;
@@ -1450,29 +1535,31 @@ bool ensure_var_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaVar * va
 		if (!ensure_var_is_cycle_checked(ctx, visitor, var)) {
 			return false;
 		}
-	[[fallthrough]];
+		[[fallthrough]];
 	case SEMA_VAR_PASS_CYCLE_CHECKED:
-		if (!ensure_type_handle_is_implemented(ctx, visitor, &var->as.sema.type)) {
+		if (!ensure_type_handle_is_implemented(ctx, visitor,
+											   &var->as.sema.type)) {
 			goto error;
 		}
 		if (var->as.sema.init_with_expr) {
 			SemaTypeHandle type;
 			ExprEvalResult result = ensure_expr_is_implemented(
-			    ctx, visitor, &var->as.sema.unwrap.expr, &type);
+				ctx, visitor, &var->as.sema.unwrap.expr, &type);
 			if (!result) {
 				goto error;
 			}
 			if (!type.type) {
 				type = var->as.sema.type;
 			} else {
-				if (!coerce_expr_to_type(ctx, &var->as.sema.unwrap.expr, type, var->as.sema.type)) {
+				if (!coerce_expr_to_type(ctx, &var->as.sema.unwrap.expr, type,
+										 var->as.sema.type)) {
 					goto error;
 				}
 			}
 			// TODO: move this to appropriate block
 			// if (result == EXPR_EVAL_UNREDUCED && var->is_global) {
-			// 	fprintf(stderr, "error: initalization of global variable with non-constant expression\n");
-			// 	goto error;
+			// 	fprintf(stderr, "error: initalization of global variable with
+			// non-constant expression\n"); 	goto error;
 			// }
 		} else if (var->is_const) {
 			fprintf(stderr, "error: uninitialized const variable\n");
@@ -1488,7 +1575,8 @@ error:
 	var->pass = SEMA_VAR_PASS_ERROR;
 	return false;
 }
-bool fn_worklist_push_with_ctx(SemaCtx * ctx, SemaFnWorklist * list, SemaFn * fn) {
+bool fn_worklist_push_with_ctx(SemaCtx * ctx, SemaFnWorklist * list,
+							   SemaFn * fn) {
 	SemaFnPtrNode * node;
 	if (ctx->free_fn_ptrs) {
 		node = ctx->free_fn_ptrs;
@@ -1527,9 +1615,11 @@ void fn_worklist_free_with_ctx(SemaCtx * ctx, SemaFnWorklist * list) {
 	ctx->free_fn_ptrs = list->begin;
 }
 
-static bool complete_block(SemaCtx * ctx, VisitorState visitor, StmtList blk, SemaFnWorklist * list);
+static bool complete_block(SemaCtx * ctx, VisitorState visitor, StmtList blk,
+						   SemaFnWorklist * list);
 
-static bool complete_stmt(SemaCtx * ctx, VisitorState visitor, const Stmt * ast, SemaFnWorklist * list) {
+static bool complete_stmt(SemaCtx * ctx, VisitorState visitor, const Stmt * ast,
+						  SemaFnWorklist * list) {
 	SemaEnv * env = ctx->env;
 	SemaStmtList * blk = &env->as.fn.blk;
 	SemaStmt stmt;
@@ -1537,77 +1627,82 @@ static bool complete_stmt(SemaCtx * ctx, VisitorState visitor, const Stmt * ast,
 	case STMT_SEMICOLON:
 		return true;
 	case STMT_BLOCK: {
-			SemaEnv chld;
-			sema_env_init_push_fn_blk_env(ctx, &chld);
-			bool ok = complete_block(ctx, visitor, ast->as.block, list);
-			sema_env_pop(ctx);
-			sema_stmt_init(&stmt, SEMA_STMT_BLOCK);
-			stmt.as.block = chld;
-			if (!sema_stmt_list_push(ctx->arena, blk, stmt)) {
-				sema_ctx_oom(ctx);
-			}
-			return ok;
+		SemaEnv chld;
+		sema_env_init_push_fn_blk_env(ctx, &chld);
+		bool ok = complete_block(ctx, visitor, ast->as.block, list);
+		sema_env_pop(ctx);
+		sema_stmt_init(&stmt, SEMA_STMT_BLOCK);
+		stmt.as.block = chld;
+		if (!sema_stmt_list_push(ctx->arena, blk, stmt)) {
+			sema_ctx_oom(ctx);
 		}
+		return ok;
+	}
 	case STMT_DECL: {
-			SemaDecl decl = sema_decl_from_ast(ctx, ast->as.decl,
-						symbol_pos_local(env->as.fn.ptr, (LocalSymbolIndex)env->decls.size)); // <- TODO
-			if (decl.type == SEMA_DECL_FN) {
-				SemaDecl * pdecl = sema_ctx_add_decl(ctx, decl);
-				if (!sema_ctx_add_decl(ctx, decl)) {
-					sema_ctx_oom(ctx);
-				}
-				if (!fn_worklist_push_with_ctx(ctx, list, &pdecl->as.fn)) {
-					sema_ctx_oom(ctx);
-				}
-			} else {
-				if (!ensure_decl_is_implemented(ctx, visitor, &decl)) {
-					return false;
-				}
-				if (!sema_ctx_add_decl(ctx, decl)) {
-					sema_ctx_oom(ctx);
-				}
-			}
-			return true;
-		}
-	case STMT_RETURN: {
-			SemaExpr expr;
-			SemaTypeHandle type;
-			if (!ast->as.return_.has_expr) {
-				sema_expr_init_implemented(&expr, SEMA_EXPR2_VALUE);
-				sema_value_init(&expr.as.sema2.value, SEMA_VALUE_VOID);
-			} else {
-				sema_expr_init_with_ast(&expr, &ast->as.return_.unwrap.expr);
-				if (!ensure_expr_is_implemented(ctx, visitor, &expr, &type)) {
-					return false;
-				}
-				if (!coerce_expr_to_type(ctx, &expr, type, sema_type_handle_from_ptr(env->as.fn.return_type))) {
-					return false;
-				}
-			}
-			sema_stmt_init(&stmt, SEMA_STMT_RETURN);
-			stmt.as.return_ = expr;
-			if (!sema_stmt_list_push(ctx->arena, blk, stmt)) {
+		SemaDecl decl = sema_decl_from_ast(
+			ctx, ast->as.decl,
+			symbol_pos_local(env->as.fn.ptr,
+							 (LocalSymbolIndex)env->decls.size)); // <- TODO
+		if (decl.type == SEMA_DECL_FN) {
+			SemaDecl * pdecl = sema_ctx_add_decl(ctx, decl);
+			if (!sema_ctx_add_decl(ctx, decl)) {
 				sema_ctx_oom(ctx);
 			}
-			return true;
-		}
-	case STMT_EXPR: {
-			SemaExpr expr;
-			sema_expr_init_with_ast(&expr, &ast->as.expr);
-			if (!ensure_expr_is_implemented(ctx, visitor, &expr, nullptr)) {
+			if (!fn_worklist_push_with_ctx(ctx, list, &pdecl->as.fn)) {
+				sema_ctx_oom(ctx);
+			}
+		} else {
+			if (!ensure_decl_is_implemented(ctx, visitor, &decl)) {
 				return false;
 			}
-			sema_stmt_init(&stmt, SEMA_STMT_EXPR);
-			stmt.as.expr = expr;
-			if (!sema_stmt_list_push(ctx->arena, blk, stmt)) {
+			if (!sema_ctx_add_decl(ctx, decl)) {
 				sema_ctx_oom(ctx);
 			}
-			return true;
 		}
+		return true;
+	}
+	case STMT_RETURN: {
+		SemaExpr expr;
+		SemaTypeHandle type;
+		if (!ast->as.return_.has_expr) {
+			sema_expr_init_implemented(&expr, SEMA_EXPR2_VALUE);
+			sema_value_init(&expr.as.sema2.value, SEMA_VALUE_VOID);
+		} else {
+			sema_expr_init_with_ast(&expr, &ast->as.return_.unwrap.expr);
+			if (!ensure_expr_is_implemented(ctx, visitor, &expr, &type)) {
+				return false;
+			}
+			if (!coerce_expr_to_type(
+					ctx, &expr, type,
+					sema_type_handle_from_ptr(env->as.fn.return_type))) {
+				return false;
+			}
+		}
+		sema_stmt_init(&stmt, SEMA_STMT_RETURN);
+		stmt.as.return_ = expr;
+		if (!sema_stmt_list_push(ctx->arena, blk, stmt)) {
+			sema_ctx_oom(ctx);
+		}
+		return true;
+	}
+	case STMT_EXPR: {
+		SemaExpr expr;
+		sema_expr_init_with_ast(&expr, &ast->as.expr);
+		if (!ensure_expr_is_implemented(ctx, visitor, &expr, nullptr)) {
+			return false;
+		}
+		sema_stmt_init(&stmt, SEMA_STMT_EXPR);
+		stmt.as.expr = expr;
+		if (!sema_stmt_list_push(ctx->arena, blk, stmt)) {
+			sema_ctx_oom(ctx);
+		}
+		return true;
+	}
 	}
 }
 
-static bool complete_block(SemaCtx * ctx, VisitorState visitor, StmtList blk, SemaFnWorklist * list) {
+static bool complete_block(SemaCtx * ctx, VisitorState visitor, StmtList blk,
+						   SemaFnWorklist * list) {
 	bool ok = true;
 	for (auto node = blk.begin; node; node = node->next) {
 		const Stmt * stmt = &node->stmt;
@@ -1616,7 +1711,8 @@ static bool complete_block(SemaCtx * ctx, VisitorState visitor, StmtList blk, Se
 	return ok;
 }
 
-static bool complete_fn_iter(SemaCtx * ctx, VisitorState visitor, SemaFn * fn, SemaFnWorklist * list) {
+static bool complete_fn_iter(SemaCtx * ctx, VisitorState visitor, SemaFn * fn,
+							 SemaFnWorklist * list) {
 	switch (fn->pass) {
 	case SEMA_FN_PASS_ERROR:
 		return false;
@@ -1628,40 +1724,43 @@ static bool complete_fn_iter(SemaCtx * ctx, VisitorState visitor, SemaFn * fn, S
 		}
 		[[fallthrough]];
 	case SEMA_FN_PASS_CYCLE_CHECKED: {
-			fn->pass = SEMA_FN_PASS_IMPLEMENTING;
-			SemaType * type = sema_type_from_interned_fn(fn->sema.signature);
-			if (!ensure_type_ptr_is_implemented(ctx, visitor, &type)) {
-				fn->pass = SEMA_FN_PASS_ERROR;
-				return false;
-			}
-			fn->sema.signature = &type->as.fn;
-			SemaEnv env;
-			sema_env_init_push_fn_base_env(ctx, &env, fn);
-			usize i = 0;
-			for (auto node = fn->sema.signature->params.begin; node; node = node->next) {
-				SemaTypeHandle type = node->type;
-				Str iden = fn->sema.args[i];
-				SemaVar var;
-				sema_var_init(&var, type, nullptr, false, false);
-				SemaDecl decl;
-				sema_decl_init(&decl, SEMA_DECL_VAR, symbol_pos_local(fn, (LocalSymbolIndex)env.decls.size), iden);
-				// TODO: overflow
-				decl.as.var = var;
-				if (!sema_ctx_add_decl(ctx, decl)) {
-					sema_ctx_oom(ctx);
-				}
-				++i;
-			}
-			bool ok = complete_block(ctx, visitor, fn->ast->body, list);
-			sema_env_pop(ctx);
-			if (!ok) {
-				fn->pass = SEMA_FN_PASS_ERROR;
-				return false;
-			}
-			fn->pass = SEMA_FN_PASS_IMPLEMENTED;
-			fn->sema.unwrap.env = env;
-			return true;
+		fn->pass = SEMA_FN_PASS_IMPLEMENTING;
+		SemaType * type = sema_type_from_interned_fn(fn->sema.signature);
+		if (!ensure_type_ptr_is_implemented(ctx, visitor, &type)) {
+			fn->pass = SEMA_FN_PASS_ERROR;
+			return false;
 		}
+		fn->sema.signature = &type->as.fn;
+		SemaEnv env;
+		sema_env_init_push_fn_base_env(ctx, &env, fn);
+		usize i = 0;
+		for (auto node = fn->sema.signature->params.begin; node;
+			 node = node->next) {
+			SemaTypeHandle type = node->type;
+			Str iden = fn->sema.args[i];
+			SemaVar var;
+			sema_var_init(&var, type, nullptr, false, false);
+			SemaDecl decl;
+			sema_decl_init(
+				&decl, SEMA_DECL_VAR,
+				symbol_pos_local(fn, (LocalSymbolIndex)env.decls.size), iden);
+			// TODO: overflow
+			decl.as.var = var;
+			if (!sema_ctx_add_decl(ctx, decl)) {
+				sema_ctx_oom(ctx);
+			}
+			++i;
+		}
+		bool ok = complete_block(ctx, visitor, fn->ast->body, list);
+		sema_env_pop(ctx);
+		if (!ok) {
+			fn->pass = SEMA_FN_PASS_ERROR;
+			return false;
+		}
+		fn->pass = SEMA_FN_PASS_IMPLEMENTED;
+		fn->sema.unwrap.env = env;
+		return true;
+	}
 	case SEMA_FN_PASS_IMPLEMENTING:
 	case SEMA_FN_PASS_IMPLEMENTED:
 	case SEMA_FN_PASS_REDUCED:
@@ -1677,91 +1776,92 @@ ExprEvalResult reduce_implemented_expr(SemaCtx * ctx, SemaExpr * expr) {
 	case SEMA_EXPR2_VALUE:
 		return EXPR_EVAL_REDUCED;
 	case SEMA_EXPR2_ADD_I32: {
-			SemaExpr * a = expr->as.sema2.add.a;
-			SemaExpr * b = expr->as.sema2.add.b;
-			ExprEvalResult aresult = reduce_implemented_expr(ctx, a);
-			ExprEvalResult bresult = reduce_implemented_expr(ctx, b);
-			if (!aresult || !bresult) {
+		SemaExpr * a = expr->as.sema2.add.a;
+		SemaExpr * b = expr->as.sema2.add.b;
+		ExprEvalResult aresult = reduce_implemented_expr(ctx, a);
+		ExprEvalResult bresult = reduce_implemented_expr(ctx, b);
+		if (!aresult || !bresult) {
+			return EXPR_EVAL_ERROR;
+		}
+		if (aresult == EXPR_EVAL_REDUCED && bresult == EXPR_EVAL_REDUCED) {
+			i32 value = a->as.sema2.value.as.i32 + b->as.sema2.value.as.i32;
+			sema_expr_init_reduced(expr, SEMA_EXPR2_VALUE);
+			sema_value_init(&expr->as.sema2.value, SEMA_VALUE_I32);
+			expr->as.sema2.value.as.i32 = value;
+			return EXPR_EVAL_REDUCED;
+		}
+		return EXPR_EVAL_UNREDUCED;
+	}
+	case SEMA_EXPR2_FUNCALL: {
+		// TODO: find more errors
+		SemaExpr * fn_expr = expr->as.sema2.funcall.fun;
+		ExprEvalResult result = reduce_implemented_expr(ctx, fn_expr);
+		if (result != EXPR_EVAL_ERROR) {
+			return EXPR_EVAL_ERROR;
+		}
+		for (usize i = 0; i < expr->as.sema2.funcall.args.size; ++i) {
+			SemaExpr * arg = &expr->as.sema2.funcall.args.data[i];
+			ExprEvalResult aresult = reduce_implemented_expr(ctx, arg);
+			if (!result) {
 				return EXPR_EVAL_ERROR;
 			}
-			if (aresult == EXPR_EVAL_REDUCED && bresult == EXPR_EVAL_REDUCED) {
-				i32 value = a->as.sema2.value.as.i32
-						+	b->as.sema2.value.as.i32;
-				sema_expr_init_reduced(expr, SEMA_EXPR2_VALUE);
-				sema_value_init(&expr->as.sema2.value, SEMA_VALUE_I32);
-				expr->as.sema2.value.as.i32 = value;
-				return EXPR_EVAL_REDUCED;
-			}
+			result =
+				aresult == EXPR_EVAL_REDUCED ? result : EXPR_EVAL_UNREDUCED;
+		}
+		if (result != EXPR_EVAL_REDUCED) {
 			return EXPR_EVAL_UNREDUCED;
 		}
-	case SEMA_EXPR2_FUNCALL: {
-			// TODO: find more errors
-			SemaExpr * fn_expr = expr->as.sema2.funcall.fun;
-			ExprEvalResult result = reduce_implemented_expr(ctx, fn_expr);
-			if (result != EXPR_EVAL_ERROR) {
-				return EXPR_EVAL_ERROR;
-			}
-			for (usize i = 0; i < expr->as.sema2.funcall.args.size; ++i) {
-				SemaExpr * arg = &expr->as.sema2.funcall.args.data[i];
-				ExprEvalResult aresult = reduce_implemented_expr(ctx, arg);
-				if (!result) {
-					return EXPR_EVAL_ERROR;
-				}
-				result = aresult == EXPR_EVAL_REDUCED ? result : EXPR_EVAL_UNREDUCED;
-			}
-			if (result != EXPR_EVAL_REDUCED) {
-				return EXPR_EVAL_UNREDUCED;
-			}
-			SemaFn * fn = fn_expr->as.sema2.value.as.fn;
-			SemaValue value;
-			if (!run_implemented_fn(ctx, fn, &value, DO_REPORT_ERROR)) {
-				return EXPR_EVAL_UNREDUCED;
-			}
-			sema_expr_init_reduced(expr, SEMA_EXPR2_VALUE);
-			expr->as.sema2.value = value;
-			return EXPR_EVAL_REDUCED;
+		SemaFn * fn = fn_expr->as.sema2.value.as.fn;
+		SemaValue value;
+		if (!run_implemented_fn(ctx, fn, &value, DO_REPORT_ERROR)) {
+			return EXPR_EVAL_UNREDUCED;
 		}
+		sema_expr_init_reduced(expr, SEMA_EXPR2_VALUE);
+		expr->as.sema2.value = value;
+		return EXPR_EVAL_REDUCED;
+	}
 	case SEMA_EXPR2_DEREF: {
-			SemaExpr * deref_expr = expr->as.sema2.deref;
-			ExprEvalResult result = reduce_implemented_expr(ctx, deref_expr);
-			if (!result) {
-				return EXPR_EVAL_ERROR;
-			}
-			if (result != EXPR_EVAL_REDUCED) {
-				return EXPR_EVAL_UNREDUCED;
-			}
-			SemaValue * value = &deref_expr->as.sema2.value;
-			switch (value->type) {
-			case SEMA_VALUE_VAR_REF:
-			case SEMA_VALUE_VAR_PTR:
-				assert(value->as.var_ptr->as.sema.init_with_expr);
-				*expr = value->as.var_ptr->as.sema.unwrap.expr;
-				assert(expr->type2 == SEMA_EXPR2_VALUE);
-				return EXPR_EVAL_REDUCED;
-			case SEMA_VALUE_RAW_PTR:
-			case SEMA_VALUE_RAW_REF:
-				return EXPR_EVAL_UNREDUCED;
-			case SEMA_VALUE_NULLPTR:
-				fprintf(stderr, "error: tried to deref a nullptr constant\n");
-				return false;
-			case SEMA_VALUE_VOID:
-			case SEMA_VALUE_I32:
-			case SEMA_VALUE_FN:
-				UNREACHABLE();
-			}
+		SemaExpr * deref_expr = expr->as.sema2.deref;
+		ExprEvalResult result = reduce_implemented_expr(ctx, deref_expr);
+		if (!result) {
+			return EXPR_EVAL_ERROR;
 		}
-	case SEMA_EXPR2_LOAD_VAR: {
-			ExprEvalResult result = reduce_implemented_var(ctx, expr->as.sema2.load_var);
-			if (!result) {
-				return EXPR_EVAL_ERROR;
-			}
-			if (result == EXPR_EVAL_UNREDUCED) {
-				return EXPR_EVAL_UNREDUCED;
-			}
-			assert(expr->as.sema2.load_var->as.sema.init_with_expr);
-			*expr = expr->as.sema2.load_var->as.sema.unwrap.expr;
+		if (result != EXPR_EVAL_REDUCED) {
+			return EXPR_EVAL_UNREDUCED;
+		}
+		SemaValue * value = &deref_expr->as.sema2.value;
+		switch (value->type) {
+		case SEMA_VALUE_VAR_REF:
+		case SEMA_VALUE_VAR_PTR:
+			assert(value->as.var_ptr->as.sema.init_with_expr);
+			*expr = value->as.var_ptr->as.sema.unwrap.expr;
+			assert(expr->type2 == SEMA_EXPR2_VALUE);
 			return EXPR_EVAL_REDUCED;
+		case SEMA_VALUE_RAW_PTR:
+		case SEMA_VALUE_RAW_REF:
+			return EXPR_EVAL_UNREDUCED;
+		case SEMA_VALUE_NULLPTR:
+			fprintf(stderr, "error: tried to deref a nullptr constant\n");
+			return false;
+		case SEMA_VALUE_VOID:
+		case SEMA_VALUE_I32:
+		case SEMA_VALUE_FN:
+			UNREACHABLE();
 		}
+	}
+	case SEMA_EXPR2_LOAD_VAR: {
+		ExprEvalResult result =
+			reduce_implemented_var(ctx, expr->as.sema2.load_var);
+		if (!result) {
+			return EXPR_EVAL_ERROR;
+		}
+		if (result == EXPR_EVAL_UNREDUCED) {
+			return EXPR_EVAL_UNREDUCED;
+		}
+		assert(expr->as.sema2.load_var->as.sema.init_with_expr);
+		*expr = expr->as.sema2.load_var->as.sema.unwrap.expr;
+		return EXPR_EVAL_REDUCED;
+	}
 	}
 }
 
@@ -1773,21 +1873,26 @@ ExprEvalResult reduce_implemented_var(SemaCtx * ctx, SemaVar * var) {
 		goto error;
 	}
 	assert(var->as.sema.init_with_expr);
-	ExprEvalResult result = reduce_implemented_expr(ctx, &var->as.sema.unwrap.expr);
+	ExprEvalResult result =
+		reduce_implemented_expr(ctx, &var->as.sema.unwrap.expr);
 	if (!result) {
 		goto error;
 	}
 	if (result == EXPR_EVAL_REDUCED) {
 		// TODO: check if scope is global
-		return var->is_const || var->is_global ? EXPR_EVAL_REDUCED : EXPR_EVAL_UNREDUCED;
+		return var->is_const || var->is_global ? EXPR_EVAL_REDUCED
+											   : EXPR_EVAL_UNREDUCED;
 	}
 	// result == EXPR_EVAL_UNREDUCED
 	if (var->is_const) {
-		fprintf(stderr, "error: non-constant expression assigned to constant variable\n");
+		fprintf(
+			stderr,
+			"error: non-constant expression assigned to constant variable\n");
 		goto error;
 	}
 	if (var->is_global) {
-		fprintf(stderr, "error: global variable initialized with non-constant expression\n");
+		fprintf(stderr, "error: global variable initialized with non-constant "
+						"expression\n");
 		goto error;
 	}
 	return EXPR_EVAL_UNREDUCED;
@@ -1825,7 +1930,8 @@ bool reduce_implemented_fn(SemaCtx * ctx, SemaFn * fn) {
 	return reduce_implemented_blk(ctx, &fn->sema.unwrap.env.as.fn.blk);
 }
 
-bool ensure_fn_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) {
+bool ensure_fn_is_implemented(SemaCtx * ctx, VisitorState visitor,
+							  SemaFn * fn) {
 	SemaFnWorklist * worklist = &ctx->worklist;
 	SemaFnWorklist reduction_worklist = {};
 	complete_fn_iter(ctx, visitor, fn, worklist);
@@ -1853,7 +1959,8 @@ bool ensure_fn_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaFn * fn) 
 	return ok;
 }
 
-bool run_implemented_fn(SemaCtx * ctx, SemaFn * fn, SemaValue * out, ReportError report_error) {
+bool run_implemented_fn(SemaCtx * ctx, SemaFn * fn, SemaValue * out,
+						ReportError report_error) {
 	if (fn->pass == SEMA_FN_PASS_ERROR) {
 		return false;
 	}
@@ -1861,14 +1968,15 @@ bool run_implemented_fn(SemaCtx * ctx, SemaFn * fn, SemaValue * out, ReportError
 	TODO();
 }
 
-bool ensure_decl_is_implemented(SemaCtx * ctx, VisitorState visitor, SemaDecl * decl) {
+bool ensure_decl_is_implemented(SemaCtx * ctx, VisitorState visitor,
+								SemaDecl * decl) {
 	switch (decl->type) {
-		case SEMA_DECL_TYPE_ALIAS:
-			return ensure_type_alias_is_implemented(ctx, visitor, &decl->as.alias);
-		case SEMA_DECL_FN:
-			return ensure_fn_is_implemented(ctx, visitor, &decl->as.fn);
-		case SEMA_DECL_VAR:
-			return ensure_var_is_implemented(ctx, visitor, &decl->as.var);
+	case SEMA_DECL_TYPE_ALIAS:
+		return ensure_type_alias_is_implemented(ctx, visitor, &decl->as.alias);
+	case SEMA_DECL_FN:
+		return ensure_fn_is_implemented(ctx, visitor, &decl->as.fn);
+	case SEMA_DECL_VAR:
+		return ensure_var_is_implemented(ctx, visitor, &decl->as.var);
 	}
 }
 
@@ -1878,14 +1986,16 @@ bool sema_analyze_ast(SemaCtx * ctx, Ast ast) {
 		return false;
 	}
 	for (DeclNode * node = ast.begin; node; node = node->next) {
-		SemaDecl decl = sema_decl_from_ast(ctx, &node->decl, symbol_pos_global());
+		SemaDecl decl =
+			sema_decl_from_ast(ctx, &node->decl, symbol_pos_global());
 		if (!sema_ctx_add_decl(ctx, decl)) {
 			sema_ctx_oom(ctx);
 		}
 	}
 	bool ok = true;
 	for (usize i = 0; i < ctx->env->decls.size; ++i) {
-		ok &= ensure_decl_is_implemented(ctx, new_visitor_state(), sema_decl_list_at(&ctx->env->decls, i));
+		ok &= ensure_decl_is_implemented(
+			ctx, new_visitor_state(), sema_decl_list_at(&ctx->env->decls, i));
 	}
 	return ok;
 }
@@ -1904,13 +2014,15 @@ void sema_print_type(FILE * file, SemaTypeHandle handle) {
 	case SEMA_TYPE_FN:
 		fputs("fn(", file);
 		const char * sep = "";
-		for (auto node = handle.type->as.fn.params.begin; node; node = node->next) {
-			fputs(sep, file); sep = ", ";
+		for (auto node = handle.type->as.fn.params.begin; node;
+			 node = node->next) {
+			fputs(sep, file);
+			sep = ", ";
 			sema_print_type(file, node->type);
 		}
 		fputs("): ", file);
-		sema_print_type(file, 
-				sema_type_handle_from_ptr(handle.type->as.fn.return_type));
+		sema_print_type(
+			file, sema_type_handle_from_ptr(handle.type->as.fn.return_type));
 		break;
 	case SEMA_TYPE_PTR:
 		fputs("*", file);
@@ -1955,9 +2067,7 @@ void sema_expr_init_reduced(SemaExpr * expr, SemaExpr2Type type) {
 	expr->type2 = type;
 }
 
-void sema_stmt_init(SemaStmt * stmt, SemaStmtType type) {
-	stmt->type = type;
-}
+void sema_stmt_init(SemaStmt * stmt, SemaStmtType type) { stmt->type = type; }
 
 void sema_var_init_with_ast(SemaVar * var, const Var * ast, bool global) {
 	var->pass = SEMA_VAR_PASS_AST;
@@ -1966,7 +2076,8 @@ void sema_var_init_with_ast(SemaVar * var, const Var * ast, bool global) {
 	var->as.ast = ast;
 }
 
-void sema_var_init(SemaVar * var, SemaTypeHandle type, SemaExpr * opt_expr, bool global, bool is_const) {
+void sema_var_init(SemaVar * var, SemaTypeHandle type, SemaExpr * opt_expr,
+				   bool global, bool is_const) {
 	var->is_global = global;
 	var->is_const = is_const;
 	var->as.sema.init_with_expr = opt_expr != nullptr;
@@ -1991,30 +2102,30 @@ void sema_fn_init_with_ast(SemaFn * fn, const Fn * ast) {
 }
 
 SymbolPos symbol_pos_global(void) {
-	return (SymbolPos) {
+	return (SymbolPos){
 		.local = false,
 	};
 }
 
 SymbolPos symbol_pos_local(SemaFn * fn, LocalSymbolIndex index) {
-	return (SymbolPos) {
+	return (SymbolPos){
 		.local = true,
 		.fn = fn,
 		.index = index,
 	};
 }
 
-void sema_decl_init(SemaDecl * decl, SemaDeclType type, SymbolPos pos, Str iden) {
+void sema_decl_init(SemaDecl * decl, SemaDeclType type, SymbolPos pos,
+					Str iden) {
 	decl->type = type;
 	decl->pos = pos;
 	decl->iden = iden;
 }
 
-void sema_type_list_init(SemaTypeList * list) {
-	ZERO(list);
-}
+void sema_type_list_init(SemaTypeList * list) { ZERO(list); }
 
-SemaType * sema_type_list_push_front(VMemArena * arena, SemaTypeList * list, SemaType type) {
+SemaType * sema_type_list_push_front(VMemArena * arena, SemaTypeList * list,
+									 SemaType type) {
 	auto node = vmem_arena_alloc(arena, SemaTypeNode);
 	if (!node) {
 		return nullptr;
@@ -2028,11 +2139,11 @@ SemaType * sema_type_list_push_front(VMemArena * arena, SemaTypeList * list, Sem
 	return &node->type;
 }
 
-void sema_type_handle_list_init(SemaTypeHandleList * list) {
-	ZERO(list);
-}
+void sema_type_handle_list_init(SemaTypeHandleList * list) { ZERO(list); }
 
-void sema_type_handle_list_push_node(SemaTypeHandleList * list, SemaTypeHandle type, SemaTypeHandleNode * node) {
+void sema_type_handle_list_push_node(SemaTypeHandleList * list,
+									 SemaTypeHandle type,
+									 SemaTypeHandleNode * node) {
 	node->type = type;
 	node->next = nullptr;
 	if (!list->begin) {
@@ -2045,7 +2156,8 @@ void sema_type_handle_list_push_node(SemaTypeHandleList * list, SemaTypeHandle t
 	++list->count;
 }
 
-bool sema_type_handle_list_push(VMemArena * arena, SemaTypeHandleList * list, SemaTypeHandle type) {
+bool sema_type_handle_list_push(VMemArena * arena, SemaTypeHandleList * list,
+								SemaTypeHandle type) {
 	auto node = vmem_arena_alloc(arena, SemaTypeHandleNode);
 	if (!node) {
 		return false;
@@ -2054,7 +2166,9 @@ bool sema_type_handle_list_push(VMemArena * arena, SemaTypeHandleList * list, Se
 	return true;
 }
 
-void sema_type_handle_list_push_node_front(SemaTypeHandleList * list, SemaTypeHandle type, SemaTypeHandleNode * node) {
+void sema_type_handle_list_push_node_front(SemaTypeHandleList * list,
+										   SemaTypeHandle type,
+										   SemaTypeHandleNode * node) {
 	node->type = type;
 	node->next = list->begin;
 	list->begin = node;
@@ -2063,7 +2177,9 @@ void sema_type_handle_list_push_node_front(SemaTypeHandleList * list, SemaTypeHa
 	}
 }
 
-bool sema_type_handle_list_push_front(VMemArena * arena, SemaTypeHandleList * list, SemaTypeHandle type) {
+bool sema_type_handle_list_push_front(VMemArena * arena,
+									  SemaTypeHandleList * list,
+									  SemaTypeHandle type) {
 	auto node = vmem_arena_alloc(arena, SemaTypeHandleNode);
 	if (!node) {
 		return false;
@@ -2079,11 +2195,10 @@ void sema_type_handle_list_pop_front(SemaTypeHandleList * list) {
 	}
 }
 
-void sema_expr_list_init(SemaExprList * list) {
-	ZERO(list);
-}
+void sema_expr_list_init(SemaExprList * list) { ZERO(list); }
 
-SemaExpr * sema_expr_list_push(VMemArena * arena, SemaExprList * list, SemaExpr expr) {
+SemaExpr * sema_expr_list_push(VMemArena * arena, SemaExprList * list,
+							   SemaExpr expr) {
 	auto node = vmem_arena_alloc(arena, SemaExprNode);
 	if (!node) {
 		return nullptr;
@@ -2108,11 +2223,10 @@ static usize segmented_list_get_index_in_slot(usize slot, usize index) {
 	return index - ((usize)1 << slot) + 1;
 }
 
-void sema_stmt_list_init(SemaStmtList * list) {
-	ZERO(list);
-}
+void sema_stmt_list_init(SemaStmtList * list) { ZERO(list); }
 
-SemaStmt * sema_stmt_list_push(VMemArena * arena, SemaStmtList * list, SemaStmt stmt) {
+SemaStmt * sema_stmt_list_push(VMemArena * arena, SemaStmtList * list,
+							   SemaStmt stmt) {
 	usize slot = segmented_list_get_slot(list->size);
 	if (slot == list->slots_size) {
 		usize slots_size = slot + 1;
@@ -2147,11 +2261,10 @@ SemaStmt * sema_stmt_list_at(SemaStmtList * list, usize index) {
 	return &list->slots[slot][slot_index];
 }
 
-void sema_decl_list_init(SemaDeclList * list) {
-	ZERO(list);
-}
+void sema_decl_list_init(SemaDeclList * list) { ZERO(list); }
 
-SemaDecl * sema_decl_list_push(VMemArena * arena, SemaDeclList * list, SemaDecl decl) {
+SemaDecl * sema_decl_list_push(VMemArena * arena, SemaDeclList * list,
+							   SemaDecl decl) {
 	usize slot = segmented_list_get_slot(list->size);
 	if (slot == list->slots_size) {
 		usize slots_size = slot + 1;

@@ -49,7 +49,7 @@ typedef struct {
 
 Lexer lexer_new(Str src);
 Token lexer_next(Lexer * lexer);
-Str   lexer_token_str(const Lexer * lexer, const Token * token);
+Str lexer_token_str(const Lexer * lexer, const Token * token);
 usize lexer_row(const Lexer * lexer);
 usize lexer_col(const Lexer * lexer);
-bool  lexer_eof(const Lexer * lexer);
+bool lexer_eof(const Lexer * lexer);

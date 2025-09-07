@@ -1,7 +1,7 @@
 #pragma once
 
-#include "lexer.h"
 #include "arena.h"
+#include "lexer.h"
 #include <setjmp.h>
 
 typedef struct {
@@ -172,7 +172,7 @@ typedef struct {
 typedef struct {
 	bool init_with_expr : 1;
 	bool is_mut : 1;
-	bool is_const: 1;
+	bool is_const : 1;
 	Str iden;
 	Type type;
 	struct {
@@ -214,7 +214,7 @@ typedef struct {
 	Token current;
 	Token next;
 	bool panic_mode : 1;
-	bool had_error  : 1;
+	bool had_error : 1;
 } Parser;
 
 void parser_init(Parser * parser, Str src, VMemArena * arena);

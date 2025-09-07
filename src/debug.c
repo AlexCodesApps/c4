@@ -1,12 +1,12 @@
-#include <stdio.h>
-#include <inttypes.h>
 #include "include/ast.h"
 #include "include/lexer.h"
+#include <inttypes.h>
+#include <stdio.h>
 
-static void dump_token(const Lexer * lexer, const Token * token, Str token_type) {
+static void dump_token(const Lexer * lexer, const Token * token,
+					   Str token_type) {
 	Str str = lexer_token_str(lexer, token);
-	fprintf(stderr, "  %.*s '%.*s'\n",
-			(int)token_type.size, token_type.data,
+	fprintf(stderr, "  %.*s '%.*s'\n", (int)token_type.size, token_type.data,
 			(int)str.size, str.data);
 }
 
@@ -17,52 +17,75 @@ void dump_tokens(Str src) {
 	do {
 		token = lexer_next(&lexer);
 		switch (token.type) {
-			case TOKEN_LPAREN:
-				dump_token(&lexer, &token, s("LPAREN")); break;
-			case TOKEN_RPAREN:
-				dump_token(&lexer, &token, s("RPAREN")); break;
-			case TOKEN_LBRACE:
-				dump_token(&lexer, &token, s("LBRACE")); break;
-			case TOKEN_RBRACE:
-				dump_token(&lexer, &token, s("RBRACE")); break;
-			case TOKEN_COLON:
-				dump_token(&lexer, &token, s("COLON")); break;
-			case TOKEN_SEMICOLON:
-				dump_token(&lexer, &token, s("SEMICOLON")); break;
-			case TOKEN_PLUS:
-				dump_token(&lexer, &token, s("PLUS")); break;
-			case TOKEN_COMMA:
-				dump_token(&lexer, &token, s("COMMA")); break;
-			case TOKEN_EQ:
-				dump_token(&lexer, &token, s("EQ")); break;
-			case TOKEN_STAR:
-				dump_token(&lexer, &token, s("*")); break;
-			case TOKEN_AMPERSAND:
-				dump_token(&lexer, &token, s("&")); break;
-			case TOKEN_CONST:
-				dump_token(&lexer, &token, s("CONST")); break;
-			case TOKEN_FN:
-				dump_token(&lexer, &token, s("FN")); break;
-			case TOKEN_LET:
-				dump_token(&lexer, &token, s("LET")); break;
-			case TOKEN_MUT:
-				dump_token(&lexer, &token, s("MUT")); break;
-			case TOKEN_NULLPTR:
-				dump_token(&lexer, &token, s("NULLPTR")); break;
-			case TOKEN_RETURN:
-				dump_token(&lexer, &token, s("RETURN")); break;
-			case TOKEN_TYPE:
-				dump_token(&lexer, &token, s("TYPE")); break;
-			case TOKEN_VOID:
-				dump_token(&lexer, &token, s("VOID")); break;
-			case TOKEN_IDEN:
-				dump_token(&lexer, &token, s("IDEN")); break;
-			case TOKEN_INT:
-				dump_token(&lexer, &token, s("INT")); break;
-			case TOKEN_EOF:
-				dump_token(&lexer, &token, s("EOF")); break;
-			case TOKEN_ERR:
-				dump_token(&lexer, &token, s("ERR")); break;
+		case TOKEN_LPAREN:
+			dump_token(&lexer, &token, s("LPAREN"));
+			break;
+		case TOKEN_RPAREN:
+			dump_token(&lexer, &token, s("RPAREN"));
+			break;
+		case TOKEN_LBRACE:
+			dump_token(&lexer, &token, s("LBRACE"));
+			break;
+		case TOKEN_RBRACE:
+			dump_token(&lexer, &token, s("RBRACE"));
+			break;
+		case TOKEN_COLON:
+			dump_token(&lexer, &token, s("COLON"));
+			break;
+		case TOKEN_SEMICOLON:
+			dump_token(&lexer, &token, s("SEMICOLON"));
+			break;
+		case TOKEN_PLUS:
+			dump_token(&lexer, &token, s("PLUS"));
+			break;
+		case TOKEN_COMMA:
+			dump_token(&lexer, &token, s("COMMA"));
+			break;
+		case TOKEN_EQ:
+			dump_token(&lexer, &token, s("EQ"));
+			break;
+		case TOKEN_STAR:
+			dump_token(&lexer, &token, s("*"));
+			break;
+		case TOKEN_AMPERSAND:
+			dump_token(&lexer, &token, s("&"));
+			break;
+		case TOKEN_CONST:
+			dump_token(&lexer, &token, s("CONST"));
+			break;
+		case TOKEN_FN:
+			dump_token(&lexer, &token, s("FN"));
+			break;
+		case TOKEN_LET:
+			dump_token(&lexer, &token, s("LET"));
+			break;
+		case TOKEN_MUT:
+			dump_token(&lexer, &token, s("MUT"));
+			break;
+		case TOKEN_NULLPTR:
+			dump_token(&lexer, &token, s("NULLPTR"));
+			break;
+		case TOKEN_RETURN:
+			dump_token(&lexer, &token, s("RETURN"));
+			break;
+		case TOKEN_TYPE:
+			dump_token(&lexer, &token, s("TYPE"));
+			break;
+		case TOKEN_VOID:
+			dump_token(&lexer, &token, s("VOID"));
+			break;
+		case TOKEN_IDEN:
+			dump_token(&lexer, &token, s("IDEN"));
+			break;
+		case TOKEN_INT:
+			dump_token(&lexer, &token, s("INT"));
+			break;
+		case TOKEN_EOF:
+			dump_token(&lexer, &token, s("EOF"));
+			break;
+		case TOKEN_ERR:
+			dump_token(&lexer, &token, s("ERR"));
+			break;
 		}
 	} while (token.type != TOKEN_EOF);
 }
@@ -82,7 +105,8 @@ static void dump_type(u32 indent, const Type * type) {
 		fputs("void\n", stderr);
 		break;
 	case TYPE_IDEN:
-		fprintf(stderr, "iden %.*s\n", (int)type->as.iden.size, type->as.iden.data);
+		fprintf(stderr, "iden %.*s\n", (int)type->as.iden.size,
+				type->as.iden.data);
 		break;
 	case TYPE_FN:
 		fprintf(stderr, "fn\n");
@@ -113,71 +137,71 @@ static void dump_type(u32 indent, const Type * type) {
 static void dump_expr(u32 indent, const Expr * expr) {
 	pad_indent(indent);
 	switch (expr->type) {
-		case EXPR_POISONED:
-			fputs("<poisoned>\n", stderr);
-			break;
-		case EXPR_INT:
-			fprintf(stderr, "%"PRIu64"\n", expr->as.int_);
-			break;
-		case EXPR_IDEN:
-			fprintf(stderr, "iden %.*s\n", (int)expr->as.iden.size, expr->as.iden.data);
-			break;
-		case EXPR_FUNCALL:
-			fputs("call\n", stderr);
-			dump_expr(indent + 1, expr->as.funcall.fun);
-			pad_indent(indent + 1);
-			fputs("parameters\n", stderr);
-			for (ExprNode * node = expr->as.funcall.args.begin; 
-				node;
-				node = node->next) {
-				dump_expr(indent + 2, &node->expr);
-			}
-			break;
-		case EXPR_NULLPTR:
-			fputs("nullptr\n", stderr);
-			break;
-		case EXPR_ADDR:
-			fputs("&\n", stderr);
-			dump_expr(indent + 1, expr->as.addr);
-			break;
-		case EXPR_PLUS:
-			fputs("+\n", stderr);
-			dump_expr(indent + 1, expr->as.plus.a);
-			dump_expr(indent + 1, expr->as.plus.b);
-			break;
+	case EXPR_POISONED:
+		fputs("<poisoned>\n", stderr);
+		break;
+	case EXPR_INT:
+		fprintf(stderr, "%" PRIu64 "\n", expr->as.int_);
+		break;
+	case EXPR_IDEN:
+		fprintf(stderr, "iden %.*s\n", (int)expr->as.iden.size,
+				expr->as.iden.data);
+		break;
+	case EXPR_FUNCALL:
+		fputs("call\n", stderr);
+		dump_expr(indent + 1, expr->as.funcall.fun);
+		pad_indent(indent + 1);
+		fputs("parameters\n", stderr);
+		for (ExprNode * node = expr->as.funcall.args.begin; node;
+			 node = node->next) {
+			dump_expr(indent + 2, &node->expr);
+		}
+		break;
+	case EXPR_NULLPTR:
+		fputs("nullptr\n", stderr);
+		break;
+	case EXPR_ADDR:
+		fputs("&\n", stderr);
+		dump_expr(indent + 1, expr->as.addr);
+		break;
+	case EXPR_PLUS:
+		fputs("+\n", stderr);
+		dump_expr(indent + 1, expr->as.plus.a);
+		dump_expr(indent + 1, expr->as.plus.b);
+		break;
 	}
 }
 
 static void dump_stmt(u32 indent, Stmt stmt) {
 	switch (stmt.type) {
-		case STMT_SEMICOLON:
-			pad_indent(indent);
-			fputs(";\n", stderr);
-			break;
-		case STMT_RETURN:
-			pad_indent(indent);
-			fputs("return\n", stderr);
-			if (stmt.as.return_.has_expr) {
-				dump_expr(indent + 1, &stmt.as.return_.unwrap.expr);
-			}
-			break;
-		case STMT_EXPR:
-			pad_indent(indent);
-			fputs("expr\n", stderr);
-			dump_expr(indent + 1, &stmt.as.expr);
-			break;
-		case STMT_BLOCK:
-			pad_indent(indent);
-			fprintf(stderr, "block\n");
-			for (auto node = stmt.as.block.begin; node; node = node->next) {
-				dump_stmt(indent + 1, node->stmt);
-			}
-			break;
-		case STMT_DECL:
-			pad_indent(indent);
-			fputs("decl\n", stderr);
-			dump_decl(indent, stmt.as.decl);
-			break;
+	case STMT_SEMICOLON:
+		pad_indent(indent);
+		fputs(";\n", stderr);
+		break;
+	case STMT_RETURN:
+		pad_indent(indent);
+		fputs("return\n", stderr);
+		if (stmt.as.return_.has_expr) {
+			dump_expr(indent + 1, &stmt.as.return_.unwrap.expr);
+		}
+		break;
+	case STMT_EXPR:
+		pad_indent(indent);
+		fputs("expr\n", stderr);
+		dump_expr(indent + 1, &stmt.as.expr);
+		break;
+	case STMT_BLOCK:
+		pad_indent(indent);
+		fprintf(stderr, "block\n");
+		for (auto node = stmt.as.block.begin; node; node = node->next) {
+			dump_stmt(indent + 1, node->stmt);
+		}
+		break;
+	case STMT_DECL:
+		pad_indent(indent);
+		fputs("decl\n", stderr);
+		dump_decl(indent, stmt.as.decl);
+		break;
 	}
 }
 
@@ -190,8 +214,7 @@ static void dump_fn(u32 indent, const Fn * fn) {
 		for (FnParamNode * node = fn->params->begin; node; node = node->next) {
 			if (node->param.has_iden) {
 				pad_indent(indent + 2);
-				fprintf(stderr, "%.*s\n",
-						(int)node->param.unwrap.iden.size, 
+				fprintf(stderr, "%.*s\n", (int)node->param.unwrap.iden.size,
 						node->param.unwrap.iden.data);
 			}
 			dump_type(indent + 3, &node->param.type);
@@ -221,20 +244,20 @@ static void dump_var(u32 indent, const Var * var) {
 }
 
 static void dump_decl(u32 indent, const Decl * decl) {
-		switch (decl->type) {
-			case DECL_FN:
-				dump_fn(indent, &decl->as.fn);
-				break;
-			case DECL_TYPE_ALIAS:
-				pad_indent(indent);
-				fprintf(stderr, "type %.*s\n", (int)decl->as.alias.iden.size,
-											 decl->as.alias.iden.data);
-				dump_type(indent + 1, &decl->as.alias.type);
-				break;
-			case DECL_VAR:
-				dump_var(indent, &decl->as.var);
-				break;
-		}
+	switch (decl->type) {
+	case DECL_FN:
+		dump_fn(indent, &decl->as.fn);
+		break;
+	case DECL_TYPE_ALIAS:
+		pad_indent(indent);
+		fprintf(stderr, "type %.*s\n", (int)decl->as.alias.iden.size,
+				decl->as.alias.iden.data);
+		dump_type(indent + 1, &decl->as.alias.type);
+		break;
+	case DECL_VAR:
+		dump_var(indent, &decl->as.var);
+		break;
+	}
 }
 
 void dump_ast(Ast ast) {

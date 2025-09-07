@@ -1,0 +1,5 @@
+TabWidth: 4
+IndentWidth: 4
+DerivePointerAlignment: false
+PointerAlignment: Middle
+UseTab: Always

@@ -1,15 +1,15 @@
-#include <inttypes.h>
-#include <stdio.h>
 #include "include/ast.h"
 #include "include/utility.h"
+#include <inttypes.h>
+#include <stdio.h>
 
-#define DECL_TOKENS \
-TOKEN_FN: \
-case TOKEN_TYPE: \
-case TOKEN_LET: \
-case TOKEN_CONST
+#define DECL_TOKENS                                                            \
+	TOKEN_FN:                                                                  \
+	case TOKEN_TYPE:                                                           \
+	case TOKEN_LET:                                                            \
+	case TOKEN_CONST
 
-const Expr poisoned_expr = { .type = EXPR_POISONED };
+const Expr poisoned_expr = {.type = EXPR_POISONED};
 const FnParamList poisoned_fn_param_list;
 
 _Noreturn static void parser_oom(Parser * parser) {
@@ -33,8 +33,8 @@ static void print_token(const Parser * parser, const Token * token) {
 }
 
 static void print_error_header(const Parser * parser) {
-	fprintf(stderr, "in [%"PRIu64", %"PRIu64"] error: ",
-			lexer_row(&parser->lexer),
+	fprintf(stderr,
+			"in [%" PRIu64 ", %" PRIu64 "] error: ", lexer_row(&parser->lexer),
 			lexer_col(&parser->lexer));
 }
 
@@ -62,13 +62,9 @@ static Token next_token(Parser * parser) {
 	}
 }
 
-static const Token * peek(const Parser * parser) {
-	return &parser->current;
-}
+static const Token * peek(const Parser * parser) { return &parser->current; }
 
-static const Token * peek1(const Parser * parser) {
-	return &parser->next;
-}
+static const Token * peek1(const Parser * parser) { return &parser->next; }
 
 static void advance(Parser * parser) {
 	parser->current = parser->next;
@@ -122,7 +118,7 @@ static TokenIndex src_span_start(const Parser * parser) {
 
 static SrcSpan src_span_end(const Parser * parser, TokenIndex start) {
 	TokenIndex end = peek(parser)->end;
-	return (SrcSpan) {
+	return (SrcSpan){
 		.start = start,
 		.end = end,
 	};
@@ -146,8 +142,8 @@ typedef enum {
 	EXPR_PREC_PRIMARY,
 } ExprPrecedence;
 
-typedef Expr (* PrefixRule)(Parser *);
-typedef Expr (* InfixRule)(Parser *, Expr);
+typedef Expr (*PrefixRule)(Parser *);
+typedef Expr (*InfixRule)(Parser *, Expr);
 
 typedef struct {
 	PrefixRule prefix;
@@ -220,18 +216,18 @@ static void synchronize_expr_in_parens(Parser * parser) {
 	}
 	while (!eof(parser)) {
 		switch (peek(parser)->type) {
-			case TOKEN_RPAREN:
-				parser->panic_mode = false;
-				[[fallthrough]];
-			case TOKEN_FN:
-			case TOKEN_TYPE:
-			case TOKEN_LET:
-			case TOKEN_RBRACE:
-			case TOKEN_SEMICOLON:
-				return;
-			default:
-				advance(parser);
-				break;
+		case TOKEN_RPAREN:
+			parser->panic_mode = false;
+			[[fallthrough]];
+		case TOKEN_FN:
+		case TOKEN_TYPE:
+		case TOKEN_LET:
+		case TOKEN_RBRACE:
+		case TOKEN_SEMICOLON:
+			return;
+		default:
+			advance(parser);
+			break;
 		}
 	}
 }
@@ -291,12 +287,12 @@ static Expr expr_plus(Parser * parser, Expr prefix) {
 }
 
 static ExprParseRule expr_parse_rules[TOKEN_EOF + 1] = {
-	[TOKEN_LPAREN]    = {expr_grouping, expr_funcall,    EXPR_PREC_FUNCALL},
-	[TOKEN_PLUS]      = {nullptr,       expr_plus,       EXPR_PREC_TERM   },
-	[TOKEN_AMPERSAND] = {expr_addr,     nullptr,         EXPR_PREC_NONE   },
-	[TOKEN_INT]       = {expr_int,      nullptr,         EXPR_PREC_NONE   },
-	[TOKEN_NULLPTR]   = {expr_nullptr,  nullptr,         EXPR_PREC_NONE   },
-	[TOKEN_IDEN]      = {expr_iden,     nullptr,         EXPR_PREC_NONE   },
+	[TOKEN_LPAREN] = {expr_grouping, expr_funcall, EXPR_PREC_FUNCALL},
+	[TOKEN_PLUS] = {nullptr, expr_plus, EXPR_PREC_TERM},
+	[TOKEN_AMPERSAND] = {expr_addr, nullptr, EXPR_PREC_NONE},
+	[TOKEN_INT] = {expr_int, nullptr, EXPR_PREC_NONE},
+	[TOKEN_NULLPTR] = {expr_nullptr, nullptr, EXPR_PREC_NONE},
+	[TOKEN_IDEN] = {expr_iden, nullptr, EXPR_PREC_NONE},
 };
 
 static Expr parse_expr_precedence(Parser * parser, ExprPrecedence prec) {
@@ -333,101 +329,103 @@ static Expr parse_expr(Parser * parser) {
 static bool parse_type(Parser * parser, Type * out) {
 	TokenIndex begin = src_span_start(parser);
 	switch (peek(parser)->type) {
-		case TOKEN_VOID:
-			advance(parser);
-			out->type = TYPE_VOID;
-			break;
-		case TOKEN_IDEN:
-			out->type = TYPE_IDEN;
-			out->as.iden = lexer_token_str(&parser->lexer, peek(parser));
-			advance(parser);
-			break;
-		case TOKEN_FN:
-			advance(parser);
-			if (!expect(parser, TOKEN_LPAREN, "expected '('")) {
-				return false;
-			}
-			TypeList params;
-			type_list_init(&params);
-			if (peek(parser)->type != TOKEN_RPAREN) {
-
-				if (peek(parser)->type == TOKEN_IDEN
-					&& peek1(parser)->type == TOKEN_COLON) {
-					advance(parser);
-					advance(parser);
-				}
-				do {
-					Type type;
-					if (!parse_type(parser, &type)) {
-						return false;
-					}
-					if (!type_list_push(parser->arena, &params, type)) {
-						parser_oom(parser);
-					}
-					if (!match(parser, TOKEN_COMMA)) {
-						break;
-					}
-				} while (peek(parser)->type != TOKEN_RPAREN);
-			}
-			if (!expect(parser, TOKEN_RPAREN, "expected ')'")) {
-				return false;
-			}
-			if (!expect(parser, TOKEN_COLON, "expected ':'")) {
-				if (peek(parser)->type == TOKEN_LBRACE) {
-					fprintf(stderr, "hint : functions returning void always have ': void'\n");
-				}
-				return false;
-			}
-			Type * return_type = vmem_arena_alloc(parser->arena, Type);
-			if (!return_type) {
-				parser_oom(parser);
-			}
-			if (!parse_type(parser, return_type)) {
-				return false;
-			}
-			out->type = TYPE_FN;
-			out->as.fn.return_type = return_type;
-			out->as.fn.params = params;
-			break;
-		case TOKEN_MUT:
-			advance(parser);
-			Type * mut = vmem_arena_alloc(parser->arena, Type);
-			if (!mut) {
-				parser_oom(parser);
-			}
-			if (!parse_type(parser, mut)) {
-				return false;
-			}
-			out->type = TYPE_MUT;
-			out->as.mut = mut;
-			break;
-		case TOKEN_STAR:
-			advance(parser);
-			Type * ptr = vmem_arena_alloc(parser->arena, Type);
-			if (!ptr) {
-				parser_oom(parser);
-			}
-			if (!parse_type(parser, ptr)) {
-				return false;
-			}
-			out->type = TYPE_PTR;
-			out->as.ptr = ptr;
-			break;
-		case TOKEN_AMPERSAND:
-			advance(parser);
-			ptr = vmem_arena_alloc(parser->arena, Type);
-			if (!ptr) {
-				parser_oom(parser);
-			}
-			if (!parse_type(parser, ptr)) {
-				return false;
-			}
-			out->type = TYPE_REF;
-			out->as.ref = ptr;
-			break;
-		default:
-			expect_error(parser, "expected type");
+	case TOKEN_VOID:
+		advance(parser);
+		out->type = TYPE_VOID;
+		break;
+	case TOKEN_IDEN:
+		out->type = TYPE_IDEN;
+		out->as.iden = lexer_token_str(&parser->lexer, peek(parser));
+		advance(parser);
+		break;
+	case TOKEN_FN:
+		advance(parser);
+		if (!expect(parser, TOKEN_LPAREN, "expected '('")) {
 			return false;
+		}
+		TypeList params;
+		type_list_init(&params);
+		if (peek(parser)->type != TOKEN_RPAREN) {
+
+			if (peek(parser)->type == TOKEN_IDEN &&
+				peek1(parser)->type == TOKEN_COLON) {
+				advance(parser);
+				advance(parser);
+			}
+			do {
+				Type type;
+				if (!parse_type(parser, &type)) {
+					return false;
+				}
+				if (!type_list_push(parser->arena, &params, type)) {
+					parser_oom(parser);
+				}
+				if (!match(parser, TOKEN_COMMA)) {
+					break;
+				}
+			} while (peek(parser)->type != TOKEN_RPAREN);
+		}
+		if (!expect(parser, TOKEN_RPAREN, "expected ')'")) {
+			return false;
+		}
+		if (!expect(parser, TOKEN_COLON, "expected ':'")) {
+			if (peek(parser)->type == TOKEN_LBRACE) {
+				fprintf(
+					stderr,
+					"hint : functions returning void always have ': void'\n");
+			}
+			return false;
+		}
+		Type * return_type = vmem_arena_alloc(parser->arena, Type);
+		if (!return_type) {
+			parser_oom(parser);
+		}
+		if (!parse_type(parser, return_type)) {
+			return false;
+		}
+		out->type = TYPE_FN;
+		out->as.fn.return_type = return_type;
+		out->as.fn.params = params;
+		break;
+	case TOKEN_MUT:
+		advance(parser);
+		Type * mut = vmem_arena_alloc(parser->arena, Type);
+		if (!mut) {
+			parser_oom(parser);
+		}
+		if (!parse_type(parser, mut)) {
+			return false;
+		}
+		out->type = TYPE_MUT;
+		out->as.mut = mut;
+		break;
+	case TOKEN_STAR:
+		advance(parser);
+		Type * ptr = vmem_arena_alloc(parser->arena, Type);
+		if (!ptr) {
+			parser_oom(parser);
+		}
+		if (!parse_type(parser, ptr)) {
+			return false;
+		}
+		out->type = TYPE_PTR;
+		out->as.ptr = ptr;
+		break;
+	case TOKEN_AMPERSAND:
+		advance(parser);
+		ptr = vmem_arena_alloc(parser->arena, Type);
+		if (!ptr) {
+			parser_oom(parser);
+		}
+		if (!parse_type(parser, ptr)) {
+			return false;
+		}
+		out->type = TYPE_REF;
+		out->as.ref = ptr;
+		break;
+	default:
+		expect_error(parser, "expected type");
+		return false;
 	}
 	out->span = src_span_end(parser, begin);
 	return true;
@@ -465,10 +463,10 @@ static bool parse_stmt(Parser * parser, Stmt * out, bool allow_decls) {
 		return true;
 	case DECL_TOKENS:
 		// second clause is to make space for anonymous fn's
-	    if (!allow_decls || (peek(parser)->type == TOKEN_FN &&
-				peek1(parser)->type != TOKEN_IDEN)) {
+		if (!allow_decls || (peek(parser)->type == TOKEN_FN &&
+							 peek1(parser)->type != TOKEN_IDEN)) {
 			goto default_;
-	    }
+		}
 		Decl * decl = vmem_arena_alloc(parser->arena, Decl);
 		if (!decl) {
 			parser_oom(parser);
@@ -573,12 +571,12 @@ static bool parse_fn(Parser * parser, Fn * out, bool is_const) {
 	}
 	fn_param_list_init(param_list_alloc);
 	const FnParamList * param_list = param_list_alloc;
-	
+
 	if (peek(parser)->type != TOKEN_RPAREN) {
 		do {
 			FnParam param;
-			if (peek(parser)->type == TOKEN_IDEN 
-				&& peek1(parser)->type == TOKEN_COLON) {
+			if (peek(parser)->type == TOKEN_IDEN &&
+				peek1(parser)->type == TOKEN_COLON) {
 				Token iden_token = *peek(parser);
 				advance(parser);
 				advance(parser);
@@ -601,10 +599,11 @@ static bool parse_fn(Parser * parser, Fn * out, bool is_const) {
 	if (!expect(parser, TOKEN_RPAREN, "expected ')'")) {
 		return false;
 	}
-	
+
 	if (!expect(parser, TOKEN_COLON, "expected ':'")) {
 		if (peek(parser)->type == TOKEN_LBRACE) {
-			fprintf(stderr, "hint : functions returning void always have ': void'\n");
+			fprintf(stderr,
+					"hint : functions returning void always have ': void'\n");
 		}
 		return false;
 	}
@@ -702,55 +701,55 @@ bool parse_decl(Parser * parser, Decl * out) {
 	Var var;
 	TypeAlias alias;
 	switch (peek(parser)->type) {
+	case TOKEN_FN:
+		if (!parse_fn(parser, &fn, false)) {
+			return false;
+		}
+		out->type = DECL_FN;
+		out->as.fn = fn;
+		break;
+	case TOKEN_TYPE:
+		if (!parse_type_alias(parser, &alias)) {
+			return false;
+		}
+		out->type = DECL_TYPE_ALIAS;
+		out->as.alias = alias;
+		break;
+	case TOKEN_LET:
+		advance(parser);
+		if (!parse_var(parser, &var, false)) {
+			return false;
+		}
+		out->type = DECL_VAR;
+		out->as.var = var;
+		break;
+	case TOKEN_CONST:
+		advance(parser);
+		switch (peek(parser)->type) {
 		case TOKEN_FN:
-			if (!parse_fn(parser, &fn, false)) {
+			if (!parse_fn(parser, &fn, true)) {
 				return false;
 			}
 			out->type = DECL_FN;
 			out->as.fn = fn;
 			break;
-		case TOKEN_TYPE:
-			if (!parse_type_alias(parser, &alias)) {
-				return false;
-			}
-			out->type = DECL_TYPE_ALIAS;
-			out->as.alias = alias;
-			break;
-		case TOKEN_LET:
-			advance(parser);
-			if (!parse_var(parser, &var, false)) {
+		case TOKEN_MUT:
+		case TOKEN_IDEN:
+			if (!parse_var(parser, &var, true)) {
 				return false;
 			}
 			out->type = DECL_VAR;
 			out->as.var = var;
 			break;
-		case TOKEN_CONST:
-			advance(parser);
-			switch (peek(parser)->type) {
-				case TOKEN_FN:
-					if (!parse_fn(parser, &fn, true)) {
-						return false;
-					}
-					out->type = DECL_FN;
-					out->as.fn = fn;
-					break;
-				case TOKEN_MUT:
-				case TOKEN_IDEN:
-					if (!parse_var(parser, &var, true)) {
-						return false;
-					}
-					out->type = DECL_VAR;
-					out->as.var = var;
-					break;
-				default:
-					// doesn't account for mut but that is an error in semantic analysis
-					expect_error(parser, "expected 'fn' or identifier");
-					return false;
-			}
-			break;
 		default:
-			expect_error(parser, "expected 'fn','type' or 'let'");
+			// doesn't account for mut but that is an error in semantic analysis
+			expect_error(parser, "expected 'fn' or identifier");
 			return false;
+		}
+		break;
+	default:
+		expect_error(parser, "expected 'fn','type' or 'let'");
+		return false;
 	}
 	return true;
 }
@@ -775,9 +774,7 @@ DeclList parser_run(Parser * parser) {
 	return list;
 }
 
-void type_list_init(TypeList * list) {
-	ZERO(list);
-}
+void type_list_init(TypeList * list) { ZERO(list); }
 
 bool type_list_push(VMemArena * arena, TypeList * list, Type type) {
 	auto node = vmem_arena_alloc(arena, TypeNode);
@@ -796,9 +793,7 @@ bool type_list_push(VMemArena * arena, TypeList * list, Type type) {
 	return true;
 }
 
-void expr_list_init(ExprList * list) {
-	ZERO(list);
-}
+void expr_list_init(ExprList * list) { ZERO(list); }
 
 bool expr_list_push(VMemArena * arena, ExprList * list, Expr expr) {
 	auto node = vmem_arena_alloc(arena, ExprNode);
@@ -818,9 +813,7 @@ bool expr_list_push(VMemArena * arena, ExprList * list, Expr expr) {
 	return true;
 }
 
-void stmt_list_init(StmtList * list) {
-	ZERO(list);
-}
+void stmt_list_init(StmtList * list) { ZERO(list); }
 
 bool stmt_list_push(VMemArena * arena, StmtList * list, Stmt stmt) {
 	auto node = vmem_arena_alloc(arena, StmtNode);
@@ -839,9 +832,7 @@ bool stmt_list_push(VMemArena * arena, StmtList * list, Stmt stmt) {
 	return true;
 }
 
-void fn_param_list_init(FnParamList * list) {
-	ZERO(list);
-}
+void fn_param_list_init(FnParamList * list) { ZERO(list); }
 
 bool fn_param_list_push(VMemArena * arena, FnParamList * list, FnParam param) {
 	auto node = vmem_arena_alloc(arena, FnParamNode);
@@ -861,9 +852,7 @@ bool fn_param_list_push(VMemArena * arena, FnParamList * list, FnParam param) {
 	return true;
 }
 
-void decl_list_init(DeclList * list) {
-	ZERO(list);
-}
+void decl_list_init(DeclList * list) { ZERO(list); }
 
 bool decl_list_push(VMemArena * arena, DeclList * list, Decl decl) {
 	auto node = vmem_arena_alloc(arena, DeclNode);
