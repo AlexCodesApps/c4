@@ -1,3 +1,5 @@
+MAIN BRANCH
+
 - [ ] Support const fns
     - [ ] Design and implement fn ir
     - [ ] Make sure assignment in const ctx errors against global variable assignment / not against address grabbing
@@ -32,3 +34,5 @@
 
 NOTES:
 - Functions don't need scope checking, at least until lambdas...
+
+REFACTOR BRANCH

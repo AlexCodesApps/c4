@@ -28,7 +28,6 @@ struct Type {
 typedef struct {
 	Str iden;
 	SrcSpan span;
-
 } TypeAlias;
 
 typedef enum {
