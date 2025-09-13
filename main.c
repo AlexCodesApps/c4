@@ -57,7 +57,7 @@ bool process_src(VMemArena * arena, const char * path, Str src) {
 		fprintf(stderr, "You have likely reached the limits of the compiler\n");
 		return false;
 	}
-	TODO("need semantically analyze ast");
+	return true; // just finish processing here
 }
 
 int process_path(VMemArena * arena, const char * path) {

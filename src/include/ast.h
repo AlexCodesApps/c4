@@ -1,5 +1,6 @@
 #pragma once
 #include "common.h"
+#include "i128.h"
 
 typedef Str Iden;
 
@@ -33,6 +34,41 @@ Type type_error();
 void type_set_error(Type * type);
 bool type_is_error(const Type * type);
 
+typedef enum {
+	EXPR_PASS_ERROR,
+	EXPR_PASS_PARSED,
+} ExprPass;
+
+typedef enum {
+	EXPR_INTEGER,
+	EXPR_PLUS,
+	EXPR_IDEN,
+	EXPR_ADDR,
+} ExprKind;
+
+typedef struct Expr Expr;
+struct Expr {
+	ExprPass pass;
+	ExprKind kind;
+	struct {
+		I128 integer;
+		struct {
+			Expr * a;
+			Expr * b;
+		} plus;
+		Iden iden;
+		Expr * addr;
+	} as;
+};
+
+Expr expr_int_from_ast(I128 i);
+Expr expr_plus_from_ast(Expr * a, Expr * b);
+Expr expr_iden_from_ast(Iden iden);
+Expr expr_addr_from_ast(Expr * next);
+Expr expr_error();
+void expr_set_error(Expr * expr);
+bool expr_is_error(const Expr * expr);
+
 typedef struct {
 	Str iden;
 	SrcSpan span;
@@ -48,10 +84,15 @@ typedef struct {
 	SrcSpan span;
 	bool is_const : 1;
 	bool is_mut : 1;
+	bool has_expr : 1;
 	Type type;
+	struct {
+		Expr expr;
+	} unwrap;
 } Var;
 
-Var var_from_ast(SrcSpan span, Type type, bool is_const, bool is_mut);
+Var var_from_ast(SrcSpan span, Type type, bool is_const, bool is_mut,
+				 const Expr * opt_expr);
 Var var_error();
 void var_set_error(Var * var);
 bool var_is_error(const Var * var);

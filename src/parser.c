@@ -25,8 +25,8 @@ static Token next_valid_token(Parser * parser, usize * row, usize * col) {
 		if (token.kind == TOKEN_ERR) {
 			parser->had_error = true;
 			fprintf(stderr, "in %.*s[%lu, %lu]: unexpected character '%c'\n",
-					(int)parser->path.size, parser->path.data, parser->row1, parser->col1,
-						*lexer_token_str(&parser->lexer, &token).data);
+					(int)parser->path.size, parser->path.data, _row, _col,
+					*lexer_token_str(&parser->lexer, &token).data);
 			continue;
 		}
 		*row = _row;
@@ -39,7 +39,7 @@ static bool eof(Parser * parser) { return parser->token1.kind == TOKEN_EOF; }
 
 static Token * peek(Parser * parser) { return &parser->token1; }
 
-static TokenKind peek_type(Parser * parser) { return peek(parser)->kind; }
+static TokenKind peek_kind(Parser * parser) { return peek(parser)->kind; }
 
 static void advance(Parser * parser) {
 	parser->token1 = parser->token2;
@@ -110,7 +110,9 @@ static void * parser_alloc_bytes_n(Parser * parser, usize size, usize n,
 #define parser_alloc_n(parser, T, n)                                           \
 	((T *)parser_alloc_bytes_n(parser, sizeof(T), (n), alignof(T)))
 
-static usize get_segmented_slot(usize size) { return stdc_bit_width(size); }
+static usize get_segmented_slot(usize size) {
+	return stdc_bit_width(size + 1) - 1;
+}
 
 static usize get_segmented_slot_index(usize size, usize slot) {
 	return size - (1U << slot) + 1;
@@ -118,7 +120,8 @@ static usize get_segmented_slot_index(usize size, usize slot) {
 
 static Decl * ast_add_decl(Parser * parser, Ast * ast, Decl decl) {
 	usize slot = get_segmented_slot(ast->size);
-	if (slot == ast->size) {
+	usize index = get_segmented_slot_index(ast->size, slot);
+	if (index == 0) {
 		size_t size = slot + 1;
 		Decl ** data = parser_alloc_n(parser, Decl *, size);
 		for (usize i = 0; i < slot; ++i) {
@@ -127,10 +130,9 @@ static Decl * ast_add_decl(Parser * parser, Ast * ast, Decl decl) {
 		data[slot] = parser_alloc_n(parser, Decl, 1U << slot);
 		ast->data = data;
 	}
-	usize index = get_segmented_slot_index(ast->size, slot);
+	++ast->size;
 	Decl * loc = &ast->data[slot][index];
 	*loc = decl;
-	++ast->size;
 	return loc;
 }
 
@@ -140,30 +142,169 @@ Decl * ast_at(Ast * ast, usize index) {
 	return &ast->data[slot][slot_index];
 }
 
-static Type parse_type(Parser * parser) {
+static bool parse_type(Parser * parser, Type * out) {
+	Type type;
 	Type * next;
-	switch (peek_type(parser)) {
+	switch (peek_kind(parser)) {
 	case TOKEN_STAR:
 		advance(parser);
+		if (!parse_type(parser, &type)) {
+			return false;
+		}
 		next = parser_alloc(parser, Type);
-		*next = parse_type(parser);
-		return type_ptr_from_ast(next);
+		*next = type;
+		*out = type_ptr_from_ast(next);
+		return true;
 	case TOKEN_AMPERSAND:
 		advance(parser);
+		if (!parse_type(parser, &type)) {
+			return false;
+		}
 		next = parser_alloc(parser, Type);
-		*next = parse_type(parser);
-		return type_ref_from_ast(next);
-	case TOKEN_IDEN:
+		*next = type;
+		*out = type_ref_from_ast(next);
+		return true;
+	case TOKEN_IDEN: {
+		Iden iden = lexer_token_str(&parser->lexer, peek(parser));
+		*out = type_iden_from_ast(iden);
 		advance(parser);
-		return type_iden_from_ast(
-			lexer_token_str(&parser->lexer, peek(parser)));
+		return true;
+	}
 	default:
-		expected_error(parser, "expected '*', '&' or identifier");
-		return type_error();
+		expected_error(parser, "expected type");
+		return false;
 	}
 }
 
-// *iden is garunteed to be initialized
+typedef bool (*ExprPrefixFn)(Parser * parser, Expr * out);
+typedef bool (*ExprPostfixFn)(Parser * parser, Expr prefix, Expr * out);
+
+typedef enum {
+	EXPR_PREC_NONE,
+	EXPR_PREC_TERM,
+	EXPR_PREC_PREFIX,
+	EXPR_PREC_PRIMARY,
+} ExprPrec;
+
+typedef struct {
+	ExprPrefixFn prefix;
+	ExprPostfixFn postfix;
+	ExprPrec prec;
+} ExprRule;
+
+static bool parse_expr_prec(Parser * parser, ExprPrec prec, Expr * out);
+static bool parse_expr(Parser * parser, Expr * out);
+
+static void recover_parse_expr_error_in_parens(Parser * parser) {
+	if (!parser->panic_mode) {
+		return;
+	}
+	parser->panic_mode = false;
+	while (!eof(parser)) {
+		switch (peek_kind(parser)) {
+		case TOKEN_SEMICOLON:
+		case TOKEN_RPAREN:
+			return;
+		default:
+			advance(parser);
+		}
+	}
+}
+
+static bool expr_parens(Parser * parser, Expr * out) {
+	advance(parser); // '('
+	if (!parse_expr(parser, out)) {
+		*out = expr_error();
+	}
+	recover_parse_expr_error_in_parens(parser);
+	if (!expect(parser, TOKEN_RPAREN, "expected ')'")) {
+		return false;
+	}
+	return true;
+}
+
+static bool expr_addr(Parser * parser, Expr * out) {
+	advance(parser); // &
+	Expr next;
+	if (!parse_expr_prec(parser, EXPR_PREC_PREFIX, &next)) {
+		return false;
+	}
+	Expr * pnext = parser_alloc(parser, Expr);
+	*pnext = next;
+	*out = expr_addr_from_ast(pnext);
+	return true;
+}
+
+static bool expr_iden(Parser * parser, Expr * out) {
+	Iden iden = lexer_token_str(&parser->lexer, peek(parser));
+	advance(parser);
+	*out = expr_iden_from_ast(iden);
+	return true;
+}
+
+static bool expr_int(Parser * parser, Expr * out) {
+	I128 i128 = i128_new(0, 0);
+	Str src = lexer_token_str(&parser->lexer, peek(parser));
+	// TODO: figure it out bc this aint it
+	advance(parser); // integer
+	for (usize i = 0; i < src.size; ++i) {
+		i128.low *= 10;
+		i128.low += (u64)(src.data[i] - '0');
+	}
+	*out = expr_int_from_ast(i128);
+	return true;
+}
+
+static bool expr_plus(Parser * parser, Expr prefix, Expr * out) {
+	advance(parser); // '+'
+	Expr expr2;
+	if (!parse_expr_prec(parser, EXPR_PREC_TERM, &expr2)) {
+		return false;
+	}
+	Expr * a = parser_alloc(parser, Expr);
+	Expr * b = parser_alloc(parser, Expr);
+	*a = prefix;
+	*b = expr2;
+	*out = expr_plus_from_ast(a, b);
+	return true;
+}
+
+ExprRule expr_rule_table[TOKEN_COUNT] = {
+	[TOKEN_LPAREN] = {expr_parens, NULL, EXPR_PREC_NONE},
+	[TOKEN_PLUS] = {NULL, expr_plus, EXPR_PREC_TERM},
+	[TOKEN_AMPERSAND] = {expr_addr, NULL, EXPR_PREC_NONE},
+	[TOKEN_INT] = {expr_int, NULL, EXPR_PREC_NONE},
+	[TOKEN_IDEN] = {expr_iden, NULL, EXPR_PREC_NONE},
+};
+
+static bool parse_expr_prec(Parser * parser, ExprPrec prec, Expr * out) {
+	ExprRule * rule = &expr_rule_table[peek_kind(parser)];
+	if (!rule->prefix) {
+		expected_error(parser, "expected expression");
+		return false;
+	}
+	Expr expr;
+	if (!rule->prefix(parser, &expr)) {
+		return false;
+	}
+	for (;;) {
+		ExprRule * rule = &expr_rule_table[peek_kind(parser)];
+		if (rule->prec < prec)
+			break;
+		prec = rule->prec;
+		if (!rule->postfix(parser, expr, &expr)) {
+			return false;
+		}
+	}
+	*out = expr;
+	return true;
+}
+
+static bool parse_expr(Parser * parser, Expr * out) {
+	return parse_expr_prec(parser, EXPR_PREC_TERM, out);
+}
+
+// *iden is guaranteed to be initialized
 static Var parse_var(Parser * parser, bool is_const, TokenIndex begin,
 					 Str * iden) {
 	bool is_mut = match(parser, TOKEN_MUT);
@@ -176,25 +317,33 @@ static Var parse_var(Parser * parser, bool is_const, TokenIndex begin,
 	if (!expect(parser, TOKEN_COLON, "expected ':'")) {
 		goto error;
 	}
-	Type type = parse_type(parser);
+	Type type;
+	if (!parse_type(parser, &type)) {
+		goto error;
+	}
+	Expr expr;
+	Expr * opt_expr = NULL;
 	if (match(parser, TOKEN_EQ)) {
-		TODO("parse expression");
+		opt_expr = &expr;
+		if (!parse_expr(parser, opt_expr)) {
+			goto error;
+		}
 	}
 	if (!expect(parser, TOKEN_SEMICOLON, "expected ';'")) {
 		goto error;
 	}
 	SrcSpan span = src_span_end(parser, begin);
-	return var_from_ast(span, type, is_const, is_mut);
+	return var_from_ast(span, type, is_const, is_mut, opt_expr);
 error:
 	return var_error();
 }
 
 static Decl parse_decl(Parser * parser) {
 	TokenIndex index = src_span_begin(parser);
-	switch (peek_type(parser)) {
+	switch (peek_kind(parser)) {
 	case TOKEN_CONST:
 		advance(parser);
-		switch (peek_type(parser)) {
+		switch (peek_kind(parser)) {
 		case TOKEN_FN:
 			TODO();
 		case TOKEN_IDEN: {
@@ -228,7 +377,7 @@ static void recover_parse_decl_error(Parser * parser) {
 		return;
 	parser->panic_mode = false;
 	while (!eof(parser)) {
-		switch (peek_type(parser)) {
+		switch (peek_kind(parser)) {
 		case TOKEN_CONST:
 		case TOKEN_FN:
 		case TOKEN_LET:

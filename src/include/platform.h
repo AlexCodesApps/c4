@@ -11,7 +11,6 @@ typedef struct {
 } DirWalker;
 #endif
 
-
 bool dir_walker_open(const char * path, DirWalker * out);
 // Must be called before dir_iter_advance blame WIN32 API
 const char * dir_walker_name(DirWalker * walker);

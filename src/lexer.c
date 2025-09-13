@@ -49,7 +49,7 @@ static char skip_ws(Lexer * lexer) {
 		char c = peek(lexer);
 		switch (c) {
 		case '\n':
-			lexer->col = 1;
+			lexer->col = 0;
 			++lexer->row;
 			[[fallthrough]];
 		case ' ':

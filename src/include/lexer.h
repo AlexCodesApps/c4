@@ -30,6 +30,7 @@ typedef enum : u32 {
 	TOKEN_EOF,
 	TOKEN_ERR,
 } TokenKind;
+#define TOKEN_COUNT TOKEN_ERR
 
 typedef u32 TokenIndex;
 #define TOKEN_INDEX_MAX UINT32_MAX

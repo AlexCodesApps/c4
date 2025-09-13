@@ -8,7 +8,8 @@
 
 bool dir_walker_open(const char * path, DirWalker * out) {
 	DIR * dir = opendir(path);
-	if (!dir) return false;
+	if (!dir)
+		return false;
 	errno = 0;
 	struct dirent * ent = readdir(dir);
 	if (errno) {
@@ -29,8 +30,6 @@ bool dir_walker_next(DirWalker * walker) {
 	return walker->entry != NULL;
 }
 
-void dir_walker_close(DirWalker * walker) {
-	closedir(walker->dir);
-}
+void dir_walker_close(DirWalker * walker) { closedir(walker->dir); }
 
 #endif
