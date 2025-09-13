@@ -1,5 +1,5 @@
-#include <memory.h>
 #include "include/str.h"
+#include <memory.h>
 
 bool str_equal(Str a, Str b) {
 	if (a.size != b.size) {

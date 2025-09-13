@@ -1,5 +1,7 @@
+#include "src/include/parser.h"
 #include "src/include/utility.h"
 #include "src/include/debug.h" // IWYU pragma: keep
+#include "src/include/platform.h"
 #include <stdio.h>
 #include <dirent.h>
 #include <stdlib.h>
@@ -38,8 +40,24 @@ cleanup:
 	return status;
 }
 
-bool process_src(VMemArena * arena, Str src) {
-	TODO();
+bool process_src(VMemArena * arena, const char * path, Str src) {
+	Ast ast;
+	ParseResult parse_result = parse_src(arena, str_from_cstr(path), src, &ast);
+	switch (parse_result) {
+	case PARSE_RESULT_OK:
+		break;
+	case PARSE_RESULT_ERROR:
+		return false;
+	case PARSE_RESULT_OOM:
+		fprintf(stderr, "fatal error: Out Of Memory\n");
+		fprintf(stderr, "exiting ...\n");
+	exit(1);
+	case PARSE_RESULT_OVERFLOW:
+		fprintf(stderr, "fatal error: internal integer overflow\n");
+		fprintf(stderr, "You have likely reached the limits of the compiler\n");
+		return false;
+	}
+	TODO("need semantically analyze ast");
 }
 
 int process_path(VMemArena * arena, const char * path) {
@@ -48,7 +66,7 @@ int process_path(VMemArena * arena, const char * path) {
 		fprintf(stderr, "error: unable to open file '%s'\n", path);
 		return 2;
 	}
-	return process_src(arena, src) ? 0 : 1;
+	return process_src(arena, path, src) ? 0 : 1;
 }
 
 void usage(const char * program) {
@@ -57,27 +75,27 @@ void usage(const char * program) {
 }
 
 bool run_tests(VMemArena * arena, const char * should_fail_path, const char * should_succeed_path) {
-	DIR * sf_dir = opendir(should_fail_path);
-	if (!sf_dir) {
+	DirWalker sf_dir;
+	if (!dir_walker_open(should_fail_path, &sf_dir)) {
 		fprintf(stderr, "error: unable to open directory '%s'\n", should_fail_path);
 		return false;
 	}
-	DIR * ss_dir = opendir(should_succeed_path);
 	bool result = false;
-	if (!ss_dir) {
+	DirWalker ss_dir;
+	if (!dir_walker_open(should_succeed_path, &ss_dir)) {
 		fprintf(stderr, "error: unable to open directory '%s'\n", should_succeed_path);
 		goto cleanup_sf;
 	}
-	struct dirent * dirent;
 	fprintf(stderr, "=== FAILURE CASES ===\n");
-	while ((dirent = readdir(sf_dir))) {
-		if (strcmp(dirent->d_name, ".") == 0
-				|| strcmp(dirent->d_name, "..") == 0) {
+	do {
+		const char * name = dir_walker_name(&sf_dir);
+		if (strcmp(name, ".") == 0
+				|| strcmp(name, "..") == 0) {
 			continue;
 		}
 		char path[256];
-		if (snprintf(path, 256, "%s/%s", should_fail_path, dirent->d_name) < 1) {
-			fprintf(stderr, "error: buffer to small for path 'test/%s'\n", dirent->d_name);
+		if (snprintf(path, 256, "%s/%s", should_fail_path, name) < 1) {
+			fprintf(stderr, "error: buffer to small for path 'test/%s'\n", name);
 			goto cleanup;
 		}
 		fprintf(stderr, "compiling file '%s'\n", path);
@@ -90,16 +108,17 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 			goto cleanup;
 		}
 		vmem_arena_reset(arena);
-	}
+	} while (dir_walker_next(&sf_dir));
 	fprintf(stderr, "=== SUCCESS CASES ===\n");
-	while ((dirent = readdir(ss_dir))) {
-		if (strcmp(dirent->d_name, ".") == 0
-				|| strcmp(dirent->d_name, "..") == 0) {
+	do {
+		const char * name = dir_walker_name(&ss_dir);
+		if (strcmp(name, ".") == 0
+				|| strcmp(name, "..") == 0) {
 			continue;
 		}
 		char path[256];
-		if (snprintf(path, 256, "%s/%s", should_succeed_path, dirent->d_name) < 1) {
-			fprintf(stderr, "error: buffer to small for path 'test/%s'\n", dirent->d_name);
+		if (snprintf(path, 256, "%s/%s", should_succeed_path, name) < 1) {
+			fprintf(stderr, "error: buffer to small for path 'test/%s'\n", name);
 			goto cleanup;
 		}
 		fprintf(stderr, "compiling file '%s'\n", path);
@@ -112,12 +131,12 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 			goto cleanup;
 		}
 		vmem_arena_reset(arena);
-	}
+	} while (dir_walker_next(&ss_dir));
 	result = true;
 cleanup:
-	closedir(ss_dir);
+	dir_walker_close(&ss_dir);
 cleanup_sf:
-	closedir(sf_dir);
+	dir_walker_close(&sf_dir);
 	return result;
 }
 

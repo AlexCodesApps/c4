@@ -3,8 +3,8 @@
 #include "ints.h"
 #include "str.h"
 
-typedef bool(*FmtWriteFn)(void * ctx, const void * data, usize size);
-typedef bool(*FmtFlushFn)(void * ctx);
+typedef bool (*FmtWriteFn)(void * ctx, const void * data, usize size);
+typedef bool (*FmtFlushFn)(void * ctx);
 
 typedef struct {
 	FmtWriteFn writefn;
@@ -25,5 +25,3 @@ bool fmt_cstr(FmtWriter writer, const char * str);
 bool fmt_str(FmtWriter writer, Str str);
 bool fmt_int(FmtWriter writer, Str fmt, isize i);
 bool fmt_uint(FmtWriter writer, Str fmt, usize u);
-
-

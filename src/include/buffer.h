@@ -14,4 +14,4 @@ static inline Buffer buffer_new(u8 * data, usize size) {
 	return buffer;
 }
 
-#define b(a) ((Buffer){ (a), sizeof(a) })
+#define b(a) ((Buffer){(a), sizeof(a)})

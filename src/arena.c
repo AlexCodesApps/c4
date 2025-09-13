@@ -5,10 +5,13 @@
 
 bool vmem_arena_init(VMemArena * arena, usize size) {
 	bool ok = align_usize(size, 4096, &size);
-	if (UNLIKELY(!ok)) return false;
-	void * pages = mmap(nullptr, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+	if (UNLIKELY(!ok))
+		return false;
+	void * pages =
+		mmap(nullptr, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
 	ok = pages != MAP_FAILED;
-	if (UNLIKELY(!ok)) return false;
+	if (UNLIKELY(!ok))
+		return false;
 	arena->begin = pages;
 	arena->current = pages;
 	arena->end = (u8 *)pages + size;
@@ -28,8 +31,10 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 		if (UNLIKELY(!ok)) {
 			return nullptr;
 		}
-		usize n_commited_bytes = (uintptr_t)new_commited - (uintptr_t)arena->commited;
-		ok = mprotect(arena->commited, n_commited_bytes, PROT_READ | PROT_WRITE) == 0;
+		usize n_commited_bytes =
+			(uintptr_t)new_commited - (uintptr_t)arena->commited;
+		ok = mprotect(arena->commited, n_commited_bytes,
+					  PROT_READ | PROT_WRITE) == 0;
 	}
 	if (UNLIKELY(!ok)) {
 		return nullptr;
@@ -39,16 +44,15 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 	return alloc_start;
 }
 
-void * vmem_arena_alloc_bytes_n(VMemArena * arena, usize size, usize n, usize align) {
+void * vmem_arena_alloc_bytes_n(VMemArena * arena, usize size, usize n,
+								usize align) {
 	if (UNLIKELY(!ckd_mul(size, n, &size))) {
 		return nullptr;
 	}
 	return vmem_arena_alloc_bytes(arena, size, align);
 }
 
-void vmem_arena_reset(VMemArena * arena) {
-	arena->current = arena->begin;
-}
+void vmem_arena_reset(VMemArena * arena) { arena->current = arena->begin; }
 
 void vmem_arena_free(VMemArena * arena) {
 	usize n_bytes = (uintptr_t)arena->end - (uintptr_t)arena->begin;
