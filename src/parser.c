@@ -245,11 +245,20 @@ static bool expr_iden(Parser * parser, Expr * out) {
 static bool expr_int(Parser * parser, Expr * out) {
 	I128 i128 = i128_new(0, 0);
 	Str src = lexer_token_str(&parser->lexer, peek(parser));
-	// TODO: figure it out bc this aint it
+	// TODO: figure it out bc this aint it (the error now)
 	advance(parser); // integer
 	for (usize i = 0; i < src.size; ++i) {
-		i128.low *= 10;
-		i128.low += (u64)(src.data[i] - '0');
+		if (!i128_mul_by_10(&i128)) {
+			fprintf(stderr, "user input overflow\n");
+			*out = expr_error();
+			return true;
+		}
+		word digit = (word)(src.data[i] - '0');
+		if (!i128_add_u64(i128, digit, &i128)) {
+			fprintf(stderr, "user input overflow\n");
+			*out = expr_error();
+			return true;
+		}
 	}
 	*out = expr_int_from_ast(i128);
 	return true;
