@@ -45,9 +45,8 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 			assert(next(&path) == 'i');
 			TokenIndex ti = va_arg(va, TokenIndex);
 			_Generic(ti,
-				u32 : fprintf(file, "%" PRIu32, ti),
-				default : assert(false)
-			);
+				u32: fprintf(file, "%" PRIu32, ti),
+				default: assert(false));
 			continue;
 		case 'i':
 			switch (next(&path)) {
@@ -105,7 +104,7 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 // | %ti      | print TokenIndex                   |
 void c4printf(FILE * file, const char * path, ...) {
 	va_list va;
-	va_start(va);
+	va_start(va, path);
 	c4vaprintf(file, path, va);
 	va_end(va);
 }

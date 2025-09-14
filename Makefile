@@ -1,6 +1,6 @@
 .PHONY: clean, make, all, fmt
 
-all: make compile_commands.json
+all: build fmt compile_commands.json make
 
 make: build
 	cmake --build build
