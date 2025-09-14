@@ -1,6 +1,5 @@
 #pragma once
 #include "ints.h"
-#include <stdbool.h>
 
 typedef struct {
 	void * begin;

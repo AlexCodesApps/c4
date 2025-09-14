@@ -48,12 +48,12 @@ bool process_src(VMemArena * arena, const char * path, Str src) {
 	case PARSE_RESULT_ERROR:
 		return false;
 	case PARSE_RESULT_OOM:
-		fprintf(stderr, "fatal error: Out Of Memory\n");
-		fprintf(stderr, "exiting ...\n");
+		c4println(stderr, "fatal error: Out Of Memory");
+		c4println(stderr, "exiting ...");
 	exit(1);
 	case PARSE_RESULT_OVERFLOW:
-		fprintf(stderr, "fatal error: internal integer overflow\n");
-		fprintf(stderr, "You have likely reached the limits of the compiler\n");
+		c4println(stderr, "fatal error: internal integer overflow");
+		c4println(stderr, "You have likely reached the limits of the compiler");
 		return false;
 	}
 	return true; // just finish processing here
@@ -62,30 +62,30 @@ bool process_src(VMemArena * arena, const char * path, Str src) {
 int process_path(VMemArena * arena, const char * path) {
 	Str src;
 	if (!read_file(arena, path, &src)) {
-		fprintf(stderr, "error: unable to open file '%s'\n", path);
+		c4printf(stderr, "error: unable to open file '%cs'", path);
 		return 2;
 	}
 	return process_src(arena, path, src) ? 0 : 1;
 }
 
 void usage(const char * program) {
-	fprintf(stderr, "usage : %s (test|compile file)?\n", program);
+	c4printf(stderr, "usage : %cs (test|compile file)?\n", program);
 	exit(1);
 }
 
 bool run_tests(VMemArena * arena, const char * should_fail_path, const char * should_succeed_path) {
 	DirWalker sf_dir;
 	if (!dir_walker_open(should_fail_path, &sf_dir)) {
-		fprintf(stderr, "error: unable to open directory '%s'\n", should_fail_path);
+		c4printf(stderr, "error: unable to open directory '%cs'\n", should_fail_path);
 		return false;
 	}
 	bool result = false;
 	DirWalker ss_dir;
 	if (!dir_walker_open(should_succeed_path, &ss_dir)) {
-		fprintf(stderr, "error: unable to open directory '%s'\n", should_succeed_path);
+		c4printf(stderr, "error: unable to open directory '%cs'\n", should_succeed_path);
 		goto cleanup_sf;
 	}
-	fprintf(stderr, "=== FAILURE CASES ===\n");
+	c4println(stderr, "=== FAILURE CASES ===");
 	do {
 		const char * name = dir_walker_name(&sf_dir);
 		if (strcmp(name, ".") == 0
@@ -94,21 +94,21 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 		}
 		char path[256];
 		if (snprintf(path, 256, "%s/%s", should_fail_path, name) < 1) {
-			fprintf(stderr, "error: buffer to small for path 'test/%s'\n", name);
+			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n", should_fail_path, name);
 			goto cleanup;
 		}
-		fprintf(stderr, "compiling file '%s'\n", path);
+		c4printf(stderr, "compiling file '%cs'\n", path);
 		int compile_result = process_path(arena, path);
 		if (compile_result == 2) { // IO error
 			goto cleanup;
 		}
 		if (compile_result == 0) { // Compile Success
-			fprintf(stderr, "error: '%s' should not have compiled\n", path);
+			c4printf(stderr, "error: '%cs' should not have compiled\n", path);
 			goto cleanup;
 		}
 		vmem_arena_reset(arena);
 	} while (dir_walker_next(&sf_dir));
-	fprintf(stderr, "=== SUCCESS CASES ===\n");
+	c4println(stderr, "=== SUCCESS CASES ===");
 	do {
 		const char * name = dir_walker_name(&ss_dir);
 		if (strcmp(name, ".") == 0
@@ -117,16 +117,16 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 		}
 		char path[256];
 		if (snprintf(path, 256, "%s/%s", should_succeed_path, name) < 1) {
-			fprintf(stderr, "error: buffer to small for path 'test/%s'\n", name);
+			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n", should_succeed_path, name);
 			goto cleanup;
 		}
-		fprintf(stderr, "compiling file '%s'\n", path);
+		c4printf(stderr, "compiling file '%cs'\n", path);
 		int compile_result = process_path(arena, path);
 		if (compile_result == 2) { // IO error
 			goto cleanup;
 		}
 		if (compile_result == 1) { // Compile Failure
-			fprintf(stderr, "error: '%s' did not compile\n", path);
+			c4printf(stderr, "error: '%cs' did not compile\n", path);
 			goto cleanup;
 		}
 		vmem_arena_reset(arena);
@@ -168,9 +168,9 @@ int main(int argc, char ** argv) {
 		bool result = run_tests(&arena, "test/fail", "test/ok");
 		vmem_arena_free(&arena);
 		if (result) {
-			fprintf(stderr, "all tests succeeded\n");
+			c4println(stderr, "all tests succeeded");
 		} else {
-			fprintf(stderr, "test failed\n");
+			c4println(stderr, "test failed");
 		}
 		return result ? 0 : 1;
 	}

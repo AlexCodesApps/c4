@@ -1,10 +1,9 @@
 #pragma once
 #include "assert.h"
 #include "checked_math.h"
+#include "fmt.h" // IWYU pragma: keep
 #include "ints.h"
 #include <memory.h>
-#include <stdbool.h>
-#include <stdio.h> // IWYU pragma: keep
 
 #define BREAKPOINT()                                                           \
 	asm("int3\n"                                                               \
@@ -13,7 +12,7 @@
 #define UNREACHABLE() assert(false && "unreachable")
 #define TODO(...)                                                              \
 	do {                                                                       \
-		__VA_OPT__(fputs("REACHED TODO: " __VA_ARGS__ "\n", stderr));          \
+		__VA_OPT__(c4println(stderr, "REACHED TODO: " __VA_ARGS__));           \
 		assert(false && "todo");                                               \
 	} while (0)
 #ifdef __GNUC__

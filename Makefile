@@ -1,9 +1,11 @@
-.PHONY: clean, make, all, fmt
+.PHONY: clean, make, all, fmt, lsp
 
-all: build fmt compile_commands.json make
+all: build fmt make
 
 make: build
 	cmake --build build
+
+lsp: compile_commands.json
 
 compile_commands.json: build
 	cp build/compile_commands.json .

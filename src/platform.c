@@ -1,8 +1,7 @@
 #include "include/platform.h"
-#include "include/fmt.h"
-#include <stdio.h>
 
 #ifdef _WIN32
+#include <stdio.h>
 
 bool dir_walker_open(const char * path, DirWalker * out) {
 	char buf[1024]; // need to copy file to add wildcard

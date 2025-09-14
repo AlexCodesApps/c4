@@ -4,6 +4,13 @@
 #include <inttypes.h>
 #include <stdarg.h>
 
+void c4print(FILE * file, const char * msg) { fputs(msg, file); }
+
+void c4println(FILE * file, const char * msg) {
+	fputs(msg, file);
+	fputc('\n', file);
+}
+
 static char peek(const char * iter) { return *iter; }
 static char next(const char ** iter) {
 	char c = **iter;

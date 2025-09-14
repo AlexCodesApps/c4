@@ -4,6 +4,12 @@
 #include <setjmp.h>
 #include <stdarg.h>
 
+#define TOKEN_DECLS                                                            \
+	TOKEN_FN:                                                                  \
+	case TOKEN_LET:                                                            \
+	case TOKEN_CONST:                                                          \
+	case TOKEN_TYPE_
+
 typedef struct {
 	Token token1;
 	Token token2;
@@ -36,6 +42,7 @@ static void print_error(Parser * parser, const char * msg, ...) {
 	c4vaprintf(stderr, msg, va);
 	va_end(va);
 	putc('\n', stderr);
+	parser->had_error = true;
 }
 
 static Token next_valid_token(Parser * parser, usize * row, usize * col) {
@@ -61,6 +68,12 @@ static Token * peek(Parser * parser) { return &parser->token1; }
 
 static TokenKind peek_kind(Parser * parser) { return peek(parser)->kind; }
 
+static Str peek_str(Parser * parser) {
+	return lexer_token_str(&parser->lexer, peek(parser));
+}
+
+static TokenKind peek_kind2(Parser * parser) { return parser->token2.kind; }
+
 static void advance(Parser * parser) {
 	parser->token1 = parser->token2;
 	parser->row1 = parser->row2;
@@ -79,7 +92,7 @@ static bool match(Parser * parser, TokenKind type) {
 static void expected_error(Parser * parser, const char * msg) {
 	Token * token = peek(parser);
 	parser->panic_mode = true;
-	parser->had_error = true;
+	// parser->had_error = true; set by print_error() (for now)
 	Str src = lexer_token_str(&parser->lexer, token);
 	print_error(parser, "%cs, found '%s'", msg, src);
 }
@@ -136,11 +149,104 @@ static usize get_segmented_slot_index(usize size, usize slot) {
 	return size - ((usize)1 << slot) + 1;
 }
 
+static TypeSig * type_sig_list_add(Parser * parser, TypeSigList * list,
+								   TypeSig type) {
+	usize slot = get_segmented_slot(list->size);
+	usize index = get_segmented_slot_index(list->size, slot);
+	if (index == 0) {
+		usize size = slot + 1;
+		TypeSig ** data = parser_alloc_n(parser, TypeSig *, size);
+		for (usize i = 0; i < slot; ++i) {
+			data[i] = list->data[i];
+		}
+		data[slot] = parser_alloc_n(parser, TypeSig, (usize)1 << slot);
+		list->data = data;
+	}
+	++list->size;
+	TypeSig * loc = &list->data[slot][index];
+	*loc = type;
+	return loc;
+}
+
+TypeSig * type_sig_list_at(TypeSigList * list, usize index) {
+	usize slot = get_segmented_slot(index);
+	usize slot_index = get_segmented_slot_index(index, slot);
+	return &list->data[slot][slot_index];
+}
+
+static Stmt * stmt_list_add(Parser * parser, StmtList * list, Stmt stmt) {
+	usize slot = get_segmented_slot(list->size);
+	usize index = get_segmented_slot_index(list->size, slot);
+	if (index == 0) {
+		usize size = slot + 1;
+		Stmt ** data = parser_alloc_n(parser, Stmt *, size);
+		for (usize i = 0; i < slot; ++i) {
+			data[i] = list->data[i];
+		}
+		data[slot] = parser_alloc_n(parser, Stmt, (usize)1 << slot);
+		list->data = data;
+	}
+	++list->size;
+	Stmt * loc = &list->data[slot][index];
+	*loc = stmt;
+	return loc;
+}
+
+static Expr * expr_list_add(Parser * parser, ExprList * list, Expr expr) {
+	usize slot = get_segmented_slot(list->size);
+	usize index = get_segmented_slot_index(list->size, slot);
+	if (index == 0) {
+		usize size = slot + 1;
+		Expr ** data = parser_alloc_n(parser, Expr *, size);
+		for (usize i = 0; i < slot; ++i) {
+			data[i] = list->data[i];
+		}
+		data[slot] = parser_alloc_n(parser, Expr, (usize)1 << slot);
+		list->data = data;
+	}
+	++list->size;
+	Expr * loc = &list->data[slot][index];
+	*loc = expr;
+	return loc;
+}
+
+Expr * expr_list_at(ExprList * list, usize index) {
+	usize slot = get_segmented_slot(index);
+	usize slot_index = get_segmented_slot_index(index, slot);
+	return &list->data[slot][slot_index];
+}
+
+Stmt * stmt_list_at(StmtList * list, usize index) {
+	usize slot = get_segmented_slot(index);
+	usize slot_index = get_segmented_slot_index(index, slot);
+	return &list->data[slot][slot_index];
+}
+
+static Param * param_list_add(Parser * parser, ParamList * list, Param param) {
+	usize slot = get_segmented_slot(list->size);
+	usize index = get_segmented_slot_index(list->size, slot);
+	if (index == 0) {
+		usize size = slot + 1;
+		Param ** data = parser_alloc_n(parser, Param *, size);
+		for (usize i = 0; i < slot; ++i) {
+			data[i] = list->data[i];
+		}
+		data[slot] = parser_alloc_n(parser, Param, (usize)1 << slot);
+		list->data = data;
+	}
+	++list->size;
+	Param * loc = &list->data[slot][index];
+	*loc = param;
+	return loc;
+}
+
+Param * param_list_at(ParamList * list, usize index);
+
 static Decl * ast_add_decl(Parser * parser, Ast * ast, Decl decl) {
 	usize slot = get_segmented_slot(ast->size);
 	usize index = get_segmented_slot_index(ast->size, slot);
 	if (index == 0) {
-		size_t size = slot + 1;
+		usize size = slot + 1;
 		Decl ** data = parser_alloc_n(parser, Decl *, size);
 		for (usize i = 0; i < slot; ++i) {
 			data[i] = ast->data[i];
@@ -160,32 +266,43 @@ Decl * ast_at(Ast * ast, usize index) {
 	return &ast->data[slot][slot_index];
 }
 
-static bool parse_type(Parser * parser, Type * out) {
-	Type type;
-	Type * next;
+static bool parse_type(Parser * parser, TypeSig * out) {
+	TypeSig type;
+	TypeSig * next;
 	switch (peek_kind(parser)) {
+	case TOKEN_MUT:
+		advance(parser);
+		if (!parse_type(parser, out)) {
+			return false;
+		}
+		type_sig_set_mut(out);
+		return true;
 	case TOKEN_STAR:
 		advance(parser);
 		if (!parse_type(parser, &type)) {
 			return false;
 		}
-		next = parser_alloc(parser, Type);
+		next = parser_alloc(parser, TypeSig);
 		*next = type;
-		*out = type_ptr_from_ast(next);
+		*out = type_sig_ptr_from_ast(next);
 		return true;
 	case TOKEN_AMPERSAND:
 		advance(parser);
 		if (!parse_type(parser, &type)) {
 			return false;
 		}
-		next = parser_alloc(parser, Type);
+		next = parser_alloc(parser, TypeSig);
 		*next = type;
-		*out = type_ref_from_ast(next);
+		*out = type_sig_ref_from_ast(next);
 		return true;
 	case TOKEN_IDEN: {
-		Iden iden = lexer_token_str(&parser->lexer, peek(parser));
-		*out = type_iden_from_ast(iden);
+		Iden iden = peek_str(parser);
+		*out = type_sig_iden_from_ast(iden);
 		advance(parser);
+		return true;
+	case TOKEN_VOID:
+		advance(parser);
+		*out = type_sig_void();
 		return true;
 	}
 	default:
@@ -201,6 +318,7 @@ typedef enum {
 	EXPR_PREC_NONE,
 	EXPR_PREC_TERM,
 	EXPR_PREC_PREFIX,
+	EXPR_PREC_POSTFIX,
 	EXPR_PREC_PRIMARY,
 } ExprPrec;
 
@@ -213,6 +331,112 @@ typedef struct {
 static bool parse_expr_prec(Parser * parser, ExprPrec prec, Expr * out);
 static bool parse_expr(Parser * parser, Expr * out);
 
+static Decl parse_decl(Parser * parser);
+
+static bool parse_block(Parser * parser, StmtBlock * out);
+static bool parse_stmt(Parser * parser, Stmt * out, bool allow_decls) {
+	switch (peek_kind(parser)) {
+	case TOKEN_SEMICOLON:
+		advance(parser);
+		*out = stmt_semicolon();
+		return true;
+	case TOKEN_RETURN: {
+		advance(parser);
+		if (match(parser, TOKEN_SEMICOLON)) {
+			*out = stmt_return_from_ast(expr_void());
+			return true;
+		}
+		Expr expr;
+		if (!parse_expr(parser, &expr)) {
+			return false;
+		}
+		if (!expect(parser, TOKEN_SEMICOLON, "expected ';'")) {
+			return false;
+		}
+		*out = stmt_return_from_ast(expr);
+		return true;
+	}
+	case TOKEN_LBRACE: {
+		StmtBlock block;
+		if (!parse_block(parser, &block)) {
+			return false;
+		}
+		*out = stmt_block_from_ast(block);
+		return true;
+	}
+	case TOKEN_DECLS: {
+		if (peek_kind(parser) == TOKEN_FN &&
+			peek_kind2(parser) == TOKEN_LPAREN) {
+			goto _default;
+		}
+		if (!allow_decls && parser->panic_mode) {
+			return false; // If this somehow happens the declaration was
+						  // probably in an outer scope
+		}
+		Decl * decl = parser_alloc(parser, Decl);
+		*decl = parse_decl(parser);
+		if (!allow_decls) {
+			print_error(parser,
+						"declarations are not allowed in the current scope");
+		}
+		*out = stmt_decl_from_ast(decl);
+		return true;
+	}
+	_default:
+	default: {
+		Expr expr;
+		if (!parse_expr(parser, &expr)) {
+			return false;
+		}
+		if (!expect(parser, TOKEN_SEMICOLON, "expected ';'")) {
+			return false;
+		}
+		*out = stmt_expr_from_ast(expr);
+		return true;
+	}
+	}
+}
+
+static void recover_stmt_block_error(Parser * parser) {
+	if (!parser->panic_mode) {
+		return;
+	}
+	parser->panic_mode = false;
+	while (!eof(parser)) {
+		switch (peek_kind(parser)) {
+		case TOKEN_DECLS:
+		case TOKEN_SEMICOLON:
+		case TOKEN_RBRACE:
+			return;
+		default:
+			advance(parser);
+		}
+	}
+}
+
+static bool parse_block(Parser * parser, StmtBlock * out) {
+	if (!expect(parser, TOKEN_LBRACE, "expected '{'")) {
+		return false;
+	}
+	StmtBlock block = {0};
+	while (!match(parser, TOKEN_RBRACE)) {
+		if (eof(parser)) { // perhaps this behavior could be improved?
+			return false;
+		}
+		Stmt stmt;
+		if (!parse_stmt(parser, &stmt, true)) {
+			recover_stmt_block_error(parser);
+			continue;
+		}
+		if (stmt.kind == STMT_SEMICOLON) {
+			continue;
+		}
+		stmt_list_add(parser, &block, stmt);
+	}
+	*out = block;
+	return true;
+}
+
 static void recover_parse_expr_error_in_parens(Parser * parser) {
 	if (!parser->panic_mode) {
 		return;
@@ -220,6 +444,7 @@ static void recover_parse_expr_error_in_parens(Parser * parser) {
 	parser->panic_mode = false;
 	while (!eof(parser)) {
 		switch (peek_kind(parser)) {
+		case TOKEN_DECLS:
 		case TOKEN_SEMICOLON:
 		case TOKEN_RPAREN:
 			return;
@@ -241,6 +466,28 @@ static bool expr_parens(Parser * parser, Expr * out) {
 	return true;
 }
 
+static bool expr_funcall(Parser * parser, Expr prefix, Expr * out) {
+	advance(parser); // '('
+	ExprList list = {0};
+	if (!match(parser, TOKEN_RPAREN)) {
+		do {
+			Expr expr;
+			if (!parse_expr(parser, &expr)) {
+				recover_parse_expr_error_in_parens(parser);
+				break;
+			}
+			expr_list_add(parser, &list, expr);
+		} while (match(parser, TOKEN_COMMA));
+		if (!expect(parser, TOKEN_RPAREN, "expected ')'")) {
+			return false;
+		}
+	}
+	Expr * fun = parser_alloc(parser, Expr);
+	*fun = prefix;
+	*out = expr_funcall_from_ast(fun, list);
+	return true;
+}
+
 static bool expr_addr(Parser * parser, Expr * out) {
 	advance(parser); // &
 	Expr next;
@@ -253,8 +500,14 @@ static bool expr_addr(Parser * parser, Expr * out) {
 	return true;
 }
 
+static bool _expr_void(Parser * parser, Expr * out) {
+	advance(parser); // 'void'
+	*out = expr_void();
+	return true;
+}
+
 static bool expr_iden(Parser * parser, Expr * out) {
-	Iden iden = lexer_token_str(&parser->lexer, peek(parser));
+	Iden iden = peek_str(parser);
 	advance(parser);
 	*out = expr_iden_from_ast(iden);
 	return true;
@@ -262,19 +515,17 @@ static bool expr_iden(Parser * parser, Expr * out) {
 
 static bool expr_int(Parser * parser, Expr * out) {
 	I128 i128 = i128_new(0, 0);
-	Str src = lexer_token_str(&parser->lexer, peek(parser));
+	Str src = peek_str(parser);
 	for (usize i = 0; i < src.size; ++i) {
 		if (!i128_mul_by_10(&i128)) {
-			print_error(parser, "integer overflow of '%s'",
-						lexer_token_str(&parser->lexer, peek(parser)));
+			print_error(parser, "integer overflow of '%s'", peek_str(parser));
 			advance(parser);
 			*out = expr_error();
 			return true;
 		}
 		word digit = (word)(src.data[i] - '0');
 		if (!i128_add_u64(i128, digit, &i128)) {
-			print_error(parser, "integer overflow of '%s'",
-						lexer_token_str(&parser->lexer, peek(parser)));
+			print_error(parser, "integer overflow of '%s'", peek_str(parser));
 			advance(parser);
 			*out = expr_error();
 			return true;
@@ -300,9 +551,10 @@ static bool expr_plus(Parser * parser, Expr prefix, Expr * out) {
 }
 
 ExprRule expr_rule_table[TOKEN_COUNT] = {
-	[TOKEN_LPAREN] = {expr_parens, NULL, EXPR_PREC_NONE},
+	[TOKEN_LPAREN] = {expr_parens, expr_funcall, EXPR_PREC_POSTFIX},
 	[TOKEN_PLUS] = {NULL, expr_plus, EXPR_PREC_TERM},
 	[TOKEN_AMPERSAND] = {expr_addr, NULL, EXPR_PREC_NONE},
+	[TOKEN_VOID] = {_expr_void, NULL, EXPR_PREC_NONE},
 	[TOKEN_INT] = {expr_int, NULL, EXPR_PREC_NONE},
 	[TOKEN_IDEN] = {expr_iden, NULL, EXPR_PREC_NONE},
 };
@@ -319,9 +571,9 @@ static bool parse_expr_prec(Parser * parser, ExprPrec prec, Expr * out) {
 	}
 	for (;;) {
 		ExprRule * rule = &expr_rule_table[peek_kind(parser)];
-		if (rule->prec < prec)
+		if (rule->prec < prec) {
 			break;
-		prec = rule->prec;
+		}
 		if (!rule->postfix(parser, expr, &expr)) {
 			return false;
 		}
@@ -334,12 +586,79 @@ static bool parse_expr(Parser * parser, Expr * out) {
 	return parse_expr_prec(parser, EXPR_PREC_TERM, out);
 }
 
+static void recover_param_list_error(Parser * parser) {
+	if (!parser->panic_mode) {
+		return;
+	}
+	parser->panic_mode = false;
+	while (!eof(parser)) {
+		switch (peek_kind(parser)) {
+		case TOKEN_DECLS:
+		case TOKEN_RPAREN:
+			return;
+		default:
+			advance(parser);
+		}
+	}
+}
+
+static Fn parse_fn(Parser * parser, bool is_const, TokenIndex begin,
+				   Str * iden) {
+	advance(parser); // 'fn'
+	*iden = peek_str(parser);
+	if (!expect(parser, TOKEN_IDEN, "expected identifier")) {
+		*iden = s("");
+		goto error;
+	}
+	if (!expect(parser, TOKEN_LPAREN, "expected '('")) {
+		goto error;
+	}
+	ParamList list = {0};
+	if (!match(parser, TOKEN_RPAREN)) {
+		do {
+			Param param = {0};
+			if (peek_kind(parser) == TOKEN_IDEN &&
+				peek_kind2(parser) == TOKEN_COLON) {
+				param.has_name = true;
+				param.unwrap.name = peek_str(parser);
+				advance(parser);
+				advance(parser);
+			} else {
+				param.has_name = false;
+			}
+			if (!parse_type(parser, &param.type)) {
+				break;
+			}
+			param_list_add(parser, &list, param);
+		} while (match(parser, TOKEN_COMMA));
+		recover_param_list_error(parser);
+		if (!expect(parser, TOKEN_RPAREN, "expected ')'")) {
+			goto error;
+		}
+	}
+	TypeSig return_ty;
+	if (match(parser, TOKEN_COLON)) {
+		if (!parse_type(parser, &return_ty)) {
+			goto error;
+		}
+	} else {
+		return_ty = type_sig_void();
+	}
+	StmtBlock block;
+	if (!parse_block(parser, &block)) {
+		goto error;
+	}
+	SrcSpan span = src_span_end(parser, begin);
+	return fn_from_ast(span, is_const, list, return_ty, block);
+error:
+	return fn_error();
+}
+
 // *iden is guaranteed to be initialized
 static Var parse_var(Parser * parser, bool is_const, TokenIndex begin,
 					 Str * iden) {
 	bool is_mut = match(parser, TOKEN_MUT);
-	Token * token = peek(parser);
-	*iden = lexer_token_str(&parser->lexer, token);
+	*iden = peek_str(parser);
 	if (!expect(parser, TOKEN_IDEN, "expected identifier")) {
 		*iden = s("");
 		goto error;
@@ -347,7 +666,7 @@ static Var parse_var(Parser * parser, bool is_const, TokenIndex begin,
 	if (!expect(parser, TOKEN_COLON, "expected ':'")) {
 		goto error;
 	}
-	Type type;
+	TypeSig type;
 	if (!parse_type(parser, &type)) {
 		goto error;
 	}
@@ -368,14 +687,41 @@ error:
 	return var_error();
 }
 
+static TypeAlias parse_type_alias(Parser * parser, Str * iden) {
+	TokenIndex index = src_span_begin(parser);
+	advance(parser); // 'type'
+	*iden = peek_str(parser);
+	if (!expect(parser, TOKEN_IDEN, "expected identifier")) {
+		*iden = s("");
+		goto error;
+	}
+	if (!expect(parser, TOKEN_EQ, "expected '='")) {
+		goto error;
+	}
+	TypeSig type;
+	if (!parse_type(parser, &type)) {
+		goto error;
+	}
+	if (!expect(parser, TOKEN_SEMICOLON, "expected ';'")) {
+		goto error;
+	}
+	SrcSpan span = src_span_end(parser, index);
+	return type_alias_from_ast(span, type);
+error:
+	return type_alias_error();
+}
+
 static Decl parse_decl(Parser * parser) {
 	TokenIndex index = src_span_begin(parser);
 	switch (peek_kind(parser)) {
 	case TOKEN_CONST:
 		advance(parser);
 		switch (peek_kind(parser)) {
-		case TOKEN_FN:
-			TODO();
+		case TOKEN_FN: {
+			Iden iden;
+			Fn fn = parse_fn(parser, true, index, &iden);
+			return decl_fn_from_ast(iden, fn);
+		}
 		case TOKEN_IDEN: {
 			Iden iden;
 			Var var = parse_var(parser, true, index, &iden);
@@ -386,16 +732,22 @@ static Decl parse_decl(Parser * parser) {
 			return decl_error();
 		}
 		break;
-	case TOKEN_FN:
-		TODO();
+	case TOKEN_FN: {
+		Iden iden;
+		Fn fn = parse_fn(parser, false, index, &iden);
+		return decl_fn_from_ast(iden, fn);
+	}
 	case TOKEN_LET: {
 		advance(parser);
 		Iden iden;
 		Var var = parse_var(parser, false, index, &iden);
 		return decl_var_from_ast(iden, var);
 	}
-	case TOKEN_TYPE_:
-		TODO();
+	case TOKEN_TYPE_: {
+		Iden iden;
+		TypeAlias alias = parse_type_alias(parser, &iden);
+		return decl_alias_from_ast(iden, alias);
+	}
 	default:
 		expected_error(parser, "expected 'const', 'fn', 'let', or 'type'");
 		return decl_error();

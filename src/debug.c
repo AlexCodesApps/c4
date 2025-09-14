@@ -1,18 +1,17 @@
+#include "include/fmt.h"
 #include "include/lexer.h"
 #include <inttypes.h>
-#include <stdio.h>
 
 static void dump_token(const Lexer * lexer, const Token * token,
 					   Str token_type) {
 	Str str = lexer_token_str(lexer, token);
-	fprintf(stderr, "  %.*s '%.*s'\n", (int)token_type.size, token_type.data,
-			(int)str.size, str.data);
+	c4printf(stderr, "%s '%s'\n", token_type, str);
 }
 
 void dump_tokens(Str src) {
 	Lexer lexer = lexer_new(src);
 	Token token;
-	fputs("== TOKENS ==\n", stderr);
+	c4println(stderr, "== TOKENS ==\n");
 	do {
 		token = lexer_next(&lexer);
 		switch (token.kind) {

@@ -21,7 +21,7 @@ typedef enum {
 	TOKEN_MUT,
 	TOKEN_NULLPTR,
 	TOKEN_RETURN,
-	TOKEN_TYPE_, // fucking WIN32 at it again. I hate this garbage
+	TOKEN_TYPE_,
 	TOKEN_VOID,
 
 	TOKEN_IDEN,

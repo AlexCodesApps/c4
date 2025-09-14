@@ -1,8 +1,8 @@
 #pragma once
-#include "ints.h"
-#include "str.h"
 #include <stdio.h>
 
+void c4print(FILE * file, const char * msg);
+void c4println(FILE * file, const char * msg);
 // | FORMAT   | USAGE                              |
 // |----------|------------------------------------|
 // | %uw      | print integer u* <= u32            |
@@ -10,7 +10,7 @@
 // | %iw      | print integer u* <= i32            |
 // | %iq      | print integer i64                  |
 // | %idq     | print integer i128                 |
-// | %s print | Str                                |
+// | %s       | print Str                          |
 // | %cs      | print const char *                 |
 // | %ch      | print ascii code of integer <= *32 |
 // | %%       | print '%'                          |
