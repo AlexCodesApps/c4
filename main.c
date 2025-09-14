@@ -3,7 +3,6 @@
 #include "src/include/debug.h" // IWYU pragma: keep
 #include "src/include/platform.h"
 #include <stdio.h>
-#include <dirent.h>
 #include <stdlib.h>
 
 bool read_file(VMemArena * arena, const char * path, Str * out) {

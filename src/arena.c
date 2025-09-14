@@ -1,14 +1,42 @@
 #include "include/arena.h"
 #include "include/utility.h"
 
+#ifdef _WIN32
+#include <windows.h>
+
+#define INVALID_PAGE NULL
+static void* map_pages(usize size) {
+	return VirtualAlloc(NULL, size, MEM_RESERVE, PAGE_NOACCESS);
+}
+static bool commit_pages(void* start, usize size) {
+	return VirtualAlloc(start, size, MEM_COMMIT, PAGE_READWRITE) != NULL;
+}
+static void free_pages(void* start, usize size) {
+	VirtualFree(start, 0, MEM_RELEASE);
+}
+#else
 #include <sys/mman.h>
+
+#define INVALID_PAGE MAP_FAILED
+static void* map_pages(usize size) {
+	return mmap(NULL, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+}
+static bool commit_pages(void* start, usize size) {
+	return mprotect(arena->commited, n_commited_bytes,
+					  PROT_READ | PROT_WRITE) == 0;
+}
+static void free_pages(void * start, usize size) {
+	munmap(start, size);
+}
+#endif
+
 
 bool vmem_arena_init(VMemArena * arena, usize size) {
 	bool ok = align_usize(size, 4096, &size);
 	if (UNLIKELY(!ok))
 		return false;
-	void * pages = mmap(NULL, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
-	ok = pages != MAP_FAILED;
+	void* pages = map_pages(size);
+	ok = pages != INVALID_PAGE;
 	if (UNLIKELY(!ok))
 		return false;
 	arena->begin = pages;
@@ -32,8 +60,7 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 		}
 		usize n_commited_bytes =
 			(uintptr_t)new_commited - (uintptr_t)arena->commited;
-		ok = mprotect(arena->commited, n_commited_bytes,
-					  PROT_READ | PROT_WRITE) == 0;
+		ok = commit_pages(arena->commited, n_commited_bytes);
 	}
 	if (UNLIKELY(!ok)) {
 		return NULL;
@@ -45,7 +72,7 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 
 void * vmem_arena_alloc_bytes_n(VMemArena * arena, usize size, usize n,
 								usize align) {
-	if (UNLIKELY(!ckd_mul(size, n, &size))) {
+	if (UNLIKELY(!ckd_mul_usize(size, n, &size))) {
 		return NULL;
 	}
 	return vmem_arena_alloc_bytes(arena, size, align);
@@ -55,5 +82,5 @@ void vmem_arena_reset(VMemArena * arena) { arena->current = arena->begin; }
 
 void vmem_arena_free(VMemArena * arena) {
 	usize n_bytes = (uintptr_t)arena->end - (uintptr_t)arena->begin;
-	munmap(arena->begin, n_bytes);
+	free_pages(arena->begin, n_bytes);
 }

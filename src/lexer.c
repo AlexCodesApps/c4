@@ -1,4 +1,5 @@
 #include "include/lexer.h"
+#include "include/utility.h"
 #include <assert.h>
 
 Lexer lexer_new(Str src) {
@@ -51,7 +52,7 @@ static char skip_ws(Lexer * lexer) {
 		case '\n':
 			lexer->col = 0;
 			++lexer->row;
-			__attribute__((fallthrough));
+			FALLTHROUGH();
 		case ' ':
 		case '\t':
 		case '\r':
@@ -65,7 +66,7 @@ static char skip_ws(Lexer * lexer) {
 				}
 				break;
 			}
-			__attribute__((fallthrough));
+			FALLTHROUGH();
 		default:
 			return c;
 		}
@@ -131,7 +132,7 @@ static Token make_iden(Lexer * lexer, TokenIndex start) {
 		return make_token(lexer, start, TOKEN_RETURN);
 	}
 	if (str_equal(iden, s("type"))) {
-		return make_token(lexer, start, TOKEN_TYPE);
+		return make_token(lexer, start, TOKEN_TYPE_);
 	}
 	if (str_equal(iden, s("void"))) {
 		return make_token(lexer, start, TOKEN_VOID);

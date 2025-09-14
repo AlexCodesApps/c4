@@ -67,7 +67,7 @@ void dump_tokens(Str src) {
 		case TOKEN_RETURN:
 			dump_token(&lexer, &token, s("RETURN"));
 			break;
-		case TOKEN_TYPE:
+		case TOKEN_TYPE_:
 			dump_token(&lexer, &token, s("TYPE"));
 			break;
 		case TOKEN_VOID:

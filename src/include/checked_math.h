@@ -1,9 +1,24 @@
 #pragma once
 #include "ints.h" // IWYU pragma: keep
 
-#define ckd_add(a, b, c) (!__builtin_add_overflow((a), (b), (c)))
-#define ckd_sub(a, b, c) (!__builtin_sub_overflow((a), (b), (c)))
-#define ckd_mul(a, b, c) (!__builtin_mul_overflow((a), (b), (c)))
-#define ckd_div(a, b, c) (((b) != 0) ? (*(c) = (a) / (b), true) : false)
-#define ckd_add_ptr(a, b, c) ckd_add((usize)(a), (b), (usize *)(c))
-#define ckd_sub_ptr(a, b, c) ckd_sub((usize)(a), (b), (usize *)(c))
+static bool ckd_add_usize(usize a, usize b, usize * c) {
+	if ((usize)(-1) - a < b) {
+		return false;
+	}
+	*c = a + b;
+	return true;
+}
+
+#define ckd_add_u64 ckd_add_usize
+
+static bool ckd_add_ptr(void* a, usize b, void** c) {
+	return ckd_add_usize((usize)a, b, (usize*)c);
+}
+
+static bool ckd_mul_usize(usize a, usize b, usize* c) {
+	if (USIZE_MAX / a < b) {
+		return false;
+	}
+	*c = a * b;
+	return true;
+}

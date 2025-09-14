@@ -1,6 +1,36 @@
+#include <stdio.h>
 #include "include/platform.h"
+#include "include/fmt.h"
+
 
 #ifdef _WIN32
+
+bool dir_walker_open(const char* path, DirWalker* out) {
+	char buf[1024]; // need to copy file to add wildcard
+	if (snprintf(buf, 1024, "%s/*", path) < 1) {
+		return false; // just fail if too big
+	}
+	WIN32_FIND_DATA data;
+	HANDLE handle = FindFirstFile(buf, &data);
+	if (handle == INVALID_HANDLE_VALUE) {
+		return false;
+	}
+	out->data = data;
+	out->handle = handle;
+	return true;
+}
+
+const char* dir_walker_name(DirWalker* walker) {
+	return walker->data.cFileName;
+}
+
+void dir_walker_close(DirWalker * walker) {
+	FindClose(walker->handle);
+}
+
+bool dir_walker_next(DirWalker* walker) {
+	FindNextFile(walker->handle, &walker->data);
+}
 
 #else
 #include <errno.h>

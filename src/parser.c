@@ -3,7 +3,6 @@
 #include "include/utility.h"
 #include <setjmp.h>
 #include <stdarg.h>
-#include <stdbit.h>
 
 typedef struct {
 	Token token1;
@@ -130,11 +129,11 @@ static void * parser_alloc_bytes_n(Parser * parser, usize size, usize n,
 	((T *)parser_alloc_bytes_n(parser, sizeof(T), (n), _Alignof(T)))
 
 static usize get_segmented_slot(usize size) {
-	return stdc_bit_width(size + 1) - 1;
+	return bit_width_usize(size + 1) - 1;
 }
 
 static usize get_segmented_slot_index(usize size, usize slot) {
-	return size - (1U << slot) + 1;
+	return size - ((usize)1 << slot) + 1;
 }
 
 static Decl * ast_add_decl(Parser * parser, Ast * ast, Decl decl) {
@@ -146,7 +145,7 @@ static Decl * ast_add_decl(Parser * parser, Ast * ast, Decl decl) {
 		for (usize i = 0; i < slot; ++i) {
 			data[i] = ast->data[i];
 		}
-		data[slot] = parser_alloc_n(parser, Decl, 1U << slot);
+		data[slot] = parser_alloc_n(parser, Decl, (usize)1 << slot);
 		ast->data = data;
 	}
 	++ast->size;
@@ -395,7 +394,7 @@ static Decl parse_decl(Parser * parser) {
 		Var var = parse_var(parser, false, index, &iden);
 		return decl_var_from_ast(iden, var);
 	}
-	case TOKEN_TYPE:
+	case TOKEN_TYPE_:
 		TODO();
 	default:
 		expected_error(parser, "expected 'const', 'fn', 'let', or 'type'");
@@ -412,7 +411,7 @@ static void recover_parse_decl_error(Parser * parser) {
 		case TOKEN_CONST:
 		case TOKEN_FN:
 		case TOKEN_LET:
-		case TOKEN_TYPE:
+		case TOKEN_TYPE_:
 			return;
 		default:
 			advance(parser);

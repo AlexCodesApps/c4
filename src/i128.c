@@ -1,6 +1,6 @@
 #include "include/i128.h"
 #include "include/checked_math.h"
-#include <stdbit.h>
+#include "include/utility.h"
 
 I128 i128_new(u64 high, u64 low) {
 	return (I128){
@@ -10,9 +10,9 @@ I128 i128_new(u64 high, u64 low) {
 }
 
 bool i128_add_u64(I128 a, u64 u, I128 * out) {
-	word carry = (u64)(-1) - a.low < u;
+	word carry = U64_MAX - a.low < u;
 	a.low += u;
-	if (!ckd_add(a.high, carry, &a.high)) {
+	if (!ckd_add_u64(a.high, carry, &a.high)) {
 		return false;
 	}
 	*out = a;
@@ -20,12 +20,12 @@ bool i128_add_u64(I128 a, u64 u, I128 * out) {
 }
 
 bool i128_add(I128 a, I128 b, I128 * out) {
-	word carry = (u64)(-1) - a.low < b.low;
+	word carry = U64_MAX - a.low < b.low;
 	a.low += b.low;
-	if (!ckd_add(a.high, b.high, &a.high)) {
+	if (!ckd_add_u64(a.high, b.high, &a.high)) {
 		return false;
 	}
-	if (!ckd_add(a.high, carry, &a.high)) {
+	if (!ckd_add_u64(a.high, carry, &a.high)) {
 		return false;
 	}
 	*out = a;
@@ -33,7 +33,7 @@ bool i128_add(I128 a, I128 b, I128 * out) {
 }
 
 I128 i128_add_wrapping(I128 a, I128 b) {
-	word carry = (u64)(-1) - a.low < b.low;
+	word carry = U64_MAX - a.low < b.low;
 	a.low += b.low;
 	a.high += b.high + carry;
 	return a;
@@ -42,9 +42,9 @@ I128 i128_add_wrapping(I128 a, I128 b) {
 bool i128_shift_left(I128 i, word shift, I128 * out) {
 	word offset;
 	if (i.high) {
-		offset = stdc_leading_zeros(i.high);
+		offset = leading_zeros_usize(i.high);
 	} else {
-		offset = sizeof(i.high) * 8 + stdc_leading_zeros(i.low);
+		offset = sizeof(i.high) * 8 + leading_zeros_usize(i.low);
 	}
 	if (offset < shift) {
 		return false;
@@ -60,7 +60,7 @@ bool i128_shift_left(I128 i, word shift, I128 * out) {
 }
 
 bool i128_mul_by_10(I128 * out) {
-	word offset = stdc_leading_zeros(out->high);
+	word offset = leading_zeros_usize(out->high);
 	if (offset < 3) {
 		return false;
 	}
@@ -71,7 +71,7 @@ bool i128_mul_by_10(I128 * out) {
 	b.high = out->high << 1;
 	b.high |= (out->low & 0x8000000000000000) >> 63;
 	b.low = out->low << 1;
-	word carry = (u64)(-1) - a.low < b.low;
+	word carry = U64_MAX - a.low < b.low;
 	a.low += b.low;
 	a.high += b.high + carry;
 	*out = a;

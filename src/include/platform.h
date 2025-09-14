@@ -1,8 +1,11 @@
 #include <stdbool.h>
 #ifdef _WIN32
+#include <windows.h>
 
 typedef struct {
-} DirIter;
+	HANDLE handle;
+	WIN32_FIND_DATA data;
+} DirWalker;
 
 #else // Only Windows and UNIX Support
 #include <dirent.h>
