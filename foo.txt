@@ -1,9 +1,10 @@
-const foo: **&foooooooooo (10 + 20) + &30;
-const foo: **&foooooooooo (10 + 20) + &30;
-const foo: **&foooooooooo (10 + 20) + &30;
-const foo: **&foooooooooo (10 + 20) + &30;
-const foo: **&foooooooooo (10 + 20) + &30;
-const foo: **&foooooooooo (10 + 20) + &30;
-const foo: **&foooooooooo (10 + 20) + &30;
-const foo: **&foooooooooo (10 + 20) + &30;
-const foo: **&foooooooooo (10 + 20) + &30;
+const foo@: **&foooooooooo  (10 + 20) + &30;
+const foo: **&foooooooooo = (10 + 20) + &30;
+const foo: **&foooooooooo  (10 + 20) + &30;
+const foo: **&foooooooooo = (10 + 20) + &30;
+const foo: **&= (10 + 20) + &30;
+const foo: **&foooooooooo = (10 + 20) + &30;
+const foo: **&foooooooooo = (10 + 20) + &30;
+const foo: **&foooooooooo = (10 + 20) + &30;
+const foo: **&foooooooooo = (10 + 20) + &30;
+let a: int = 340282366920938463463374607431768211456

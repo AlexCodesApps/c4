@@ -70,7 +70,7 @@ bool i128_mul_by_10(I128 * out) {
 	a.low = out->low << 3;
 	b.high = out->high << 1;
 	b.high |= (out->low & 0x8000000000000000) >> 63;
-	b.low =  out->low << 1;
+	b.low = out->low << 1;
 	word carry = (u64)(-1) - a.low < b.low;
 	a.low += b.low;
 	a.high += b.high + carry;

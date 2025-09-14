@@ -1,27 +1,19 @@
 #pragma once
-
 #include "ints.h"
 #include "str.h"
+#include <stdio.h>
 
-typedef bool (*FmtWriteFn)(void * ctx, const void * data, usize size);
-typedef bool (*FmtFlushFn)(void * ctx);
-
-typedef struct {
-	FmtWriteFn writefn;
-	FmtFlushFn flushfn;
-} FmtVTable;
-
-typedef struct {
-	const FmtVTable * vtable;
-	union {
-		void * p_ctx;
-		usize u_ctx;
-	};
-} FmtWriter;
-
-bool fmt_write(FmtWriter writer, const void * data, usize size);
-bool fmt_byte(FmtWriter writer, u8 b);
-bool fmt_cstr(FmtWriter writer, const char * str);
-bool fmt_str(FmtWriter writer, Str str);
-bool fmt_int(FmtWriter writer, Str fmt, isize i);
-bool fmt_uint(FmtWriter writer, Str fmt, usize u);
+// | FORMAT   | USAGE                              |
+// |----------|------------------------------------|
+// | %uw      | print integer u* <= u32            |
+// | %uq      | print integer u64                  |
+// | %iw      | print integer u* <= i32            |
+// | %iq      | print integer i64                  |
+// | %idq     | print integer i128                 |
+// | %s print | Str                                |
+// | %cs      | print const char *                 |
+// | %ch      | print ascii code of integer <= *32 |
+// | %%       | print '%'                          |
+// | %ti      | print TokenIndex                   |
+void c4printf(FILE * file, const char * path, ...);
+void c4vaprintf(FILE * file, const char * path, va_list va);

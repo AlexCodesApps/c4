@@ -1,6 +1,8 @@
 #include "include/parser.h"
+#include "include/fmt.h"
 #include "include/utility.h"
 #include <setjmp.h>
+#include <stdarg.h>
 #include <stdbit.h>
 
 typedef struct {
@@ -17,6 +19,24 @@ typedef struct {
 	bool panic_mode;
 } Parser;
 
+static void _print_error(Str path, usize row, usize col, const char * msg, ...) {
+	c4printf(stderr, "in %s[%uq, %uq]: ", path, row, col);
+	va_list va;
+	va_start(va, msg);
+	c4vaprintf(stderr, msg, va);
+	va_end(va);
+	putc('\n', stderr);
+}
+
+static void print_error(Parser * parser, const char * msg, ...) {
+	c4printf(stderr, "in %s[%uq, %uq]: ", parser->path, parser->row1, parser->col1);
+	va_list va;
+	va_start(va, msg);
+	c4vaprintf(stderr, msg, va);
+	va_end(va);
+	putc('\n', stderr);
+}
+
 static Token next_valid_token(Parser * parser, usize * row, usize * col) {
 	for (;;) {
 		usize _row = lexer_row(&parser->lexer);
@@ -24,8 +44,8 @@ static Token next_valid_token(Parser * parser, usize * row, usize * col) {
 		Token token = lexer_next(&parser->lexer);
 		if (token.kind == TOKEN_ERR) {
 			parser->had_error = true;
-			fprintf(stderr, "in %.*s[%lu, %lu]: unexpected character '%c'\n",
-					(int)parser->path.size, parser->path.data, _row, _col,
+			_print_error(parser->path, _row, _col,
+				"unexpected character '%ch'",
 					*lexer_token_str(&parser->lexer, &token).data);
 			continue;
 		}
@@ -61,9 +81,7 @@ static void expected_error(Parser * parser, const char * msg) {
 	parser->panic_mode = true;
 	parser->had_error = true;
 	Str src = lexer_token_str(&parser->lexer, token);
-	fprintf(stderr, "in %.*s[%lu, %lu]: %s, found '%.*s'\n",
-			(int)parser->path.size, parser->path.data, parser->row1,
-			parser->col1, msg, (int)src.size, src.data);
+	print_error(parser, "%cs, found '%s'", msg, src);
 }
 
 static bool expect(Parser * parser, TokenKind type, const char * msg) {
@@ -245,21 +263,24 @@ static bool expr_iden(Parser * parser, Expr * out) {
 static bool expr_int(Parser * parser, Expr * out) {
 	I128 i128 = i128_new(0, 0);
 	Str src = lexer_token_str(&parser->lexer, peek(parser));
-	// TODO: figure it out bc this aint it (the error now)
-	advance(parser); // integer
 	for (usize i = 0; i < src.size; ++i) {
 		if (!i128_mul_by_10(&i128)) {
-			fprintf(stderr, "user input overflow\n");
+			print_error(parser, "integer overflow of '%s'",
+				lexer_token_str(&parser->lexer, peek(parser)));
+			advance(parser);
 			*out = expr_error();
 			return true;
 		}
 		word digit = (word)(src.data[i] - '0');
 		if (!i128_add_u64(i128, digit, &i128)) {
-			fprintf(stderr, "user input overflow\n");
+			print_error(parser, "integer overflow of '%s'",
+				lexer_token_str(&parser->lexer, peek(parser)));
+			advance(parser);
 			*out = expr_error();
 			return true;
 		}
 	}
+	advance(parser); // integer
 	*out = expr_int_from_ast(i128);
 	return true;
 }
