@@ -24,20 +24,23 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 		case '%':
 			fputc('%', file);
 			continue;
-		case 's':
+		case 's': {
 			Str str = va_arg(va, Str);
 			fwrite(str.data, 1, str.size, file);
 			continue;
+		}
 		case 'c':
 			switch (next(&path)) {
-			case 's':
+			case 's': {
 				const char * ptr = va_arg(va, const char *);
 				fputs(ptr, file);
 				continue;
-			case 'h':
+			}
+			case 'h': {
 				int c = va_arg(va, int);
 				putc(c, file);
 				continue;
+			}
 			default:
 				UNREACHABLE();
 			}
@@ -45,9 +48,8 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 			assert(next(&path) == 'i');
 			TokenIndex ti = va_arg(va, TokenIndex);
 			_Generic(ti,
-				u32 : fprintf(file, "%" PRIu32, ti),
-				default : assert(false)
-			);
+				u32: fprintf(file, "%" PRIu32, ti),
+				default: assert(false));
 			continue;
 		case 'i':
 			switch (next(&path)) {
@@ -105,7 +107,7 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 // | %ti      | print TokenIndex                   |
 void c4printf(FILE * file, const char * path, ...) {
 	va_list va;
-	va_start(va);
+	va_start(va, path);
 	c4vaprintf(file, path, va);
 	va_end(va);
 }

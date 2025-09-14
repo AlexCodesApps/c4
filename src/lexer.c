@@ -51,7 +51,7 @@ static char skip_ws(Lexer * lexer) {
 		case '\n':
 			lexer->col = 0;
 			++lexer->row;
-			[[fallthrough]];
+			__attribute__((fallthrough));
 		case ' ':
 		case '\t':
 		case '\r':
@@ -65,7 +65,7 @@ static char skip_ws(Lexer * lexer) {
 				}
 				break;
 			}
-			[[fallthrough]];
+			__attribute__((fallthrough));
 		default:
 			return c;
 		}

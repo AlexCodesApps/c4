@@ -9,7 +9,7 @@ bool str_equal(Str a, Str b) {
 }
 
 bool str_copy(VMemArena * arena, Str str, Str * out) {
-	char * buffer = vmem_arena_alloc_bytes(arena, str.size, alignof(char));
+	char * buffer = vmem_arena_alloc_bytes(arena, str.size, _Alignof(char));
 	if (!buffer) {
 		return false;
 	}

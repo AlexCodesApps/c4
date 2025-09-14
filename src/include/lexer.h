@@ -2,7 +2,7 @@
 #include "ints.h"
 #include "str.h"
 
-typedef enum : u32 {
+typedef enum {
 	TOKEN_LPAREN,
 	TOKEN_RPAREN,
 	TOKEN_LBRACE,

@@ -7,8 +7,7 @@ bool vmem_arena_init(VMemArena * arena, usize size) {
 	bool ok = align_usize(size, 4096, &size);
 	if (UNLIKELY(!ok))
 		return false;
-	void * pages =
-		mmap(nullptr, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+	void * pages = mmap(NULL, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
 	ok = pages != MAP_FAILED;
 	if (UNLIKELY(!ok))
 		return false;
@@ -29,7 +28,7 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 	if (new_commited < new_current) {
 		ok &= align_ptr(new_current, 4096, &new_commited);
 		if (UNLIKELY(!ok)) {
-			return nullptr;
+			return NULL;
 		}
 		usize n_commited_bytes =
 			(uintptr_t)new_commited - (uintptr_t)arena->commited;
@@ -37,7 +36,7 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 					  PROT_READ | PROT_WRITE) == 0;
 	}
 	if (UNLIKELY(!ok)) {
-		return nullptr;
+		return NULL;
 	}
 	arena->current = new_current;
 	arena->commited = new_commited;
@@ -47,7 +46,7 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 void * vmem_arena_alloc_bytes_n(VMemArena * arena, usize size, usize n,
 								usize align) {
 	if (UNLIKELY(!ckd_mul(size, n, &size))) {
-		return nullptr;
+		return NULL;
 	}
 	return vmem_arena_alloc_bytes(arena, size, align);
 }

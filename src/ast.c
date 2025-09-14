@@ -24,7 +24,7 @@ Type type_iden_from_ast(Iden iden) {
 	};
 }
 
-Type type_error() {
+Type type_error(void) {
 	return (Type){
 		.pass = TYPE_PASS_ERROR,
 	};
@@ -60,7 +60,7 @@ Expr expr_addr_from_ast(Expr * next) {
 	};
 }
 
-Expr expr_error() {
+Expr expr_error(void) {
 	return (Expr){
 		.pass = EXPR_PASS_ERROR,
 	};
@@ -87,7 +87,7 @@ Var var_from_ast(SrcSpan span, Type type, bool is_const, bool is_mut,
 	return var;
 }
 
-Var var_error() {
+Var var_error(void) {
 	return (Var){
 		.pass = VAR_PASS_ERROR,
 	};
@@ -105,7 +105,7 @@ Decl decl_var_from_ast(Iden iden, Var var) {
 	};
 }
 
-Decl decl_error() {
+Decl decl_error(void) {
 	return (Decl){
 		.kind = DECL_ERROR,
 	};

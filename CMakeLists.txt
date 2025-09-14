@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(c4)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_C_STANDARD 23)
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED TRUE)
 add_executable(c4 main.c src/debug.c src/lexer.c src/str.c src/arena.c src/parser.c src/ast.c src/platform.c src/i128.c src/fmt.c)
 

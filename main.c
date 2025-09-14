@@ -25,7 +25,7 @@ bool read_file(VMemArena * arena, const char * path, Str * out) {
 		goto cleanup;
 	}
 	usize size = (usize)lsize;
-	char * buf = vmem_arena_alloc_bytes(arena, size, alignof(char));
+	char * buf = vmem_arena_alloc_bytes(arena, size, _Alignof(char));
 	if (!buf) {
 		goto cleanup;
 	}

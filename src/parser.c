@@ -19,7 +19,8 @@ typedef struct {
 	bool panic_mode;
 } Parser;
 
-static void _print_error(Str path, usize row, usize col, const char * msg, ...) {
+static void _print_error(Str path, usize row, usize col, const char * msg,
+						 ...) {
 	c4printf(stderr, "in %s[%uq, %uq]: ", path, row, col);
 	va_list va;
 	va_start(va, msg);
@@ -29,7 +30,8 @@ static void _print_error(Str path, usize row, usize col, const char * msg, ...) 
 }
 
 static void print_error(Parser * parser, const char * msg, ...) {
-	c4printf(stderr, "in %s[%uq, %uq]: ", parser->path, parser->row1, parser->col1);
+	c4printf(stderr, "in %s[%uq, %uq]: ", parser->path, parser->row1,
+			 parser->col1);
 	va_list va;
 	va_start(va, msg);
 	c4vaprintf(stderr, msg, va);
@@ -44,9 +46,8 @@ static Token next_valid_token(Parser * parser, usize * row, usize * col) {
 		Token token = lexer_next(&parser->lexer);
 		if (token.kind == TOKEN_ERR) {
 			parser->had_error = true;
-			_print_error(parser->path, _row, _col,
-				"unexpected character '%ch'",
-					*lexer_token_str(&parser->lexer, &token).data);
+			_print_error(parser->path, _row, _col, "unexpected character '%ch'",
+						 *lexer_token_str(&parser->lexer, &token).data);
 			continue;
 		}
 		*row = _row;
@@ -124,9 +125,9 @@ static void * parser_alloc_bytes_n(Parser * parser, usize size, usize n,
 }
 
 #define parser_alloc(parser, T)                                                \
-	((T *)parser_alloc_bytes(parser, sizeof(T), alignof(T)))
+	((T *)parser_alloc_bytes(parser, sizeof(T), _Alignof(T)))
 #define parser_alloc_n(parser, T, n)                                           \
-	((T *)parser_alloc_bytes_n(parser, sizeof(T), (n), alignof(T)))
+	((T *)parser_alloc_bytes_n(parser, sizeof(T), (n), _Alignof(T)))
 
 static usize get_segmented_slot(usize size) {
 	return stdc_bit_width(size + 1) - 1;
@@ -266,7 +267,7 @@ static bool expr_int(Parser * parser, Expr * out) {
 	for (usize i = 0; i < src.size; ++i) {
 		if (!i128_mul_by_10(&i128)) {
 			print_error(parser, "integer overflow of '%s'",
-				lexer_token_str(&parser->lexer, peek(parser)));
+						lexer_token_str(&parser->lexer, peek(parser)));
 			advance(parser);
 			*out = expr_error();
 			return true;
@@ -274,7 +275,7 @@ static bool expr_int(Parser * parser, Expr * out) {
 		word digit = (word)(src.data[i] - '0');
 		if (!i128_add_u64(i128, digit, &i128)) {
 			print_error(parser, "integer overflow of '%s'",
-				lexer_token_str(&parser->lexer, peek(parser)));
+						lexer_token_str(&parser->lexer, peek(parser)));
 			advance(parser);
 			*out = expr_error();
 			return true;
