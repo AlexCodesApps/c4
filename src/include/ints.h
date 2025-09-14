@@ -1,4 +1,5 @@
 #pragma once
+#include <stdbool.h>
 #include <stdint.h>
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -14,5 +15,5 @@ typedef float f32;
 typedef double f64;
 typedef u32 word;
 
-#define USIZE_MAX ((usize)-1)
-#define U64_MAX ((u64)-1)
+#define USIZE_MAX ((usize) - 1)
+#define U64_MAX ((u64) - 1)

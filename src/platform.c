@@ -1,11 +1,10 @@
-#include <stdio.h>
 #include "include/platform.h"
 #include "include/fmt.h"
-
+#include <stdio.h>
 
 #ifdef _WIN32
 
-bool dir_walker_open(const char* path, DirWalker* out) {
+bool dir_walker_open(const char * path, DirWalker * out) {
 	char buf[1024]; // need to copy file to add wildcard
 	if (snprintf(buf, 1024, "%s/*", path) < 1) {
 		return false; // just fail if too big
@@ -20,15 +19,13 @@ bool dir_walker_open(const char* path, DirWalker* out) {
 	return true;
 }
 
-const char* dir_walker_name(DirWalker* walker) {
+const char * dir_walker_name(DirWalker * walker) {
 	return walker->data.cFileName;
 }
 
-void dir_walker_close(DirWalker * walker) {
-	FindClose(walker->handle);
-}
+void dir_walker_close(DirWalker * walker) { FindClose(walker->handle); }
 
-bool dir_walker_next(DirWalker* walker) {
+bool dir_walker_next(DirWalker * walker) {
 	FindNextFile(walker->handle, &walker->data);
 }
 

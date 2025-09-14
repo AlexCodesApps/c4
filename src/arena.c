@@ -5,37 +5,33 @@
 #include <windows.h>
 
 #define INVALID_PAGE NULL
-static void* map_pages(usize size) {
+static void * map_pages(usize size) {
 	return VirtualAlloc(NULL, size, MEM_RESERVE, PAGE_NOACCESS);
 }
-static bool commit_pages(void* start, usize size) {
+static bool commit_pages(void * start, usize size) {
 	return VirtualAlloc(start, size, MEM_COMMIT, PAGE_READWRITE) != NULL;
 }
-static void free_pages(void* start, usize size) {
+static void free_pages(void * start, usize size) {
 	VirtualFree(start, 0, MEM_RELEASE);
 }
 #else
 #include <sys/mman.h>
 
 #define INVALID_PAGE MAP_FAILED
-static void* map_pages(usize size) {
+static void * map_pages(usize size) {
 	return mmap(NULL, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
 }
-static bool commit_pages(void* start, usize size) {
-	return mprotect(arena->commited, n_commited_bytes,
-					  PROT_READ | PROT_WRITE) == 0;
+static bool commit_pages(void * start, usize size) {
+	return mprotect(start, size, PROT_READ | PROT_WRITE) == 0;
 }
-static void free_pages(void * start, usize size) {
-	munmap(start, size);
-}
+static void free_pages(void * start, usize size) { munmap(start, size); }
 #endif
-
 
 bool vmem_arena_init(VMemArena * arena, usize size) {
 	bool ok = align_usize(size, 4096, &size);
 	if (UNLIKELY(!ok))
 		return false;
-	void* pages = map_pages(size);
+	void * pages = map_pages(size);
 	ok = pages != INVALID_PAGE;
 	if (UNLIKELY(!ok))
 		return false;
