@@ -1,8 +1,9 @@
 #include "include/ast.h"
+#include <assert.h>
 
 TypeSig type_sig_ptr_from_ast(TypeSig * next) {
 	return (TypeSig){
-		.pass = TYPE_PASS_PARSED,
+		.pass = TYPE_SIG_PASS_PARSED,
 		.is_mut = false,
 		.kind = TYPE_SIG_PTR,
 		.as.ptr = next,
@@ -11,7 +12,7 @@ TypeSig type_sig_ptr_from_ast(TypeSig * next) {
 
 TypeSig type_sig_ref_from_ast(TypeSig * next) {
 	return (TypeSig){
-		.pass = TYPE_PASS_PARSED,
+		.pass = TYPE_SIG_PASS_PARSED,
 		.is_mut = false,
 		.kind = TYPE_SIG_REF,
 		.as.ref = next,
@@ -20,7 +21,7 @@ TypeSig type_sig_ref_from_ast(TypeSig * next) {
 
 TypeSig type_sig_iden_from_ast(Iden iden) {
 	return (TypeSig){
-		.pass = TYPE_PASS_PARSED,
+		.pass = TYPE_SIG_PASS_PARSED,
 		.is_mut = false,
 		.kind = TYPE_SIG_IDEN,
 		.as.iden = iden,
@@ -31,21 +32,21 @@ void type_sig_set_mut(TypeSig * type) { type->is_mut = true; }
 
 TypeSig type_sig_void(void) {
 	return (TypeSig){
-		.pass = TYPE_PASS_PARSED,
+		.pass = TYPE_SIG_PASS_PARSED,
 		.kind = TYPE_SIG_VOID,
 	};
 }
 
 TypeSig type_sig_error(void) {
 	return (TypeSig){
-		.pass = TYPE_PASS_ERROR,
+		.pass = TYPE_SIG_PASS_ERROR,
 	};
 }
 
-void type_sig_set_error(TypeSig * type) { type->pass = TYPE_PASS_ERROR; }
+void type_sig_set_error(TypeSig * type) { type->pass = TYPE_SIG_PASS_ERROR; }
 
 bool type_sig_is_error(const TypeSig * type) {
-	return type->pass == TYPE_PASS_ERROR;
+	return type->pass == TYPE_SIG_PASS_ERROR;
 }
 
 Expr expr_int_from_ast(I128 i) {
@@ -178,7 +179,7 @@ TypeAlias type_alias_from_ast(SrcSpan span, TypeSig type) {
 	return (TypeAlias){
 		.span = span,
 		.pass = TYPE_ALIAS_PASS_PARSED,
-		.type = type,
+		.as.parsed = type,
 	};
 }
 
@@ -188,6 +189,17 @@ TypeAlias type_alias_error(void) {
 
 void type_alias_set_error(TypeAlias * alias) {
 	alias->pass = TYPE_ALIAS_PASS_ERROR;
+}
+
+void type_alias_set_checking(TypeAlias * alias, VisitIndex visit_index) {
+	assert(alias->pass == TYPE_ALIAS_PASS_PARSED);
+	alias->pass = TYPE_ALIAS_PASS_CHECKING;
+	alias->as.checking.visit_index = visit_index;
+}
+
+void type_alias_set_checked(TypeAlias * alias, TypeHandle type) {
+	assert(alias->pass == TYPE_ALIAS_PASS_CHECKING);
+	alias->as.checked = type;
 }
 
 bool type_alias_is_error(const TypeAlias * alias) {

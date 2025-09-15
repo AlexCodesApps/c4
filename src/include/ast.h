@@ -1,15 +1,18 @@
 #pragma once
 #include "common.h"
 #include "i128.h"
+#include "type.h"
 
 typedef Str Iden;
 
 typedef struct TypeSig TypeSig;
+typedef struct TypeAlias TypeAlias;
 typedef struct Decl Decl;
 
 typedef enum {
-	TYPE_PASS_ERROR,
-	TYPE_PASS_PARSED,
+	TYPE_SIG_PASS_ERROR,
+	TYPE_SIG_PASS_PARSED,
+	TYPE_SIG_PASS_CYCLE_CHECKED
 } TypeSigPass;
 
 typedef enum {
@@ -17,6 +20,7 @@ typedef enum {
 	TYPE_SIG_REF,
 	TYPE_SIG_IDEN,
 	TYPE_SIG_VOID,
+	TYPE_SIG_ALIAS_STUB,
 } TypeSigKind;
 
 typedef struct {
@@ -34,6 +38,7 @@ struct TypeSig {
 		TypeSig * ptr;
 		TypeSig * ref;
 		Iden iden;
+		TypeAlias * alias_stub;
 	} as;
 };
 
@@ -192,17 +197,28 @@ bool var_is_error(const Var * var);
 typedef enum {
 	TYPE_ALIAS_PASS_ERROR,
 	TYPE_ALIAS_PASS_PARSED,
+	TYPE_ALIAS_PASS_CHECKING,
+	TYPE_ALIAS_PASS_CHECKED,
 } TypeAliasPass;
 
-typedef struct {
+struct TypeAlias {
 	SrcSpan span;
 	TypeAliasPass pass;
-	TypeSig type;
-} TypeAlias;
+	struct {
+		TypeSig parsed;
+		struct {
+			TypeSig parsed;
+			VisitIndex visit_index;
+		} checking;
+		TypeHandle checked;
+	} as;
+};
 
 TypeAlias type_alias_from_ast(SrcSpan span, TypeSig type);
 TypeAlias type_alias_error(void);
 void type_alias_set_error(TypeAlias * alias);
+void type_alias_set_checking(TypeAlias * alias, VisitIndex visit_index);
+void type_alias_set_checked(TypeAlias * alias, TypeHandle type);
 bool type_alias_is_error(const TypeAlias * alias);
 
 typedef enum {

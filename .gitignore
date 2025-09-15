@@ -1,5 +1,5 @@
-!.clang-format
-!.gitignore
-build
-compile_commands.json
 .*
+/build
+/compile_commands.json
+!/.clang-format
+!/.gitignore
