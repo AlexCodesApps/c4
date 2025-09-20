@@ -35,5 +35,4 @@ typedef struct {
 	VMPtrStackTable stack;
 } VM;
 
-bool vm_complete_type(VM * vm, Type * type);
 void vm_init(VM * vm);
