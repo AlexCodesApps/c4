@@ -1,4 +1,5 @@
 #include "include/fmt.h"
+#include "include/debug.h"
 #include "include/lexer.h"
 #include "include/utility.h"
 #include <inttypes.h>
@@ -9,6 +10,7 @@ void c4print(FILE * file, const char * msg) { fputs(msg, file); }
 void c4println(FILE * file, const char * msg) {
 	fputs(msg, file);
 	fputc('\n', file);
+	fflush(file);
 }
 
 static char peek(const char * iter) { return *iter; }
@@ -52,11 +54,11 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 				UNREACHABLE();
 			}
 		case 't':
-			assert(next(&path) == 'i');
+			ASSERT(next(&path) == 'i');
 			TokenIndex ti = va_arg(va, TokenIndex);
 			_Generic(ti,
 				u32: fprintf(file, "%" PRIu32, ti),
-				default: assert(false));
+				default: ASSERT(false));
 			continue;
 		case 'i':
 			switch (next(&path)) {
@@ -71,7 +73,7 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 				continue;
 			}
 			case 'd': {
-				assert(next(&path) == 'q');
+				ASSERT(next(&path) == 'q');
 				TODO();
 			}
 			default:
@@ -90,7 +92,7 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 				continue;
 			}
 			case 'd': {
-				assert(next(&path) == 'q');
+				ASSERT(next(&path) == 'q');
 				TODO();
 			}
 			default:

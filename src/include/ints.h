@@ -13,6 +13,7 @@ typedef int64_t i64;
 typedef intptr_t isize;
 typedef float f32;
 typedef double f64;
+typedef i32 iword;
 typedef u32 word;
 
 #define USIZE_MAX ((usize) - 1)

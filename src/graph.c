@@ -1,12 +1,12 @@
 #include "include/graph.h"
+#include "include/debug.h"
 #include "include/utility.h"
 
-static bool ensure_type_sig_is_cycle_checked(GraphResolverCtx * ctx,
-											 TypeSig * sig);
+static bool ensure_type_sig_is_cycle_checked(SemaCtx * ctx, TypeSig * sig);
 
-static TypeHandle checked_sig_to_type(GraphResolverCtx * ctx, TypeSig * sig) {
+static TypeHandle checked_sig_to_type(SemaCtx * ctx, TypeSig * sig) {
 	TypeHandle type;
-	assert(sig->pass == TYPE_SIG_PASS_CYCLE_CHECKED);
+	ASSERT(sig->pass == TYPE_SIG_PASS_CYCLE_CHECKED);
 	switch (sig->kind) {
 	case TYPE_SIG_VOID:
 		type = type_handle_from_ptr(&ctx->table->void_type);
@@ -26,11 +26,14 @@ static TypeHandle checked_sig_to_type(GraphResolverCtx * ctx, TypeSig * sig) {
 	case TYPE_SIG_ALIAS_STUB: {
 		TypeAlias * alias = sig->as.alias_stub;
 		if (alias->pass != TYPE_ALIAS_PASS_CHECKED) {
-			assert(alias->pass == TYPE_ALIAS_PASS_CHECKING);
+			ASSERT(alias->pass == TYPE_ALIAS_PASS_CHECKING);
 			type_alias_set_checked(
 				alias, checked_sig_to_type(ctx, &alias->as.checking.parsed));
 		}
 		type = alias->as.checked;
+		break;
+	case TYPE_SIG_TYPE_STUB:
+		type = type_handle_from_ptr(sig->as.type_stub);
 		break;
 	}
 	case TYPE_SIG_IDEN:
@@ -41,8 +44,7 @@ static TypeHandle checked_sig_to_type(GraphResolverCtx * ctx, TypeSig * sig) {
 }
 
 // does not set to CYCLE_CHECKED!
-static bool ensure_type_alias_free_of_cycles(GraphResolverCtx * ctx,
-											 TypeAlias * alias) {
+static bool ensure_type_alias_free_of_cycles(SemaCtx * ctx, TypeAlias * alias) {
 	switch (alias->pass) {
 	case TYPE_ALIAS_PASS_ERROR:
 		return false;
@@ -57,18 +59,23 @@ static bool ensure_type_alias_free_of_cycles(GraphResolverCtx * ctx,
 	case TYPE_ALIAS_PASS_CHECKING:
 		if (alias->as.checking.visit_index > ctx->visitor.last_indirection_id ||
 			alias->as.checking.visit_index > ctx->visitor.last_opaque_id) {
-			TODO("cycle detected");
+			c4println(stderr, "error: detected cycle"); // TODO
 			type_alias_set_error(alias);
 			return false;
 		}
 		FALLTHROUGH();
 	case TYPE_ALIAS_PASS_CHECKED:
+	case TYPE_ALIAS_PASS_EVALUATED:
 		return true;
 	}
 }
 
-static bool etsicc_iden_helper(GraphResolverCtx * ctx, TypeSig * sig,
-							   Iden iden) {
+static bool etsicc_iden_helper(SemaCtx * ctx, TypeSig * sig, Iden iden) {
+	if (str_equal(iden, s("int"))) {
+		sig->kind = TYPE_SIG_TYPE_STUB;
+		sig->as.type_stub = &ctx->table->i32_type;
+		return true;
+	}
 	for (usize i = 0; i < ctx->base->size; ++i) {
 		Decl * decl = ast_at(ctx->base, i);
 		if (!str_equal(decl->iden, iden)) {
@@ -85,12 +92,11 @@ static bool etsicc_iden_helper(GraphResolverCtx * ctx, TypeSig * sig,
 		sig->as.alias_stub = &decl->as.alias;
 		return true;
 	}
-	TODO();
+	TODO("unknown identifier");
 	return false;
 }
 
-static bool ensure_type_sig_is_cycle_checked(GraphResolverCtx * ctx,
-											 TypeSig * sig) {
+static bool ensure_type_sig_is_cycle_checked(SemaCtx * ctx, TypeSig * sig) {
 	VisitorState * visitor = &ctx->visitor;
 	switch (sig->pass) {
 	case TYPE_SIG_PASS_ERROR:
@@ -105,6 +111,7 @@ static bool ensure_type_sig_is_cycle_checked(GraphResolverCtx * ctx,
 			bool result = ensure_type_sig_is_cycle_checked(ctx, sig->as.ptr);
 			visitor->last_indirection_id = sv;
 			if (!result) {
+				type_sig_set_error(sig);
 				return false;
 			}
 			break;
@@ -115,16 +122,19 @@ static bool ensure_type_sig_is_cycle_checked(GraphResolverCtx * ctx,
 			bool result = ensure_type_sig_is_cycle_checked(ctx, sig->as.ref);
 			visitor->last_indirection_id = sv;
 			if (!result) {
+				type_sig_set_error(sig);
 				return false;
 			}
 			break;
 		}
 		case TYPE_SIG_IDEN: {
 			if (!etsicc_iden_helper(ctx, sig, sig->as.iden)) {
+				type_sig_set_error(sig);
 				return false;
 			}
 			break;
 		}
+		case TYPE_SIG_TYPE_STUB:
 		case TYPE_SIG_ALIAS_STUB:
 			UNREACHABLE();
 		}
@@ -135,14 +145,14 @@ static bool ensure_type_sig_is_cycle_checked(GraphResolverCtx * ctx,
 	}
 }
 
-TypeHandle resolve_type_sig_graph(GraphResolverCtx * ctx, TypeSig * sig) {
+TypeHandle resolve_type_sig_graph(SemaCtx * ctx, TypeSig * sig) {
 	if (!ensure_type_sig_is_cycle_checked(ctx, sig)) {
 		return type_handle_null();
 	}
 	return checked_sig_to_type(ctx, sig);
 }
 
-bool resolve_type_alias_graph(GraphResolverCtx * ctx, TypeAlias * alias) {
+bool resolve_type_alias_graph(SemaCtx * ctx, TypeAlias * alias) {
 	if (!ensure_type_alias_free_of_cycles(ctx, alias)) {
 		return false;
 	}
@@ -151,4 +161,19 @@ bool resolve_type_alias_graph(GraphResolverCtx * ctx, TypeAlias * alias) {
 			alias, checked_sig_to_type(ctx, &alias->as.checking.parsed));
 	}
 	return true;
+}
+
+bool resolve_var_graph(SemaCtx * ctx, Var * var) {
+	switch (var->pass) {
+	case VAR_PASS_ERROR:
+		return false;
+	case VAR_PASS_PARSED: {
+		TODO("reason about how expressions fit into graph checking");
+	}
+	case VAR_PASS_CHECKING:
+		TODO("^");
+	case VAR_PASS_CHECKED:
+	case VAR_PASS_EVALUATED:
+		return true;
+	}
 }

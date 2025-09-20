@@ -149,25 +149,6 @@ static usize get_segmented_slot_index(usize size, usize slot) {
 	return size - ((usize)1 << slot) + 1;
 }
 
-static TypeSig * type_sig_list_add(Parser * parser, TypeSigList * list,
-								   TypeSig type) {
-	usize slot = get_segmented_slot(list->size);
-	usize index = get_segmented_slot_index(list->size, slot);
-	if (index == 0) {
-		usize size = slot + 1;
-		TypeSig ** data = parser_alloc_n(parser, TypeSig *, size);
-		for (usize i = 0; i < slot; ++i) {
-			data[i] = list->data[i];
-		}
-		data[slot] = parser_alloc_n(parser, TypeSig, (usize)1 << slot);
-		list->data = data;
-	}
-	++list->size;
-	TypeSig * loc = &list->data[slot][index];
-	*loc = type;
-	return loc;
-}
-
 TypeSig * type_sig_list_at(TypeSigList * list, usize index) {
 	usize slot = get_segmented_slot(index);
 	usize slot_index = get_segmented_slot_index(index, slot);
@@ -343,7 +324,7 @@ static bool parse_stmt(Parser * parser, Stmt * out, bool allow_decls) {
 	case TOKEN_RETURN: {
 		advance(parser);
 		if (match(parser, TOKEN_SEMICOLON)) {
-			*out = stmt_return_from_ast(expr_void());
+			*out = stmt_return_from_ast(expr_void(INVALID_SRC_SPAN));
 			return true;
 		}
 		Expr expr;
@@ -467,6 +448,7 @@ static bool expr_parens(Parser * parser, Expr * out) {
 }
 
 static bool expr_funcall(Parser * parser, Expr prefix, Expr * out) {
+	TokenIndex index = src_span_begin(parser);
 	advance(parser); // '('
 	ExprList list = {0};
 	if (!match(parser, TOKEN_RPAREN)) {
@@ -482,13 +464,15 @@ static bool expr_funcall(Parser * parser, Expr prefix, Expr * out) {
 			return false;
 		}
 	}
+	SrcSpan span = src_span_end(parser, index);
 	Expr * fun = parser_alloc(parser, Expr);
 	*fun = prefix;
-	*out = expr_funcall_from_ast(fun, list);
+	*out = expr_funcall_from_ast(span, fun, list);
 	return true;
 }
 
 static bool expr_addr(Parser * parser, Expr * out) {
+	TokenIndex index = src_span_begin(parser);
 	advance(parser); // &
 	Expr next;
 	if (!parse_expr_prec(parser, EXPR_PREC_PREFIX, &next)) {
@@ -496,24 +480,30 @@ static bool expr_addr(Parser * parser, Expr * out) {
 	}
 	Expr * pnext = parser_alloc(parser, Expr);
 	*pnext = next;
-	*out = expr_addr_from_ast(pnext);
+	SrcSpan span = src_span_end(parser, index);
+	*out = expr_addr_from_ast(span, pnext);
 	return true;
 }
 
 static bool _expr_void(Parser * parser, Expr * out) {
+	TokenIndex index = src_span_begin(parser);
 	advance(parser); // 'void'
-	*out = expr_void();
+	SrcSpan span = src_span_end(parser, index);
+	*out = expr_void(span);
 	return true;
 }
 
 static bool expr_iden(Parser * parser, Expr * out) {
+	TokenIndex index = src_span_begin(parser);
 	Iden iden = peek_str(parser);
 	advance(parser);
-	*out = expr_iden_from_ast(iden);
+	SrcSpan span = src_span_end(parser, index);
+	*out = expr_iden_from_ast(span, iden);
 	return true;
 }
 
 static bool expr_int(Parser * parser, Expr * out) {
+	TokenIndex index = src_span_begin(parser);
 	I128 i128 = i128_new(0, 0);
 	Str src = peek_str(parser);
 	for (usize i = 0; i < src.size; ++i) {
@@ -532,11 +522,21 @@ static bool expr_int(Parser * parser, Expr * out) {
 		}
 	}
 	advance(parser); // integer
-	*out = expr_int_from_ast(i128);
+	SrcSpan span = src_span_end(parser, index);
+	*out = expr_int_from_ast(span, i128);
+	return true;
+}
+
+static bool _expr_nullptr(Parser * parser, Expr * out) {
+	TokenIndex index = src_span_begin(parser);
+	advance(parser); // 'nullptr'
+	SrcSpan span = src_span_end(parser, index);
+	*out = expr_nullptr(span);
 	return true;
 }
 
 static bool expr_plus(Parser * parser, Expr prefix, Expr * out) {
+	TokenIndex index = src_span_begin(parser);
 	advance(parser); // '+'
 	Expr expr2;
 	if (!parse_expr_prec(parser, EXPR_PREC_TERM, &expr2)) {
@@ -546,7 +546,8 @@ static bool expr_plus(Parser * parser, Expr prefix, Expr * out) {
 	Expr * b = parser_alloc(parser, Expr);
 	*a = prefix;
 	*b = expr2;
-	*out = expr_plus_from_ast(a, b);
+	SrcSpan span = src_span_end(parser, index);
+	*out = expr_plus_from_ast(span, a, b);
 	return true;
 }
 
@@ -556,6 +557,7 @@ ExprRule expr_rule_table[TOKEN_COUNT] = {
 	[TOKEN_AMPERSAND] = {expr_addr, NULL, EXPR_PREC_NONE},
 	[TOKEN_VOID] = {_expr_void, NULL, EXPR_PREC_NONE},
 	[TOKEN_INT] = {expr_int, NULL, EXPR_PREC_NONE},
+	[TOKEN_NULLPTR] = {_expr_nullptr, NULL, EXPR_PREC_NONE},
 	[TOKEN_IDEN] = {expr_iden, NULL, EXPR_PREC_NONE},
 };
 
@@ -722,6 +724,7 @@ static Decl parse_decl(Parser * parser) {
 			Fn fn = parse_fn(parser, true, index, &iden);
 			return decl_fn_from_ast(iden, fn);
 		}
+		case TOKEN_MUT: // illegal but parsed anyways
 		case TOKEN_IDEN: {
 			Iden iden;
 			Var var = parse_var(parser, true, index, &iden);

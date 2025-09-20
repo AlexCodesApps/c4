@@ -1,4 +1,5 @@
 #include "include/ast.h"
+#include "include/debug.h"
 #include <assert.h>
 
 TypeSig type_sig_ptr_from_ast(TypeSig * next) {
@@ -49,50 +50,64 @@ bool type_sig_is_error(const TypeSig * type) {
 	return type->pass == TYPE_SIG_PASS_ERROR;
 }
 
-Expr expr_int_from_ast(I128 i) {
+Expr expr_int_from_ast(SrcSpan span, I128 i) {
 	return (Expr){
 		.pass = EXPR_PASS_PARSED,
 		.kind = EXPR_INTEGER,
+		.span = span,
 		.as.integer = i,
 	};
 }
 
-Expr expr_plus_from_ast(Expr * a, Expr * b) {
+Expr expr_plus_from_ast(SrcSpan span, Expr * a, Expr * b) {
 	return (Expr){
 		.pass = EXPR_PASS_PARSED,
 		.kind = EXPR_PLUS,
+		.span = span,
 		.as.plus = {.a = a, .b = b},
 	};
 }
 
-Expr expr_iden_from_ast(Iden iden) {
-	return (Expr){.pass = EXPR_PASS_PARSED, .kind = EXPR_IDEN, .as.iden = iden};
+Expr expr_iden_from_ast(SrcSpan span, Iden iden) {
+	return (Expr){
+		.pass = EXPR_PASS_PARSED,
+		.kind = EXPR_IDEN,
+		.span = span,
+		.as.iden = iden,
+	};
 }
 
-Expr expr_addr_from_ast(Expr * next) {
+Expr expr_addr_from_ast(SrcSpan span, Expr * next) {
 	return (Expr){
 		.pass = EXPR_PASS_PARSED,
 		.kind = EXPR_ADDR,
+		.span = span,
 		.as.addr = next,
 	};
 }
 
-Expr expr_funcall_from_ast(Expr * fun, ExprList args) {
+Expr expr_funcall_from_ast(SrcSpan span, Expr * fun, ExprList args) {
 	return (Expr){
 		.pass = EXPR_PASS_PARSED,
 		.kind = EXPR_FUNCALL,
-		.as.funcall =
-			{
-				.fun = fun,
-				.args = args,
-			},
+		.span = span,
+		.as.funcall = {.fun = fun, .args = args},
 	};
 }
 
-Expr expr_void(void) {
+Expr expr_nullptr(SrcSpan span) {
+	return (Expr){
+		.pass = EXPR_PASS_PARSED,
+		.kind = EXPR_NULLPTR,
+		.span = span,
+	};
+}
+
+Expr expr_void(SrcSpan span) {
 	return (Expr){
 		.pass = EXPR_PASS_PARSED,
 		.kind = EXPR_VOID,
+		.span = span,
 	};
 }
 
@@ -163,16 +178,34 @@ Var var_from_ast(SrcSpan span, TypeSig type, bool is_const, bool is_mut,
 	Var var;
 	var.pass = VAR_PASS_PARSED;
 	var.span = span;
-	var.is_const = is_const;
-	var.is_mut = is_mut;
-	var.type = type;
+	var.as.parsed.is_const = is_const;
+	var.as.parsed.is_mut = is_mut;
+	var.as.parsed.type = type;
 	if (opt_expr) {
-		var.has_expr = true;
-		var.unwrap.expr = *opt_expr;
+		var.as.parsed.has_expr = true;
+		var.as.parsed.unwrap.expr = *opt_expr;
 	} else {
-		var.has_expr = false;
+		var.as.parsed.has_expr = false;
 	}
 	return var;
+}
+
+void var_set_checking(Var * var, VisitIndex index) {
+	ASSERT(var->pass == VAR_PASS_PARSED);
+	var->as.checking.index = index;
+	var->pass = VAR_PASS_CHECKING;
+}
+
+void var_set_checked(Var * var, VarMutability mut, TypeHandle type) {
+	ASSERT(var->pass == VAR_PASS_CHECKING);
+	bool has_expr = var->as.parsed.has_expr;
+	if (has_expr) {
+		Expr maybe_uninit_expr = var->as.parsed.unwrap.expr;
+		var->as.checked.has_expr = has_expr;
+		var->as.checked.unwrap.expr = maybe_uninit_expr;
+	}
+	var->as.checked.mut = mut;
+	var->as.checked.type = type;
 }
 
 TypeAlias type_alias_from_ast(SrcSpan span, TypeSig type) {
@@ -192,13 +225,13 @@ void type_alias_set_error(TypeAlias * alias) {
 }
 
 void type_alias_set_checking(TypeAlias * alias, VisitIndex visit_index) {
-	assert(alias->pass == TYPE_ALIAS_PASS_PARSED);
+	ASSERT(alias->pass == TYPE_ALIAS_PASS_PARSED);
 	alias->pass = TYPE_ALIAS_PASS_CHECKING;
 	alias->as.checking.visit_index = visit_index;
 }
 
 void type_alias_set_checked(TypeAlias * alias, TypeHandle type) {
-	assert(alias->pass == TYPE_ALIAS_PASS_CHECKING);
+	ASSERT(alias->pass == TYPE_ALIAS_PASS_CHECKING);
 	alias->as.checked = type;
 }
 

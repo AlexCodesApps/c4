@@ -29,49 +29,55 @@ bool type_handle_eq(TypeHandle a, TypeHandle b) {
 	return a.type == b.type;
 }
 
-static usize get_segmented_slot(usize size) {
+static word get_segmented_slot(usize size) {
 	return bit_width_usize(size + 1) - 1;
 }
 
-static usize get_segmented_slot_index(usize size, usize slot) {
+static usize get_segmented_slot_index(usize size, word slot) {
 	return size - ((usize)1 << slot) + 1;
 }
 
-static Type * type_intern_table_at(TypeInternTable * table, usize index) {
-	usize slot = get_segmented_slot(index);
+Type * type_list_at(TypeList * list, usize index) {
+	word slot = get_segmented_slot(index);
 	usize slot_index = get_segmented_slot_index(index, slot);
-	return &table->data[slot][slot_index];
+	return &list->data[slot][slot_index];
 }
-
-static Type * type_intern_table_add(VMemArena * arena, TypeInternTable * table,
-									Type type) {
-	usize slot = get_segmented_slot(table->size);
-	usize index = get_segmented_slot_index(table->size, slot);
+Type * type_list_add(VMemArena * arena, TypeList * list, Type type) {
+	word slot = get_segmented_slot(list->size);
+	usize index = get_segmented_slot_index(list->size, slot);
 	if (index == 0) {
-		usize size = slot + 1;
+		word size = slot + 1;
 		Type ** data = vmem_arena_alloc_n(arena, Type *, size);
 		if (!data) {
 			return NULL;
 		}
 		for (usize i = 0; i < slot; ++i) {
-			data[i] = table->data[i];
+			data[i] = list->data[i];
 		}
 		Type * slot_ptr = vmem_arena_alloc_n(arena, Type, (usize)1 << slot);
 		if (!slot_ptr) {
 			return NULL;
 		}
 		data[slot] = slot_ptr;
-		table->data = data;
+		list->data = data;
 	}
-	++table->size;
-	Type * loc = &table->data[slot][index];
+	++list->size;
+	Type * loc = &list->data[slot][index];
 	*loc = type;
 	return loc;
 }
 
+static Type * type_intern_table_at(TypeInternTable * table, usize index) {
+	return type_list_at(&table->types, index);
+}
+
+static Type * type_intern_table_add(VMemArena * arena, TypeInternTable * table,
+									Type type) {
+	return type_list_add(arena, &table->types, type);
+}
+
 void type_intern_table_init(TypeInternTable * table) {
-	table->data = NULL;
-	table->size = 0;
+	ZERO(&table->types);
 	table->void_type = (Type){
 		.pass = TYPE_PASS_EVALUATED,
 		.kind = TYPE_BUILTIN_VOID,
@@ -84,7 +90,7 @@ void type_intern_table_init(TypeInternTable * table) {
 
 Type * type_intern_table_ptr_to(VMemArena * arena, TypeInternTable * table,
 								TypeHandle type) {
-	for (usize i = 0; i < table->size; ++i) {
+	for (usize i = 0; i < table->types.size; ++i) {
 		Type * otype = type_intern_table_at(table, i);
 		if (otype->kind != TYPE_PTR) {
 			continue;
@@ -102,7 +108,7 @@ Type * type_intern_table_ptr_to(VMemArena * arena, TypeInternTable * table,
 }
 Type * type_intern_table_ref_to(VMemArena * arena, TypeInternTable * table,
 								TypeHandle type) {
-	for (usize i = 0; i < table->size; ++i) {
+	for (usize i = 0; i < table->types.size; ++i) {
 		Type * otype = type_intern_table_at(table, i);
 		if (otype->kind != TYPE_REF) {
 			continue;

@@ -1,20 +1,32 @@
 #pragma once
 #include "assert.h"
 #include "checked_math.h"
+#include "debug.h"
 #include "fmt.h" // IWYU pragma: keep
 #include "ints.h"
 #include <memory.h>
+#include <signal.h>
+#include <stdlib.h>
 
-#define BREAKPOINT()                                                           \
-	asm("int3\n"                                                               \
-		"nop\n") // not portable but program is borked anyways
+#ifdef __GNUC__
+__attribute__((noreturn))
+#endif
+static inline void
+crash(void) {
+	fflush(stderr);
+	fflush(stdout);
+	raise(SIGABRT);
+	_Exit(127); // fallback
+}
+
 #define ZERO(ptr) memset(ptr, 0, sizeof(*(ptr)))
-#define UNREACHABLE() assert(false && "unreachable")
-#define TODO(...)                                                              \
-	do {                                                                       \
-		__VA_OPT__(c4println(stderr, "REACHED TODO: " __VA_ARGS__));           \
-		assert(false && "todo");                                               \
-	} while (0)
+#ifdef C4_DEBUG
+#define TODO(...) FAIL("TODO REACHED: " __VA_ARGS__)
+#define UNREACHABLE() FAIL("THE UNREACHABLE WAS REACHED...")
+#else
+#define TODO(...) abort()
+#define UNREACHABLE() abort()
+#endif
 #ifdef __GNUC__
 #define UNLIKELY(...) __builtin_expect(!!(__VA_ARGS__), 0)
 #define LIKELY(...) __builtin_expect(!!(__VA_ARGS__), 1)

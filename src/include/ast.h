@@ -21,6 +21,7 @@ typedef enum {
 	TYPE_SIG_IDEN,
 	TYPE_SIG_VOID,
 	TYPE_SIG_ALIAS_STUB,
+	TYPE_SIG_TYPE_STUB,
 } TypeSigKind;
 
 typedef struct {
@@ -39,6 +40,7 @@ struct TypeSig {
 		TypeSig * ref;
 		Iden iden;
 		TypeAlias * alias_stub;
+		Type * type_stub;
 	} as;
 };
 
@@ -62,6 +64,7 @@ typedef enum {
 	EXPR_IDEN,
 	EXPR_ADDR,
 	EXPR_FUNCALL,
+	EXPR_NULLPTR,
 	EXPR_VOID,
 } ExprKind;
 
@@ -77,7 +80,8 @@ Expr * expr_list_at(ExprList * list, usize index);
 struct Expr {
 	ExprPass pass;
 	ExprKind kind;
-	struct {
+	SrcSpan span;
+	union {
 		I128 integer;
 		struct {
 			Expr * a;
@@ -92,12 +96,13 @@ struct Expr {
 	} as;
 };
 
-Expr expr_int_from_ast(I128 i);
-Expr expr_plus_from_ast(Expr * a, Expr * b);
-Expr expr_iden_from_ast(Iden iden);
-Expr expr_addr_from_ast(Expr * next);
-Expr expr_funcall_from_ast(Expr * fun, ExprList args);
-Expr expr_void(void);
+Expr expr_int_from_ast(SrcSpan span, I128 i);
+Expr expr_plus_from_ast(SrcSpan span, Expr * a, Expr * b);
+Expr expr_iden_from_ast(SrcSpan span, Iden iden);
+Expr expr_addr_from_ast(SrcSpan span, Expr * next);
+Expr expr_funcall_from_ast(SrcSpan span, Expr * fun, ExprList args);
+Expr expr_nullptr(SrcSpan span);
+Expr expr_void(SrcSpan span);
 Expr expr_error(void);
 void expr_set_error(Expr * expr);
 bool expr_is_error(const Expr * expr);
@@ -122,7 +127,7 @@ typedef enum {
 
 struct Stmt {
 	StmtKind kind;
-	struct {
+	union {
 		Decl * decl;
 		Expr expr;
 		Expr return_;
@@ -172,25 +177,58 @@ void fn_set_error(Fn * fn);
 bool fn_is_error(const Fn * fn);
 
 typedef enum {
+	VAR_MUT_MUT,   // mutable runtime variable
+	VAR_MUT_LET,   // runtime constant
+	VAR_MUT_CONST, // compile time constant
+} VarMutability;
+
+typedef enum {
 	VAR_PASS_ERROR,
 	VAR_PASS_PARSED,
+	VAR_PASS_CHECKED,
+	VAR_PASS_CHECKING,
+	VAR_PASS_EVALUATED,
 } VarPass;
 
 typedef struct {
 	SrcSpan span;
 	VarPass pass;
-	bool is_const : 1;
-	bool is_mut : 1;
-	bool has_expr : 1;
-	TypeSig type;
-	struct {
-		Expr expr;
-	} unwrap;
+	union {
+		struct {
+			bool is_const : 1;
+			bool is_mut : 1;
+			bool has_expr : 1;
+			TypeSig type;
+			struct {
+				Expr expr;
+			} unwrap;
+		} parsed;
+		struct {
+			bool is_const : 1;
+			bool is_mut : 1;
+			bool has_expr : 1;
+			TypeSig type;
+			struct {
+				Expr expr;
+			} unwrap;
+			TokenIndex index;
+		} checking;
+		struct {
+			VarMutability mut : 2;
+			bool has_expr : 1;
+			TypeHandle type;
+			struct {
+				Expr expr;
+			} unwrap;
+		} checked;
+	} as;
 } Var;
 
 Var var_from_ast(SrcSpan span, TypeSig type, bool is_const, bool is_mut,
 				 const Expr * opt_expr);
 Var var_error(void);
+void var_set_checking(Var * var, VisitIndex index);
+void var_set_checked(Var * var, VarMutability mut, TypeHandle type);
 void var_set_error(Var * var);
 bool var_is_error(const Var * var);
 
@@ -199,18 +237,20 @@ typedef enum {
 	TYPE_ALIAS_PASS_PARSED,
 	TYPE_ALIAS_PASS_CHECKING,
 	TYPE_ALIAS_PASS_CHECKED,
+	TYPE_ALIAS_PASS_EVALUATED,
 } TypeAliasPass;
 
 struct TypeAlias {
 	SrcSpan span;
 	TypeAliasPass pass;
-	struct {
+	union {
 		TypeSig parsed;
 		struct {
 			TypeSig parsed;
 			VisitIndex visit_index;
 		} checking;
 		TypeHandle checked;
+		TypeHandle evaled;
 	} as;
 };
 
@@ -231,7 +271,7 @@ typedef enum {
 struct Decl {
 	DeclKind kind;
 	Str iden;
-	struct {
+	union {
 		Var var;
 		TypeAlias alias;
 		Fn fn;

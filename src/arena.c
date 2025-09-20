@@ -1,4 +1,5 @@
 #include "include/arena.h"
+#include "include/debug.h"
 #include "include/utility.h"
 
 #ifdef _WIN32
@@ -57,6 +58,8 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 		usize n_commited_bytes =
 			(uintptr_t)new_commited - (uintptr_t)arena->commited;
 		ok = commit_pages(arena->commited, n_commited_bytes);
+		LOG("tried commited %uq bytes of address space into memory",
+			n_commited_bytes);
 	}
 	if (UNLIKELY(!ok)) {
 		return NULL;

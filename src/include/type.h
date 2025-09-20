@@ -19,6 +19,7 @@ TypeHandle type_handle_from_ptr(Type * type);
 bool type_handle_eq(TypeHandle a, TypeHandle b);
 
 typedef enum {
+	TYPE_PASS_ERROR,
 	TYPE_PASS_CHECKED,
 	TYPE_PASS_EVALUATED,
 } TypePass;
@@ -31,17 +32,28 @@ typedef enum {
 } TypeKind;
 
 struct Type {
-	TypePass pass : 4;
-	TypeKind kind : 4;
+	TypePass pass : 4 * 8;
+	TypeKind kind : 4 * 8;
 	union {
 		TypeHandle ptr;
 		TypeHandle ref;
 	} as;
+	struct {
+		usize size;
+		usize align;
+	} evaluated;
 };
 
 typedef struct {
 	Type ** data;
 	usize size;
+} TypeList;
+
+Type * type_list_at(TypeList * list, usize index);
+Type * type_list_add(VMemArena * arena, TypeList * list, Type type);
+
+typedef struct {
+	TypeList types;
 	Type void_type;
 	Type i32_type;
 } TypeInternTable;

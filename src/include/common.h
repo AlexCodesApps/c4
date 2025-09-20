@@ -22,4 +22,8 @@ typedef struct {
 	TokenIndex end;
 } SrcSpan;
 
+bool src_span_is_valid(const SrcSpan * span);
+
+#define INVALID_SRC_SPAN ((SrcSpan){TOKEN_INDEX_MAX, 0})
+
 VisitorState visitor_state_new(void);

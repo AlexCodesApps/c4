@@ -1,7 +1,8 @@
 #include "src/include/parser.h"
 #include "src/include/utility.h"
-#include "src/include/debug.h" // IWYU pragma: keep
+#include "src/include/debug.h"
 #include "src/include/platform.h"
+#include "src/include/sema.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -53,10 +54,15 @@ bool process_src(VMemArena * arena, const char * path, Str src) {
 	exit(1);
 	case PARSE_RESULT_OVERFLOW:
 		c4println(stderr, "fatal error: internal integer overflow");
-		c4println(stderr, "You have likely reached the limits of the compiler");
+		c4println(stderr, "hint: you have likely reached the limits of the compiler");
 		return false;
 	}
-	return true; // just finish processing here
+	TypeInternTable table;
+	type_intern_table_init(&table);
+	SemaCtx ctx;
+	sema_ctx_init(&ctx, &ast, arena, &table);
+	bool analysis_result = sema_ctx_run(&ctx);
+	return parse_result == PARSE_RESULT_OK && analysis_result; // just finish processing here
 }
 
 int process_path(VMemArena * arena, const char * path) {
@@ -104,7 +110,7 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 		}
 		if (compile_result == 0) { // Compile Success
 			c4printf(stderr, "error: '%cs' should not have compiled\n", path);
-			goto cleanup;
+			// goto cleanup;
 		}
 		vmem_arena_reset(arena);
 	} while (dir_walker_next(&sf_dir));
@@ -127,7 +133,7 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 		}
 		if (compile_result == 1) { // Compile Failure
 			c4printf(stderr, "error: '%cs' did not compile\n", path);
-			goto cleanup;
+			// goto cleanup;
 		}
 		vmem_arena_reset(arena);
 	} while (dir_walker_next(&ss_dir));
@@ -157,13 +163,14 @@ int main(int argc, char ** argv) {
 		if (!vmem_arena_init(&arena, MB(5))) {
 			abort();
 		}
+		LOG("initialized test arena");
 		int result = process_path(&arena, path);
 		vmem_arena_free(&arena);
 		return result;
 	} else if (strcmp(cmd, "test") == 0) {
 		VMemArena arena;
 		if (!vmem_arena_init(&arena, MB(5))) {
-			abort();
+			FAIL("OOM");
 		}
 		bool result = run_tests(&arena, "test/fail", "test/ok");
 		vmem_arena_free(&arena);

@@ -9,6 +9,7 @@ typedef struct {
 
 #else // Only Windows and UNIX Support
 #include <dirent.h>
+
 typedef struct {
 	DIR * dir;
 	struct dirent * entry;

@@ -1,6 +1,38 @@
+#include "include/debug.h"
 #include "include/fmt.h"
 #include "include/lexer.h"
+#include "include/utility.h"
 #include <inttypes.h>
+#include <stdarg.h>
+
+void va_debug(DebugLevel level, const char * filename, const char * function,
+			  word line, const char * msg, va_list va) {
+	const char * prefix[DEBUG_LEVEL_COUNT] = {
+		[DEBUG_LOG] = "\x1b[33mLOG",
+		[DEBUG_ERROR] = "\x1b[31mERROR",
+	};
+	c4printf(stderr, "%cs: in %cs[%uw, %cs]: ", prefix[level], filename, line,
+			 function);
+	c4vaprintf(stderr, msg, va);
+	c4println(stderr, "\x1b[0m");
+}
+
+void debug(DebugLevel level, const char * filename, const char * function,
+		   word line, const char * msg, ...) {
+	va_list va;
+	va_start(va, msg);
+	va_debug(level, filename, function, line, msg, va);
+	va_end(va);
+}
+
+void fail(const char * filename, const char * function, word line,
+		  const char * msg, ...) {
+	va_list va;
+	va_start(va, msg);
+	va_debug(DEBUG_ERROR, filename, function, line, msg, va);
+	va_end(va);
+	crash();
+}
 
 static void dump_token(const Lexer * lexer, const Token * token,
 					   Str token_type) {

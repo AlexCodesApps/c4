@@ -1,5 +1,9 @@
 #include "include/common.h"
 
+bool src_span_is_valid(const SrcSpan * span) {
+	return span->begin <= span->end;
+}
+
 VisitorState visitor_state_new(void) {
 	return (VisitorState){
 		.last_fn_id = 0,
