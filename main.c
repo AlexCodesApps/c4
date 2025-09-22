@@ -68,7 +68,7 @@ bool process_src(VMemArena * arena, const char * path, Str src) {
 int process_path(VMemArena * arena, const char * path) {
 	Str src;
 	if (!read_file(arena, path, &src)) {
-		c4printf(stderr, "error: unable to open file '%cs'", path);
+		c4printf(stderr, "error: unable to open file '%cs'\n", path);
 		return 2;
 	}
 	return process_src(arena, path, src) ? 0 : 1;
@@ -99,7 +99,7 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 			continue;
 		}
 		char path[256];
-		if (snprintf(path, 256, "%s/%s", should_fail_path, name) < 1) {
+		if (!snprintf_TODO(path, 256, "%s/%s", should_fail_path, name)) {
 			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n", should_fail_path, name);
 			goto cleanup;
 		}
@@ -122,7 +122,7 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 			continue;
 		}
 		char path[256];
-		if (snprintf(path, 256, "%s/%s", should_succeed_path, name) < 1) {
+		if (!snprintf_TODO(path, 256, "%s/%s", should_succeed_path, name)) {
 			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n", should_succeed_path, name);
 			goto cleanup;
 		}
@@ -163,7 +163,7 @@ int main(int argc, char ** argv) {
 		if (!vmem_arena_init(&arena, MB(5))) {
 			abort();
 		}
-		LOG("initialized test arena");
+		LOG("initialized arena");
 		int result = process_path(&arena, path);
 		vmem_arena_free(&arena);
 		return result;

@@ -6,6 +6,7 @@
 #include "ints.h"
 #include <memory.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdlib.h>
 
 #ifdef __GNUC__
@@ -79,6 +80,21 @@ static inline word leading_zeros_usize(usize u) {
 		++accum;
 	}
 	return accum;
+}
+
+#ifdef __GNUC__
+__attribute__((__format__(__printf__, 3, 4)))
+#endif
+// temporary stop gap bc the uscases are hacky
+// and probably better suited for custom
+// temporary arena backed formatting
+static inline bool
+snprintf_TODO(char * buf, size_t bufsz, const char * fmt, ...) {
+	va_list va;
+	va_start(va, fmt);
+	iword result = vsnprintf(buf, bufsz, fmt, va);
+	va_end(va);
+	return 0 <= result && (word)result <= bufsz;
 }
 
 #define KB(n) ((n) * 1024)

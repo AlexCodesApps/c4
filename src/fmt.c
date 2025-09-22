@@ -58,7 +58,7 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 			TokenIndex ti = va_arg(va, TokenIndex);
 			_Generic(ti,
 				u32: fprintf(file, "%" PRIu32, ti),
-				default: ASSERT(false));
+				default: FAIL("TokenIndex format needs to be updated"));
 			continue;
 		case 'i':
 			switch (next(&path)) {
