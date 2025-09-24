@@ -99,7 +99,7 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 			continue;
 		}
 		char path[256];
-		if (!snprintf_TODO(path, 256, "%s/%s", should_fail_path, name)) {
+		if (!snprintf_bool(path, 256, "%s/%s", should_fail_path, name)) {
 			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n", should_fail_path, name);
 			goto cleanup;
 		}
@@ -122,7 +122,7 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 			continue;
 		}
 		char path[256];
-		if (!snprintf_TODO(path, 256, "%s/%s", should_succeed_path, name)) {
+		if (!snprintf_bool(path, 256, "%s/%s", should_succeed_path, name)) {
 			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n", should_succeed_path, name);
 			goto cleanup;
 		}

@@ -89,12 +89,12 @@ __attribute__((__format__(__printf__, 3, 4)))
 // and probably better suited for custom
 // temporary arena backed formatting
 static inline bool
-snprintf_TODO(char * buf, size_t bufsz, const char * fmt, ...) {
+snprintf_bool(char * buf, size_t bufsz, const char * fmt, ...) {
 	va_list va;
 	va_start(va, fmt);
-	iword result = vsnprintf(buf, bufsz, fmt, va);
+	int result = vsnprintf(buf, bufsz, fmt, va);
 	va_end(va);
-	return 0 <= result && (word)result <= bufsz;
+	return 0 <= result && (unsigned)result < bufsz;
 }
 
 #define KB(n) ((n) * 1024)
