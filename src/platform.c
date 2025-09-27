@@ -5,7 +5,7 @@
 
 bool dir_walker_open(const char * path, DirWalker * out) {
 	char buf[1024]; // need to copy file to add wildcard
-	if (!snprintf_TODO(buf, 1024, "%s/*", path)) {
+	if (!snprintf_bool(buf, 1024, "%s/*", path)) {
 		return false; // just fail if too big
 	}
 	WIN32_FIND_DATA data;

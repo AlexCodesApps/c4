@@ -45,9 +45,8 @@ bool process_src(VMemArena * arena, const char * path, Str src) {
 	ParseResult parse_result = parse_src(arena, str_from_cstr(path), src, &ast);
 	switch (parse_result) {
 	case PARSE_RESULT_OK:
-		break;
 	case PARSE_RESULT_ERROR:
-		return false;
+		break;
 	case PARSE_RESULT_OOM:
 		c4println(stderr, "fatal error: Out Of Memory");
 		c4println(stderr, "exiting ...");
@@ -161,7 +160,7 @@ int main(int argc, char ** argv) {
 		const char * path = argv[2];
 		VMemArena arena;
 		if (!vmem_arena_init(&arena, MB(5))) {
-			abort();
+			crash();
 		}
 		LOG("initialized arena");
 		int result = process_path(&arena, path);

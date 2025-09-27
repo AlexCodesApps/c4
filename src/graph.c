@@ -168,7 +168,29 @@ bool resolve_var_graph(SemaCtx * ctx, Var * var) {
 	case VAR_PASS_ERROR:
 		return false;
 	case VAR_PASS_PARSED: {
-		TODO("reason about how expressions fit into graph checking");
+		VarMutability mut;
+		if (var->as.parsed.is_mut) {
+			if (var->as.parsed.is_const) {
+				TODO("illegal constant mutable variable");
+				var_set_error(var);
+				return false;
+			}
+			mut = VAR_MUT_MUT;
+		} else if (var->as.parsed.is_const) {
+			mut = VAR_MUT_CONST;
+		} else {
+			mut = VAR_MUT_LET;
+		}
+		var_set_checking(var, ctx->visitor.visit_id++);
+		TODO("cycle check expr");
+		TypeHandle handle = resolve_type_sig_graph(ctx, &var->as.checking.type);
+		if (!type_handle_is_valid(handle)) {
+			TODO();
+			var_set_error(var);
+			return false;
+		}
+		var_set_checked(var, mut, handle);
+		return true;
 	}
 	case VAR_PASS_CHECKING:
 		TODO("^");
