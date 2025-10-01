@@ -1,4 +1,4 @@
-.PHONY: clean, make, all, fmt, lsp, release
+.PHONY: clean, make, all, fmt, release
 
 CC=clang
 RM=rm -rf
@@ -14,11 +14,6 @@ all: build fmt make
 
 make: build
 	cmake --build build
-
-lsp: compile_commands.json
-
-compile_commands.json: build
-	$(COPY) build/compile_commands.json .
 
 release: clean
 	cmake -S . -B build -DCMAKE_C_COMPILER=$(CC)
