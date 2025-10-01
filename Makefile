@@ -1,5 +1,15 @@
 .PHONY: clean, make, all, fmt, lsp, release
 
+CC=clang
+RM=rm -rf
+CP=cp
+
+ifeq (, $(shell which clang-format))
+	FMT=find src -name '*.c' -o -name '*.h' | xargs clang-format -i
+else
+	FMT=echo 'Install clang-format to format code'
+endif
+
 all: build fmt make
 
 make: build
@@ -8,16 +18,17 @@ make: build
 lsp: compile_commands.json
 
 compile_commands.json: build
-	cp build/compile_commands.json .
+	$(COPY) build/compile_commands.json .
 
-release:
-	CC=clang CXX=clang++ cmake -S . -B build && cmake --build build
+release: clean
+	cmake -S . -B build -DCMAKE_C_COMPILER=$(CC)
+	cmake --build build
 
 build: CMakeLists.txt Makefile
-	CC=clang CXX=clang++ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+	cmake -S . -B build -DCMAKE_C_COMPILER=$(CC) -DCMAKE_BUILD_TYPE=Debug
 
 fmt:
-	find src -name '*.c' -o -name '*.h' | xargs clang-format -i
+	$(FMT)
 
 clean:
-	rm -r build
+	$(RM) build

@@ -6,6 +6,7 @@
 #define BREAKPOINT()                                                           \
 	asm("int3\n"                                                               \
 		"nop\n") // not portable but program is borked anyways
+
 typedef enum {
 	DEBUG_LOG,
 	DEBUG_ERROR,
