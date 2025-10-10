@@ -34,9 +34,15 @@ void fail(const char * filename, const char * function, word line, const char * 
 #define ASSERT(cond) (cond ? (void)0 : FAIL("assertion failed : " #cond))
 #else
 
+#ifdef __GNUC__
 #define FAIL(...) __builtin_unreachable()
 #define LOG(...) (void)0
 #define ASSERT(cond) ((cond) ? (void)0 : __builtin_unreachable())
+#else
+#define FAIL(...) ((void)0)
+#define LOG(...) ((void)0)
+#define ASSERT(cond) ((void)0)
+#endif
 #endif
 
 void dump_tokens(Str src);

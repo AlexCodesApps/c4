@@ -1,7 +1,7 @@
 #include "include/platform.h"
+#include "include/utility.h"
 
 #ifdef _WIN32
-#include <stdio.h>
 
 bool dir_walker_open(const char * path, DirWalker * out) {
 	char buf[1024]; // need to copy file to add wildcard
@@ -25,7 +25,7 @@ const char * dir_walker_name(DirWalker * walker) {
 void dir_walker_close(DirWalker * walker) { FindClose(walker->handle); }
 
 bool dir_walker_next(DirWalker * walker) {
-	FindNextFile(walker->handle, &walker->data);
+	return FindNextFile(walker->handle, &walker->data);
 }
 
 #else
