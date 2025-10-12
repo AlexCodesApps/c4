@@ -137,9 +137,9 @@ static void * parser_alloc_bytes_n(Parser * parser, usize size, usize n,
 }
 
 #define parser_alloc(parser, T)                                                \
-	((T *)parser_alloc_bytes(parser, sizeof(T), _Alignof(T)))
+	((T *)parser_alloc_bytes((parser), sizeof(T), _Alignof(T)))
 #define parser_alloc_n(parser, T, n)                                           \
-	((T *)parser_alloc_bytes_n(parser, sizeof(T), (n), _Alignof(T)))
+	((T *)parser_alloc_bytes_n((parser), sizeof(T), (n), _Alignof(T)))
 
 static usize get_segmented_slot(usize size) {
 	return bit_width_usize(size + 1) - 1;

@@ -64,22 +64,32 @@ static inline bool align_ptr(void * ptr, usize alignment, void ** out) {
 }
 
 static inline word bit_width_usize(usize u) {
+#ifdef __GNUC__
+	if (u == 0) return 0;
+	return USIZE_MAX_BITWIDTH - (word)__builtin_clzll(u);
+#else
 	word accum = 0;
 	while (u) {
 		u >>= 1;
 		++accum;
 	}
 	return accum;
+#endif
 }
 
 static inline word leading_zeros_usize(usize u) {
+#ifdef __GNUC__
+	if (u == 0) return USIZE_MAX_BITWIDTH;
+	return (word)__builtin_clzll(u);
+#else
 	u = ~u;
 	word accum = 0;
-	while (u & ((usize)1 << (sizeof(u) * 8 - 1))) {
+	while (u & ((usize)1 << (USIZE_MAX_BITWIDTH - 1))) {
 		u <<= 1;
 		++accum;
 	}
 	return accum;
+#endif
 }
 
 #ifdef __GNUC__
