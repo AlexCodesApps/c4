@@ -2,7 +2,7 @@
 #include "ints.h" // IWYU pragma: keep
 
 static inline bool ckd_add_usize(usize a, usize b, usize * c) {
-	if ((usize)(-1) - a < b) {
+	if (USIZE_MAX - a < b) {
 		return false;
 	}
 	*c = a + b;

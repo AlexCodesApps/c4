@@ -1,6 +1,7 @@
 #pragma once
-#include "ast.h"
+#include "arena.h"
 #include "ints.h"
+#include "type.h"
 
 typedef struct {
 	u64 section_tag : 16; // serves dual purpose of

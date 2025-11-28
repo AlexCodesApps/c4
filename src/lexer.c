@@ -1,13 +1,12 @@
 #include "include/lexer.h"
 #include "include/debug.h"
-#include "include/utility.h"
 #include <assert.h>
 
 Lexer lexer_new(Str src) {
 	Lexer lexer;
 	lexer.src = src;
 	lexer.index = 0;
-	lexer.row = 0;
+	lexer.row = 1;
 	lexer.col = 1;
 	return lexer;
 }

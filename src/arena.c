@@ -58,7 +58,7 @@ void * vmem_arena_alloc_bytes(VMemArena * arena, usize size, usize align) {
 		usize n_commited_bytes =
 			(uintptr_t)new_commited - (uintptr_t)arena->commited;
 		ok = commit_pages(arena->commited, n_commited_bytes);
-		LOG("tried commited %uq bytes of address space into memory",
+		LOG("tried commiting %uq bytes of address space into memory",
 			n_commited_bytes);
 	}
 	if (UNLIKELY(!ok)) {
@@ -77,9 +77,15 @@ void * vmem_arena_alloc_bytes_n(VMemArena * arena, usize size, usize n,
 	return vmem_arena_alloc_bytes(arena, size, align);
 }
 
-void vmem_arena_reset(VMemArena * arena) { arena->current = arena->begin; }
+void vmem_arena_reset(VMemArena * arena) {
+	LOG("used %uq bytes before resetting arena",
+		(u64)((uintptr_t)arena->current - (uintptr_t)arena->begin));
+	arena->current = arena->begin;
+}
 
 void vmem_arena_free(VMemArena * arena) {
 	usize n_bytes = (uintptr_t)arena->end - (uintptr_t)arena->begin;
 	free_pages(arena->begin, n_bytes);
+	LOG("freed arena of bytes %uq [committed %uq]", n_bytes,
+		(u64)((uintptr_t)arena->commited - (uintptr_t)arena->begin));
 }

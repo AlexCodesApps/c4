@@ -16,7 +16,7 @@ bool str_copy(VMemArena * arena, Str str, Str * out) {
 		*out = str_new(NULL, 0);
 		return true;
 	}
-	char * buffer = vmem_arena_alloc_bytes(arena, str.size, _Alignof(char));
+	char * buffer = vmem_arena_alloc_bytes(arena, str.size, 1);
 	if (!buffer) {
 		return false;
 	}

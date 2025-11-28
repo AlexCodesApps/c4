@@ -81,8 +81,8 @@ static void advance(Parser * parser) {
 	parser->token2 = next_valid_token(parser, &parser->row2, &parser->col2);
 }
 
-static bool match(Parser * parser, TokenKind type) {
-	if (peek(parser)->kind == type) {
+static bool match(Parser * parser, TokenKind kind) {
+	if (peek_kind(parser) == kind) {
 		advance(parser);
 		return true;
 	}
@@ -778,12 +778,14 @@ Ast parse_ast(Parser * parser) {
 	Ast ast = {0};
 	while (!eof(parser)) {
 		ast_add_decl(parser, &ast, parse_decl(parser));
+		LOG("parsed top level decl");
 		recover_parse_decl_error(parser);
 	}
 	return ast;
 }
 
 ParseResult parse_src(VMemArena * arena, Str path, Str src, Ast * out) {
+	LOG("compiling file : %s", path);
 	Parser parser;
 	parser.lexer = lexer_new(src);
 	parser.arena = arena;
@@ -798,6 +800,8 @@ ParseResult parse_src(VMemArena * arena, Str path, Str src, Ast * out) {
 	if (setjmp(parser.overflow_handler)) {
 		return PARSE_RESULT_OVERFLOW;
 	}
+	LOG("initialized parser : %s", path);
 	*out = parse_ast(&parser);
+	LOG("finished parsing");
 	return parser.had_error ? PARSE_RESULT_ERROR : PARSE_RESULT_OK;
 }

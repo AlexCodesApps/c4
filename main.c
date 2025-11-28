@@ -1,12 +1,20 @@
-#include "src/include/parser.h"
-#include "src/include/utility.h"
 #include "src/include/debug.h"
-#include "src/include/platform.h"
+#include "src/include/dir_walker.h"
+#include "src/include/parser.h"
 #include "src/include/sema.h"
+#include "src/include/utility.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-bool read_file(VMemArena * arena, const char * path, Str * out) {
+#define RESERVED_ADDRESS_SPACE MB(100)
+
+static NORETURN void oom(void) {
+	c4println(stderr, "fatal error: Out Of Memory");
+	c4println(stderr, "exiting ...");
+	exit(1);
+}
+
+static bool read_file(VMemArena * arena, const char * path, Str * out) {
 	bool status = false;
 	FILE * file = fopen(path, "r");
 	if (!file) {
@@ -25,7 +33,7 @@ bool read_file(VMemArena * arena, const char * path, Str * out) {
 		goto cleanup;
 	}
 	usize size = (usize)lsize;
-	char * buf = vmem_arena_alloc_bytes(arena, size, _Alignof(char));
+	char * buf = vmem_arena_alloc_bytes(arena, size, 1);
 	if (!buf) {
 		goto cleanup;
 	}
@@ -40,7 +48,7 @@ cleanup:
 	return status;
 }
 
-bool process_src(VMemArena * arena, const char * path, Str src) {
+static bool process_src(VMemArena * arena, const char * path, Str src) {
 	Ast ast;
 	ParseResult parse_result = parse_src(arena, str_from_cstr(path), src, &ast);
 	switch (parse_result) {
@@ -48,23 +56,24 @@ bool process_src(VMemArena * arena, const char * path, Str src) {
 	case PARSE_RESULT_ERROR:
 		break;
 	case PARSE_RESULT_OOM:
-		c4println(stderr, "fatal error: Out Of Memory");
-		c4println(stderr, "exiting ...");
-	exit(1);
+		oom();
 	case PARSE_RESULT_OVERFLOW:
 		c4println(stderr, "fatal error: internal integer overflow");
-		c4println(stderr, "hint: you have likely reached the limits of the compiler");
+		c4println(stderr,
+				  "hint: you have likely reached the limits of the compiler");
 		return false;
 	}
 	TypeInternTable table;
 	type_intern_table_init(&table);
 	SemaCtx ctx;
 	sema_ctx_init(&ctx, &ast, arena, &table);
-	bool analysis_result = sema_ctx_run(&ctx);
-	return parse_result == PARSE_RESULT_OK && analysis_result; // just finish processing here
+	// bool analysis_result = sema_ctx_run(&ctx);
+	bool analysis_result = true;
+	return parse_result == PARSE_RESULT_OK &&
+		   analysis_result; // just finish processing here
 }
 
-int process_path(VMemArena * arena, const char * path) {
+static int process_path(VMemArena * arena, const char * path) {
 	Str src;
 	if (!read_file(arena, path, &src)) {
 		c4printf(stderr, "error: unable to open file '%cs'\n", path);
@@ -73,33 +82,36 @@ int process_path(VMemArena * arena, const char * path) {
 	return process_src(arena, path, src) ? 0 : 1;
 }
 
-void usage(const char * program) {
+static void usage(const char * program) {
 	c4printf(stderr, "usage : %cs (test|compile file)?\n", program);
 	exit(1);
 }
 
-bool run_tests(VMemArena * arena, const char * should_fail_path, const char * should_succeed_path) {
+bool run_tests(VMemArena * arena, const char * should_fail_path,
+			   const char * should_succeed_path) {
 	DirWalker sf_dir;
 	if (!dir_walker_open(should_fail_path, &sf_dir)) {
-		c4printf(stderr, "error: unable to open directory '%cs'\n", should_fail_path);
+		c4printf(stderr, "error: unable to open directory '%cs'\n",
+				 should_fail_path);
 		return false;
 	}
 	bool result = false;
 	DirWalker ss_dir;
 	if (!dir_walker_open(should_succeed_path, &ss_dir)) {
-		c4printf(stderr, "error: unable to open directory '%cs'\n", should_succeed_path);
+		c4printf(stderr, "error: unable to open directory '%cs'\n",
+				 should_succeed_path);
 		goto cleanup_sf;
 	}
 	c4println(stderr, "=== FAILURE CASES ===");
 	do {
 		const char * name = dir_walker_name(&sf_dir);
-		if (strcmp(name, ".") == 0
-				|| strcmp(name, "..") == 0) {
+		if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
 			continue;
 		}
 		char path[256];
 		if (!snprintf_bool(path, 256, "%s/%s", should_fail_path, name)) {
-			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n", should_fail_path, name);
+			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n",
+					 should_fail_path, name);
 			goto cleanup;
 		}
 		c4printf(stderr, "compiling file '%cs'\n", path);
@@ -116,13 +128,13 @@ bool run_tests(VMemArena * arena, const char * should_fail_path, const char * sh
 	c4println(stderr, "=== SUCCESS CASES ===");
 	do {
 		const char * name = dir_walker_name(&ss_dir);
-		if (strcmp(name, ".") == 0
-				|| strcmp(name, "..") == 0) {
+		if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
 			continue;
 		}
 		char path[256];
 		if (!snprintf_bool(path, 256, "%s/%s", should_succeed_path, name)) {
-			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n", should_succeed_path, name);
+			c4printf(stderr, "error: buffer to small for path '%cs/%cs'\n",
+					 should_succeed_path, name);
 			goto cleanup;
 		}
 		c4printf(stderr, "compiling file '%cs'\n", path);
@@ -146,7 +158,7 @@ cleanup_sf:
 
 int main(int argc, char ** argv) {
 	const char * program = argv[0];
-	if (argc  > 3) {
+	if (argc > 3) {
 		usage(program);
 	}
 	const char * cmd = "test";
@@ -159,8 +171,8 @@ int main(int argc, char ** argv) {
 		}
 		const char * path = argv[2];
 		VMemArena arena;
-		if (!vmem_arena_init(&arena, MB(5))) {
-			crash();
+		if (!vmem_arena_init(&arena, RESERVED_ADDRESS_SPACE)) {
+			oom();
 		}
 		LOG("initialized arena");
 		int result = process_path(&arena, path);
@@ -168,9 +180,10 @@ int main(int argc, char ** argv) {
 		return result;
 	} else if (strcmp(cmd, "test") == 0) {
 		VMemArena arena;
-		if (!vmem_arena_init(&arena, MB(5))) {
-			FAIL("OOM");
+		if (!vmem_arena_init(&arena, RESERVED_ADDRESS_SPACE)) {
+			oom();
 		}
+		LOG("initialized arena");
 		bool result = run_tests(&arena, "test/fail", "test/ok");
 		vmem_arena_free(&arena);
 		if (result) {

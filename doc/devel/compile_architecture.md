@@ -1,19 +1,43 @@
-# C4 Compiler Architecture
+# I Need to Reason About What Im Doing Here
 
-## Table of Contents
-- AST Parse
-- Sema AST
-- ASM
+this is a theoretical program in a future version
 
-## AST Parse
-- straight forward parsing of program src to tree
-- fails on syntax errors
+```c4
+const fn times2(x: usize): usize {
+    return x * x;
+}
+struct A {
+    a: *[times2(sizeof(a))]typeof(b::a);
+}
 
-### Sema Ast
-- here there isn't a more traditional pass system, but a graph of lazily phased nodes
-in which compile time functions lazily cycle check and evaluate the nodes they need, so when functions are
-compiled down to IR, there needs to be little difference between compile time functions and runtime functions,
-as they use the same representation with differing rules
+mod b {
+    const a: A = A { a: null };
+}
 
-## ASM
-- very much a stub rn, working on SysV ABI (why did I decide to implement funcalls so early)?
+const fn calculate(a: &A): usize {
+    return (a.*a as usize) - 10;
+}
+
+fn main() {
+    let a: A = { a: null };
+    let b: A = { a: &a };
+    let c = calculate(&b);
+}
+```
+
+In this program, what is important rn is how cyclical types are evaluated at
+compile time.
+It appears that uhh, type evaluation is in someways shallow, to prevent
+infinite recursion, and to allow for introspecting on the type of a constant of
+the same type (value is irrelevant in the usage).
+So a shallow type impl (enough to define sizeof()), and a somehow recursive one
+(probably using some sort of queue to prevent infinite cycles).
+
+ULTIMATUM. implement the VM so that it works properly, then implement cycle
+checks, because reasoning about that without proper examples is difficult?
+idk might have to check back on this one.
+
+CONSIDER: typeof(expr) does not have the same semantics as expr
+typeof(expr) maybe be more charitable in what it accepts.
+sizeof(expr) functionality is in the same boat as it is functionally a
+sizeof(typeof(expr)) which should be valid in all the same places.

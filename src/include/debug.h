@@ -1,5 +1,6 @@
 #pragma once
 
+#include "platform.h"
 #include "str.h"
 #include <stdio.h>
 
@@ -20,29 +21,24 @@ void va_debug(DebugLevel level, const char * filename, const char * function,
 void debug(DebugLevel level, const char * filename, const char * function,
 		   word line, const char * msg, ...);
 
+NORETURN void fail(const char * filename, const char * function, word line, const char * msg, ...);
+
+#define FAIL_RELEASE(...) fail(__FILE__, __FUNCTION__, __LINE__, __VA_ARGS__)
+
 #ifdef C4_DEBUG
 
-#ifdef __GNUC__
-__attribute__((noreturn))
-#endif
-void fail(const char * filename, const char * function, word line, const char * msg, ...);
-
-#define FAIL(...) fail(__FILE__, __FUNCTION__, __LINE__, __VA_ARGS__)
+#define FAIL(...) FAIL_RELEASE(__VA_ARGS__)
 
 #define LOG(...) debug(DEBUG_LOG, __FILE__, __FUNCTION__, __LINE__, __VA_ARGS__)
 
 #define ASSERT(cond) (cond ? (void)0 : FAIL("assertion failed : " #cond))
+
 #else
 
-#ifdef __GNUC__
-#define FAIL(...) __builtin_unreachable()
+#define FAIL(...) COMPILER_UNREACHABLE()
 #define LOG(...) (void)0
-#define ASSERT(cond) ((cond) ? (void)0 : __builtin_unreachable())
-#else
-#define FAIL(...) ((void)0)
-#define LOG(...) ((void)0)
-#define ASSERT(cond) ((void)0)
-#endif
+#define ASSERT(cond) ((cond) ? (void)0 : COMPILER_UNREACHABLE())
+
 #endif
 
 void dump_tokens(Str src);

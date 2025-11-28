@@ -1,7 +1,8 @@
 #pragma once
+#include "platform.h"
 #include "assert.h"
 #include "checked_math.h"
-#include "debug.h"
+#include "debug.h" // IWYU pragma: keep
 #include "fmt.h" // IWYU pragma: keep
 #include "ints.h"
 #include <memory.h>
@@ -9,9 +10,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 
-#ifdef __GNUC__
-__attribute__((noreturn))
-#endif
+NORETURN
 static inline void
 crash(void) {
 	fflush(stderr);
@@ -20,23 +19,15 @@ crash(void) {
 	_Exit(127); // fallback
 }
 
-#define ZERO(ptr) memset(ptr, 0, sizeof(*(ptr)))
 #ifdef C4_DEBUG
 #define TODO(...) FAIL("TODO REACHED: " __VA_ARGS__)
 #define UNREACHABLE() FAIL("THE UNREACHABLE WAS REACHED...")
 #else
-#define TODO(...) abort()
-#define UNREACHABLE() abort()
+#define TODO(...) FAIL_RELEASE("This code path is unimplemented...")
+#define UNREACHABLE() COMPILER_UNREACHABLE()
 #endif
-#ifdef __GNUC__
-#define UNLIKELY(...) __builtin_expect(!!(__VA_ARGS__), 0)
-#define LIKELY(...) __builtin_expect(!!(__VA_ARGS__), 1)
-#define FALLTHROUGH() __attribute__((fallthrough))
-#else
-#define UNLIKELY(...) (__VA_ARGS__)
-#define LIKELY(...) (__VA_ARGS__)
-#define FALLTHROUGH()
-#endif
+
+#define ZERO(ptr) memset(ptr, 0, sizeof(*(ptr)))
 
 typedef enum {
 	DONT_REPORT_ERROR = 0,
@@ -65,7 +56,8 @@ static inline bool align_ptr(void * ptr, usize alignment, void ** out) {
 
 static inline word bit_width_usize(usize u) {
 #ifdef __GNUC__
-	if (u == 0) return 0;
+	if (u == 0)
+		return 0;
 	return USIZE_MAX_BITWIDTH - (word)__builtin_clzll(u);
 #else
 	word accum = 0;
@@ -79,7 +71,8 @@ static inline word bit_width_usize(usize u) {
 
 static inline word leading_zeros_usize(usize u) {
 #ifdef __GNUC__
-	if (u == 0) return USIZE_MAX_BITWIDTH;
+	if (u == 0)
+		return USIZE_MAX_BITWIDTH;
 	return (word)__builtin_clzll(u);
 #else
 	u = ~u;
@@ -92,9 +85,7 @@ static inline word leading_zeros_usize(usize u) {
 #endif
 }
 
-#ifdef __GNUC__
-__attribute__((__format__(__printf__, 3, 4)))
-#endif
+STD_PRINTF_FN(3, 4)
 // temporary stop gap bc the uscases are hacky
 // and probably better suited for custom
 // temporary arena backed formatting

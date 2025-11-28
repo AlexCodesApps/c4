@@ -5,7 +5,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED TRUE)
 add_executable(c4 main.c
 	src/debug.c src/lexer.c src/str.c src/arena.c src/parser.c
-	src/ast.c src/platform.c src/i128.c src/fmt.c src/type.c
+	src/ast.c src/dir_walker.c src/i128.c src/fmt.c src/type.c
 	src/graph.c src/sema.c src/common.c src/vm.c src/eval.c)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -18,6 +18,8 @@ if (CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
 		add_compile_definitions(c4 PRIVATE C4_DEBUG)
 		target_compile_options(c4 PRIVATE -fsanitize=address)
 		target_link_options(c4 PRIVATE -fsanitize=address)
+	else()
+		target_link_options(c4 PRIVATE -flto)
 	endif()
 elseif (CMAKE_C_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(c4 PRIVATE /W4 /permissive-)

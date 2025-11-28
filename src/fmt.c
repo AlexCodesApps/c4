@@ -13,7 +13,6 @@ void c4println(FILE * file, const char * msg) {
 	fflush(file);
 }
 
-static char peek(const char * iter) { return *iter; }
 static char next(const char ** iter) {
 	char c = **iter;
 	if (c != '\0') {
@@ -23,7 +22,7 @@ static char next(const char ** iter) {
 }
 
 void c4vaprintf(FILE * file, const char * path, va_list va) {
-	while (peek(path) != '\0') {
+	while (*path != '\0') {
 		char c = next(&path);
 		if (c != '%') {
 			putc(c, file);
