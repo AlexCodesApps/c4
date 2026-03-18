@@ -66,9 +66,8 @@ static bool process_src(VMemArena * arena, const char * path, Str src) {
 	TypeInternTable table;
 	type_intern_table_init(&table);
 	SemaCtx ctx;
-	sema_ctx_init(&ctx, &ast, arena, &table);
-	// bool analysis_result = sema_ctx_run(&ctx);
-	bool analysis_result = true;
+	sema_ctx_init(&ctx, &ast, arena, &table, src, str_from_cstr(path));
+	bool analysis_result = sema_ctx_run(&ctx);
 	return parse_result == PARSE_RESULT_OK &&
 		   analysis_result; // just finish processing here
 }
@@ -103,6 +102,8 @@ bool run_tests(VMemArena * arena, const char * should_fail_path,
 		goto cleanup_sf;
 	}
 	c4println(stderr, "=== FAILURE CASES ===");
+	int succ = 0;
+	int err = 0;
 	do {
 		const char * name = dir_walker_name(&sf_dir);
 		if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
@@ -121,8 +122,10 @@ bool run_tests(VMemArena * arena, const char * should_fail_path,
 		}
 		if (compile_result == 0) { // Compile Success
 			c4printf(stderr, "error: '%cs' should not have compiled\n", path);
-			// goto cleanup;
+			++err;
+			continue;
 		}
+		++succ;
 		vmem_arena_reset(arena);
 	} while (dir_walker_next(&sf_dir));
 	c4println(stderr, "=== SUCCESS CASES ===");
@@ -144,11 +147,14 @@ bool run_tests(VMemArena * arena, const char * should_fail_path,
 		}
 		if (compile_result == 1) { // Compile Failure
 			c4printf(stderr, "error: '%cs' did not compile\n", path);
-			// goto cleanup;
+			++err;
+			continue;
 		}
+		++succ;
 		vmem_arena_reset(arena);
 	} while (dir_walker_next(&ss_dir));
-	result = true;
+	c4printf(stderr, "RESULTS: [%iw SUCCEEDED] [%iw FAILED]\n", succ, err);
+	result = (err == 0);
 cleanup:
 	dir_walker_close(&ss_dir);
 cleanup_sf:
@@ -189,7 +195,7 @@ int main(int argc, char ** argv) {
 		if (result) {
 			c4println(stderr, "all tests succeeded");
 		} else {
-			c4println(stderr, "test failed");
+			c4println(stderr, "test(s) failed");
 		}
 		return result ? 0 : 1;
 	}

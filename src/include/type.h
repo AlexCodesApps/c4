@@ -18,6 +18,16 @@ TypeHandle type_handle_new(Type * type, bool is_mut, bool is_lvalue);
 TypeHandle type_handle_from_ptr(Type * type);
 bool type_handle_eq(TypeHandle a, TypeHandle b);
 
+typedef struct {
+	TypeHandle * data;
+	usize size;
+} TypeHandleSpan;
+
+typedef struct FnType {
+	TypeHandle return_ty;
+	TypeHandleSpan params;
+} FnType;
+
 typedef enum {
 	TYPE_PASS_ERROR,
 	TYPE_PASS_CHECKED,
@@ -29,6 +39,7 @@ typedef enum {
 	TYPE_BUILTIN_I32,
 	TYPE_PTR,
 	TYPE_REF,
+	TYPE_FN,
 } TypeKind;
 
 struct Type {
@@ -37,6 +48,7 @@ struct Type {
 	union {
 		TypeHandle ptr;
 		TypeHandle ref;
+		FnType fn;
 	} as;
 	struct {
 		usize size;
@@ -63,3 +75,5 @@ Type * type_intern_table_ptr_to(VMemArena * arena, TypeInternTable * table,
 								TypeHandle type);
 Type * type_intern_table_ref_to(VMemArena * arena, TypeInternTable * table,
 								TypeHandle type);
+Type * type_intern_table_fn_of(VMemArena * arena, TypeInternTable * table,
+							   TypeHandle return_ty, TypeHandleSpan params);

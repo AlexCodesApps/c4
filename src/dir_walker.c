@@ -1,11 +1,12 @@
 #include "include/dir_walker.h"
+#include "include/platform.h"
 
-#ifdef _WIN32
+#if defined(PLATFORM_WINDOWS)
 #include "include/utility.h"
 
 bool dir_walker_open(const char * path, DirWalker * out) {
-	char buf[1024]; // need to copy file to add wildcard
-	if (!snprintf_bool(buf, 1024, "%s/*", path)) {
+	char buf[MAX_PATH]; // need to copy file to add wildcard
+	if (!snprintf_bool(buf, MAX_PATH, "%s/*", path)) {
 		return false; // just fail if too big
 	}
 	WIN32_FIND_DATA data;
@@ -28,7 +29,7 @@ bool dir_walker_next(DirWalker * walker) {
 	return FindNextFile(walker->handle, &walker->data);
 }
 
-#else
+#elif defined(PLATFORM_UNIX)
 #include <errno.h>
 #include <stddef.h>
 
@@ -58,4 +59,6 @@ bool dir_walker_next(DirWalker * walker) {
 
 void dir_walker_close(DirWalker * walker) { closedir(walker->dir); }
 
+#else
+#error unknown platform
 #endif

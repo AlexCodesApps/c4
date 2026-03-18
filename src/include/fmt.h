@@ -9,7 +9,6 @@ void c4println(FILE * file, const char * msg);
 // | %uq      | print integer u64                  |
 // | %iw      | print integer u* <= i32            |
 // | %iq      | print integer i64                  |
-// | %idq     | print integer i128                 |
 // | %s       | print Str                          |
 // | %cs      | print const char *                 |
 // | %ch      | print ascii code of integer <= *32 |

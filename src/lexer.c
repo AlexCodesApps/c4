@@ -93,9 +93,11 @@ static inline bool is_alpha(char c) {
 	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z');
 }
 
-static inline bool is_alnum(char c) { return is_digit(c) || is_alpha(c); }
+static inline bool is_start_of_iden(char c) { return is_alpha(c) || c == '_'; }
 
-static inline bool is_start_of_iden(char c) { return c == '_' || is_alnum(c); }
+static inline bool is_part_of_iden(char c) {
+	return is_alpha(c) || c == '_' || is_digit(c);
+}
 
 static Token make_number(Lexer * lexer, TokenIndex start) {
 	do {
@@ -111,7 +113,7 @@ static Str span_lexer(Lexer * lexer, TokenIndex start) {
 static Token make_iden(Lexer * lexer, TokenIndex start) {
 	do {
 		advance(lexer);
-	} while (is_alnum(peek(lexer)) || peek(lexer) == '_');
+	} while (is_part_of_iden(peek(lexer)));
 	Str iden = span_lexer(lexer, start);
 	if (str_equal(iden, s("const"))) {
 		return make_token(lexer, start, TOKEN_CONST);

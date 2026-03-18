@@ -155,6 +155,25 @@ TypeSig * type_sig_list_at(TypeSigList * list, usize index) {
 	return &list->data[slot][slot_index];
 }
 
+static TypeSig * type_sig_list_add(Parser * parser, TypeSigList * list,
+								   TypeSig sig) {
+	usize slot = get_segmented_slot(list->size);
+	usize index = get_segmented_slot_index(list->size, slot);
+	if (index == 0) {
+		usize size = slot + 1;
+		TypeSig ** data = parser_alloc_n(parser, TypeSig *, size);
+		for (usize i = 0; i < slot; ++i) {
+			data[i] = list->data[i];
+		}
+		data[slot] = parser_alloc_n(parser, TypeSig, (usize)1 << slot);
+		list->data = data;
+	}
+	++list->size;
+	TypeSig * loc = &list->data[slot][index];
+	*loc = sig;
+	return loc;
+}
+
 static Stmt * stmt_list_add(Parser * parser, StmtList * list, Stmt stmt) {
 	usize slot = get_segmented_slot(list->size);
 	usize index = get_segmented_slot_index(list->size, slot);
@@ -247,6 +266,8 @@ Decl * ast_at(Ast * ast, usize index) {
 	return &ast->data[slot][slot_index];
 }
 
+static void recover_param_list_error(Parser * parser);
+
 static bool parse_type(Parser * parser, TypeSig * out) {
 	TypeSig type;
 	TypeSig * next;
@@ -285,6 +306,37 @@ static bool parse_type(Parser * parser, TypeSig * out) {
 		advance(parser);
 		*out = type_sig_void();
 		return true;
+	case TOKEN_FN: {
+		advance(parser);
+		if (!expect(parser, TOKEN_LPAREN, "expected '('"))
+			return false;
+		TypeSigList params = {0};
+		if (!match(parser, TOKEN_RPAREN)) {
+			do {
+				TypeSig sig;
+				if (peek_kind(parser) == TOKEN_IDEN &&
+					peek_kind2(parser) == TOKEN_COLON) {
+					advance(parser);
+					advance(parser);
+				}
+				if (!parse_type(parser, &sig))
+					break;
+				type_sig_list_add(parser, &params, sig);
+			} while (match(parser, TOKEN_COMMA));
+			recover_param_list_error(parser);
+			if (!expect(parser, TOKEN_RPAREN, "expected ')'"))
+				return false;
+		}
+		TypeSig * return_ty = parser_alloc(parser, TypeSig);
+		if (match(parser, TOKEN_COLON)) {
+			if (!parse_type(parser, return_ty))
+				return false;
+		} else {
+			*return_ty = type_sig_void();
+		}
+		*out = type_sig_fn_from_ast(return_ty, params);
+		return true;
+	}
 	}
 	default:
 		expected_error(parser, "expected type");

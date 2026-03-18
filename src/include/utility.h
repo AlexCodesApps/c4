@@ -1,18 +1,17 @@
 #pragma once
-#include "platform.h"
 #include "assert.h"
 #include "checked_math.h"
 #include "debug.h" // IWYU pragma: keep
-#include "fmt.h" // IWYU pragma: keep
+#include "fmt.h"   // IWYU pragma: keep
 #include "ints.h"
+#include "platform.h"
 #include <memory.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
 
 NORETURN
-static inline void
-crash(void) {
+static inline void crash(void) {
 	fflush(stderr);
 	fflush(stdout);
 	raise(SIGABRT);
@@ -89,8 +88,8 @@ STD_PRINTF_FN(3, 4)
 // temporary stop gap bc the uscases are hacky
 // and probably better suited for custom
 // temporary arena backed formatting
-static inline bool
-snprintf_bool(char * buf, size_t bufsz, const char * fmt, ...) {
+static inline bool snprintf_bool(char * buf, size_t bufsz, const char * fmt,
+								 ...) {
 	va_list va;
 	va_start(va, fmt);
 	int result = vsnprintf(buf, bufsz, fmt, va);

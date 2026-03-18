@@ -71,10 +71,6 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 				fprintf(file, "%" PRIi64, i);
 				continue;
 			}
-			case 'd': {
-				ASSERT(next(&path) == 'q');
-				TODO();
-			}
 			default:
 				UNREACHABLE();
 			}
@@ -90,13 +86,16 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 				fprintf(file, "%" PRIu64, i);
 				continue;
 			}
-			case 'd': {
-				ASSERT(next(&path) == 'q');
-				TODO();
-			}
 			default:
 				UNREACHABLE();
 			}
+		case 'p': {
+			void * ptr = va_arg(va, void *);
+			fprintf(file, "%p", ptr);
+			continue;
+		}
+		default:
+			UNREACHABLE();
 		}
 	}
 }
@@ -105,12 +104,12 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 // |----------|------------------------------------|
 // | %uw      | print integer u* <= u32            |
 // | %uq      | print integer u64                  |
-// | %iw      | print integer u* <= i32            |
+// | %iw      | print integer i* <= i32            |
 // | %iq      | print integer i64                  |
 // | %idq     | print integer i128                 |
 // | %s print | Str                                |
 // | %cs      | print const char *                 |
-// | %ch      | print ascii code of integer <= *32 |
+// | %ch      | print ascii repr of integer <= *32 |
 // | %%       | print '%'                          |
 // | %ti      | print TokenIndex                   |
 void c4printf(FILE * file, const char * path, ...) {

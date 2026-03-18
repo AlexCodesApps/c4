@@ -20,6 +20,13 @@ TypeSig type_sig_ref_from_ast(TypeSig * next) {
 	};
 }
 
+TypeSig type_sig_fn_from_ast(TypeSig * return_ty, TypeSigList params) {
+	return (TypeSig){.pass = TYPE_SIG_PASS_PARSED,
+					 .is_mut = false,
+					 .kind = TYPE_SIG_FN,
+					 .as.fn = {.return_ty = return_ty, .params = params}};
+}
+
 TypeSig type_sig_iden_from_ast(Iden iden) {
 	return (TypeSig){
 		.pass = TYPE_SIG_PASS_PARSED,
@@ -156,10 +163,14 @@ Fn fn_from_ast(SrcSpan span, bool is_const, ParamList params, TypeSig return_ty,
 	return (Fn){
 		.span = span,
 		.pass = FN_PASS_PARSED,
-		.is_const = is_const,
-		.return_ty = return_ty,
-		.params = params,
+		.proto =
+			{
+				.is_const = is_const,
+				.return_ty = return_ty,
+				.params = params,
+			},
 		.block = block,
+		.unwrap.type = type_handle_null(),
 	};
 }
 
@@ -192,20 +203,13 @@ Var var_from_ast(SrcSpan span, TypeSig type, bool is_const, bool is_mut,
 
 void var_set_checking(Var * var, VisitIndex index) {
 	ASSERT(var->pass == VAR_PASS_PARSED);
-	var->as.checking.index = index;
 	var->pass = VAR_PASS_CHECKING;
+	var->as.checking.visit_index = index;
 }
 
-void var_set_checked(Var * var, VarMutability mut, TypeHandle type) {
-	ASSERT(var->pass == VAR_PASS_CHECKING);
-	bool has_expr = var->as.parsed.has_expr;
-	if (has_expr) {
-		Expr maybe_uninit_expr = var->as.parsed.unwrap.expr;
-		var->as.checked.has_expr = has_expr;
-		var->as.checked.unwrap.expr = maybe_uninit_expr;
-	}
-	var->as.checked.mut = mut;
-	var->as.checked.type = type;
+void var_set_checked(Var * var) {
+	ASSERT(var->pass = VAR_PASS_CHECKING);
+	var->pass = VAR_PASS_CHECKED;
 }
 
 TypeAlias type_alias_from_ast(SrcSpan span, TypeSig type) {
@@ -230,9 +234,14 @@ void type_alias_set_checking(TypeAlias * alias, VisitIndex visit_index) {
 	alias->as.checking.visit_index = visit_index;
 }
 
-void type_alias_set_checked(TypeAlias * alias, TypeHandle type) {
+void type_alias_set_checked(TypeAlias * alias) {
 	ASSERT(alias->pass == TYPE_ALIAS_PASS_CHECKING);
-	alias->as.checked = type;
+	alias->pass = TYPE_ALIAS_PASS_CHECKED;
+}
+
+void type_alias_set_evalled(TypeAlias * alias, TypeHandle handle) {
+	alias->pass = TYPE_ALIAS_PASS_EVALUATED;
+	alias->as.evalled = handle;
 }
 
 bool type_alias_is_error(const TypeAlias * alias) {

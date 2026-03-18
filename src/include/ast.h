@@ -8,21 +8,13 @@ typedef Str Iden;
 typedef struct TypeSig TypeSig;
 typedef struct TypeAlias TypeAlias;
 typedef struct Decl Decl;
+typedef struct Var Var;
 
 typedef enum {
 	TYPE_SIG_PASS_ERROR,
 	TYPE_SIG_PASS_PARSED,
 	TYPE_SIG_PASS_CYCLE_CHECKED
 } TypeSigPass;
-
-typedef enum {
-	TYPE_SIG_PTR,
-	TYPE_SIG_REF,
-	TYPE_SIG_IDEN,
-	TYPE_SIG_VOID,
-	TYPE_SIG_ALIAS_STUB,
-	TYPE_SIG_TYPE_STUB,
-} TypeSigKind;
 
 typedef struct {
 	TypeSig ** data;
@@ -31,6 +23,21 @@ typedef struct {
 
 TypeSig * type_sig_list_at(TypeSigList * list, usize index);
 
+typedef struct FnTypeSig {
+	TypeSig * return_ty;
+	TypeSigList params;
+} FnTypeSig;
+
+typedef enum {
+	TYPE_SIG_PTR,
+	TYPE_SIG_REF,
+	TYPE_SIG_IDEN,
+	TYPE_SIG_VOID,
+	TYPE_SIG_FN,
+	TYPE_SIG_ALIAS_STUB,
+	TYPE_SIG_TYPE_STUB,
+} TypeSigKind;
+
 struct TypeSig {
 	TypeSigPass pass;
 	TypeSigKind kind;
@@ -38,6 +45,7 @@ struct TypeSig {
 	union {
 		TypeSig * ptr;
 		TypeSig * ref;
+		FnTypeSig fn;
 		Iden iden;
 		TypeAlias * alias_stub;
 		Type * type_stub;
@@ -46,6 +54,7 @@ struct TypeSig {
 
 TypeSig type_sig_ptr_from_ast(TypeSig * next);
 TypeSig type_sig_ref_from_ast(TypeSig * next);
+TypeSig type_sig_fn_from_ast(TypeSig * return_ty, TypeSigList params);
 TypeSig type_sig_iden_from_ast(Iden iden);
 void type_sig_set_mut(TypeSig * type);
 TypeSig type_sig_void(void);
@@ -56,12 +65,13 @@ bool type_sig_is_error(const TypeSig * type);
 typedef enum {
 	EXPR_PASS_ERROR,
 	EXPR_PASS_PARSED,
+	EXPR_PASS_CYCLE_CHECKED,
 } ExprPass;
 
 typedef enum {
 	EXPR_INTEGER,
 	EXPR_PLUS,
-	EXPR_IDEN,
+	EXPR_IDEN, // reused for EXPR_VAR
 	EXPR_ADDR,
 	EXPR_FUNCALL,
 	EXPR_NULLPTR,
@@ -93,6 +103,7 @@ struct Expr {
 			Expr * fun;
 			ExprList args;
 		} funcall;
+		Var * var; /* cycle checked */
 	} as;
 };
 
@@ -159,14 +170,24 @@ Param * param_list_at(ParamList * list, usize index);
 typedef enum {
 	FN_PASS_ERROR,
 	FN_PASS_PARSED,
+	FN_PASS_PROTO,
+	FN_PASS_EVAL,
 } FnPass;
+
+typedef struct {
+	bool is_const : 1;
+	TypeSig return_ty;
+	ParamList params;
+	TypeHandle proto;
+} ParsedFnProto;
 
 typedef struct {
 	SrcSpan span;
 	FnPass pass;
-	bool is_const : 1;
-	TypeSig return_ty;
-	ParamList params;
+	ParsedFnProto proto;
+	struct {
+		TypeHandle type;
+	} unwrap;
 	StmtBlock block;
 } Fn;
 
@@ -191,44 +212,39 @@ typedef enum {
 } VarPass;
 
 typedef struct {
+	bool is_const : 1;
+	bool is_mut : 1;
+	bool has_expr : 1;
+	TypeSig type;
+	struct {
+		Expr expr;
+	} unwrap;
+} ParsedVar;
+
+struct Var {
 	SrcSpan span;
 	VarPass pass;
 	union {
+		ParsedVar parsed;
 		struct {
-			bool is_const : 1;
-			bool is_mut : 1;
-			bool has_expr : 1;
-			TypeSig type;
-			struct {
-				Expr expr;
-			} unwrap;
-		} parsed;
-		struct {
-			bool is_const : 1;
-			bool is_mut : 1;
-			bool has_expr : 1;
-			TypeSig type;
-			struct {
-				Expr expr;
-			} unwrap;
-			TokenIndex index;
+			ParsedVar parsed;
+			VisitIndex visit_index;
 		} checking;
+		ParsedVar checked;
 		struct {
-			VarMutability mut : 2;
-			bool has_expr : 1;
+			VarMutability mutability;
 			TypeHandle type;
-			struct {
-				Expr expr;
-			} unwrap;
-		} checked;
+			Expr expr;
+		} evalled;
 	} as;
-} Var;
+};
 
 Var var_from_ast(SrcSpan span, TypeSig type, bool is_const, bool is_mut,
 				 const Expr * opt_expr);
 Var var_error(void);
 void var_set_checking(Var * var, VisitIndex index);
-void var_set_checked(Var * var, VarMutability mut, TypeHandle type);
+void var_set_checked(Var * var);
+void var_set_evalled(Var * var, VarMutability mut, TypeHandle type);
 void var_set_error(Var * var);
 bool var_is_error(const Var * var);
 
@@ -249,8 +265,8 @@ struct TypeAlias {
 			TypeSig parsed;
 			VisitIndex visit_index;
 		} checking;
-		TypeHandle checked;
-		TypeHandle evaled;
+		TypeSig checked;
+		TypeHandle evalled;
 	} as;
 };
 
@@ -258,7 +274,8 @@ TypeAlias type_alias_from_ast(SrcSpan span, TypeSig type);
 TypeAlias type_alias_error(void);
 void type_alias_set_error(TypeAlias * alias);
 void type_alias_set_checking(TypeAlias * alias, VisitIndex visit_index);
-void type_alias_set_checked(TypeAlias * alias, TypeHandle type);
+void type_alias_set_checked(TypeAlias * alias);
+void type_alias_set_evalled(TypeAlias * alias, TypeHandle handle);
 bool type_alias_is_error(const TypeAlias * alias);
 
 typedef enum {

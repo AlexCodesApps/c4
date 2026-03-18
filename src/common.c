@@ -13,3 +13,9 @@ VisitorState visitor_state_new(void) {
 		.recursion_count = 0,
 	};
 }
+
+VisitIndex visitor_opaque(VisitorState * visitor) {
+	VisitIndex id = visitor->visit_id++;
+	visitor->last_opaque_id = id;
+	return id;
+}

@@ -4,17 +4,33 @@
 #include "include/utility.h"
 #include <inttypes.h>
 #include <stdarg.h>
+#ifdef PLATFORM_UNIX
+#include <unistd.h>
+#endif
 
 void va_debug(DebugLevel level, const char * filename, const char * function,
 			  word line, const char * msg, va_list va) {
-	const char * prefix[DEBUG_LEVEL_COUNT] = {
-		[DEBUG_LOG] = "\x1b[33mLOG",
-		[DEBUG_ERROR] = "\x1b[31mERROR",
+	struct {
+		const char * color;
+		const char * name;
+	} prefix[DEBUG_LEVEL_COUNT] = {
+		[DEBUG_LOG] = {"\x1b[33m", "LOG"},
+		[DEBUG_ERROR] = {"\x1b[31m", "ERROR"},
 	};
-	c4printf(stderr, "%cs: in %cs[%uw, %cs]: ", prefix[level], filename, line,
-			 function);
+#ifdef PLATFORM_UNIX
+	if (isatty(STDERR_FILENO)) {
+		c4printf(stderr, "[%cs%cs\x1b[0m]: ", prefix[level].color,
+				 prefix[level].name);
+	} else {
+		c4printf(stderr, "[%cs]: ", prefix[level].name);
+	}
+#else
+	c4printf(stderr, "[%cs]: ", prefix[level].name);
+#endif
+	c4printf(stderr, "%cs[%uw, %cs]: ", filename, line, function);
 	c4vaprintf(stderr, msg, va);
-	c4println(stderr, "\x1b[0m");
+	fputc('\n', stderr);
+	fflush(stderr);
 }
 
 void debug(DebugLevel level, const char * filename, const char * function,

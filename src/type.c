@@ -124,3 +124,25 @@ Type * type_intern_table_ref_to(VMemArena * arena, TypeInternTable * table,
 	};
 	return type_intern_table_add(arena, table, ntype);
 }
+
+Type * type_intern_table_fn_of(VMemArena * arena, TypeInternTable * table,
+							   TypeHandle return_ty, TypeHandleSpan params) {
+	for (usize i = 0; i < table->types.size; ++i) {
+		Type * otype = type_intern_table_at(table, i);
+		if (otype->kind != TYPE_FN)
+			continue;
+		if (!type_handle_eq(otype->as.fn.return_ty, return_ty))
+			continue;
+		if (otype->as.fn.params.size != params.size)
+			continue;
+		for (usize j = 0; j < params.size; ++j) {
+			if (!type_handle_eq(params.data[j], otype->as.fn.params.data[j]))
+				continue;
+		}
+		return otype;
+	}
+	Type ntype = {.pass = TYPE_PASS_CHECKED,
+				  .kind = TYPE_FN,
+				  .as.fn = {.return_ty = return_ty, .params = params}};
+	return type_intern_table_add(arena, table, ntype);
+}

@@ -4,7 +4,7 @@ CC=clang
 RM=rm -rf
 CP=cp
 
-FMT=echo $(find src -name '*.c' -o -name '*.h') main.c | xargs clang-format -i
+FMT=find src '(' -name '*.c' -o -name '*.h' ')' -exec clang-format -i {} +
 
 all: build fmt make
 

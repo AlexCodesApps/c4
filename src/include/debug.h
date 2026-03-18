@@ -21,7 +21,8 @@ void va_debug(DebugLevel level, const char * filename, const char * function,
 void debug(DebugLevel level, const char * filename, const char * function,
 		   word line, const char * msg, ...);
 
-NORETURN void fail(const char * filename, const char * function, word line, const char * msg, ...);
+NORETURN void fail(const char * filename, const char * function, word line,
+				   const char * msg, ...);
 
 #define FAIL_RELEASE(...) fail(__FILE__, __FUNCTION__, __LINE__, __VA_ARGS__)
 
@@ -31,7 +32,8 @@ NORETURN void fail(const char * filename, const char * function, word line, cons
 
 #define LOG(...) debug(DEBUG_LOG, __FILE__, __FUNCTION__, __LINE__, __VA_ARGS__)
 
-#define ASSERT(cond) (cond ? (void)0 : FAIL("assertion failed : " #cond))
+// Currently will always execute side effect no matter what flags
+#define ASSERT(cond) ((cond) ? (void)0 : FAIL("assertion failed : " #cond))
 
 #else
 
