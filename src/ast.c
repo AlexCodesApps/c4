@@ -170,13 +170,30 @@ Fn fn_from_ast(SrcSpan span, bool is_const, ParamList params, TypeSig return_ty,
 				.params = params,
 			},
 		.block = block,
-		.unwrap.type = type_handle_null(),
 	};
+}
+
+bool fn_is_const(const Fn * fn) { return fn->proto.is_const; }
+
+void fn_set_pass_proto_checking(Fn * fn, VisitIndex idx) {
+	fn->pass = FN_PASS_PROTO_CHECKING;
+	fn->as.checking = idx;
+}
+
+void fn_set_pass_proto_checked(Fn * fn) {
+	ASSERT(fn->pass == FN_PASS_PROTO_CHECKING);
+	fn->pass = FN_PASS_PROTO_CHECKED;
+}
+
+void fn_set_pass_proto(Fn * fn, TypeHandle type) {
+	ASSERT(fn->pass == FN_PASS_PROTO_CHECKED);
+	fn->pass = FN_PASS_PROTO;
+	fn->as.proto = type;
 }
 
 Fn fn_error(void) {
 	return (Fn){
-		.pass = FN_PASS_PARSED,
+		.pass = FN_PASS_ERROR,
 	};
 }
 

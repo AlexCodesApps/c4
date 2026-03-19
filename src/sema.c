@@ -17,6 +17,7 @@ NODISCARD static usize type_evalled_size(Type * type);
 NODISCARD static usize type_evalled_align(Type * type);
 NODISCARD static bool var_cycle_check(SemaCtx * ctx, Var * var);
 NODISCARD static bool var_eval(SemaCtx * ctx, Var * var);
+NODISCARD static bool fn_proto_cycle_check(SemaCtx * ctx, Fn * fn);
 NODISCARD static Decl * lookup_decl(SemaCtx * ctx, Iden iden,
 									ReportError report);
 
@@ -158,21 +159,18 @@ static bool type_alias_cycle_check(SemaCtx * ctx, TypeAlias * alias) {
 	case TYPE_ALIAS_PASS_ERROR:
 		return false;
 	case TYPE_ALIAS_PASS_PARSED: {
-		VisitIndex last_opaque = ctx->visitor.last_opaque_id;
-		VisitIndex id = visitor_opaque(&ctx->visitor);
-		type_alias_set_checking(alias, id);
+		VisitStructural checkpoint = visitor_structural(&ctx->visitor);
+		type_alias_set_checking(alias, checkpoint.visit_id);
 		if (!type_sig_cycle_check(ctx, &alias->as.checking.parsed))
 			goto error;
-		ASSERT(alias->pass == TYPE_ALIAS_PASS_CHECKING);
-		--ctx->visitor.visit_id;
-		ctx->visitor.last_opaque_id = last_opaque;
+		visitor_structural_restore(&ctx->visitor, checkpoint);
 		type_alias_set_checked(alias);
 		return true;
 	}
 	case TYPE_ALIAS_PASS_CHECKING:
 		LOG("detected potential cycle in type alias %p", alias);
-		if (alias->as.checking.visit_index <= ctx->visitor.last_opaque_id &&
-			ctx->visitor.last_indirection_id <= ctx->visitor.last_opaque_id) {
+		if (!visitor_check_structural(&ctx->visitor,
+									  alias->as.checking.visit_index)) {
 			print_error(ctx, alias->span, "detected cycle in alias");
 			goto error;
 		}
@@ -182,11 +180,12 @@ static bool type_alias_cycle_check(SemaCtx * ctx, TypeAlias * alias) {
 		return true;
 	}
 error:
-	alias->pass = TYPE_ALIAS_PASS_ERROR;
+	type_alias_set_error(alias);
 	return false;
 }
 
 static bool type_sig_cycle_check(SemaCtx * ctx, TypeSig * sig) {
+	VisitIndex idx;
 	switch (sig->pass) {
 	case TYPE_SIG_PASS_ERROR:
 		return false;
@@ -225,14 +224,19 @@ static bool type_sig_cycle_check(SemaCtx * ctx, TypeSig * sig) {
 			}
 		}
 		case TYPE_SIG_PTR:
+			idx = visitor_push_indirection(&ctx->visitor);
 			if (!type_sig_cycle_check(ctx, sig->as.ptr))
 				goto error;
+			visitor_pop_indirection(&ctx->visitor, idx);
 			break;
 		case TYPE_SIG_REF:
+			idx = visitor_push_indirection(&ctx->visitor);
 			if (!type_sig_cycle_check(ctx, sig->as.ref))
 				goto error;
+			visitor_pop_indirection(&ctx->visitor, idx);
 			break;
 		case TYPE_SIG_FN:
+			idx = visitor_push_indirection(&ctx->visitor);
 			if (!type_sig_cycle_check(ctx, sig->as.fn.return_ty))
 				goto error;
 			for (usize i = 0; i < sig->as.fn.params.size; ++i) {
@@ -240,6 +244,7 @@ static bool type_sig_cycle_check(SemaCtx * ctx, TypeSig * sig) {
 				if (!type_sig_cycle_check(ctx, param))
 					goto error;
 			}
+			visitor_pop_indirection(&ctx->visitor, idx);
 			break;
 		case TYPE_SIG_VOID:
 		case TYPE_SIG_ALIAS_STUB:
@@ -252,7 +257,7 @@ static bool type_sig_cycle_check(SemaCtx * ctx, TypeSig * sig) {
 		return true;
 	}
 error:
-	sig->pass = TYPE_SIG_PASS_ERROR;
+	type_sig_set_error(sig);
 	return false;
 }
 
@@ -337,16 +342,40 @@ error:
 	return type_handle_null();
 }
 
-static bool impl_fn_proto(SemaCtx * ctx, Fn * fn) {
+NODISCARD static bool fn_proto_cycle_check(SemaCtx * ctx, Fn * fn) {
 	switch (fn->pass) {
 	case FN_PASS_ERROR:
 		return false;
-	case FN_PASS_PARSED:
-		TODO();
+	case FN_PASS_PARSED: {
+		VisitStructural checkpoint = visitor_structural(&ctx->visitor);
+		fn_set_pass_proto_checking(fn, checkpoint.visit_id);
+		if (!type_sig_cycle_check(ctx, &fn->proto.return_ty))
+			goto error;
+		ParamList * list = &fn->proto.params;
+		for (usize i = 0; i < list->size; ++i) {
+			Param * param = param_list_at(list, i);
+			if (!type_sig_cycle_check(ctx, &param->type))
+				goto error;
+		}
+		visitor_structural_restore(&ctx->visitor, checkpoint);
+		fn_set_pass_proto_checked(fn);
+		return true;
+	}
+	case FN_PASS_PROTO_CHECKING:
+		LOG("detected potential cycle in type fn %p", fn);
+		if (!visitor_check_structural(&ctx->visitor, fn->as.checking)) {
+			print_error(ctx, fn->span, "detected cycle in fn");
+			goto error;
+		}
+		FALLTHROUGH();
+	case FN_PASS_PROTO_CHECKED:
 	case FN_PASS_PROTO:
 	case FN_PASS_EVAL:
 		return true;
 	}
+error:
+	fn_set_error(fn);
+	return false;
 }
 
 static bool var_cycle_check(SemaCtx * ctx, Var * var) {
@@ -354,9 +383,8 @@ static bool var_cycle_check(SemaCtx * ctx, Var * var) {
 	case VAR_PASS_ERROR:
 		return false;
 	case VAR_PASS_PARSED: {
-		VisitIndex last_opaque = ctx->visitor.last_opaque_id;
-		VisitIndex id = visitor_opaque(&ctx->visitor);
-		var_set_checking(var, id);
+		VisitStructural checkpoint = visitor_structural(&ctx->visitor);
+		var_set_checking(var, checkpoint.visit_id);
 		ParsedVar * inner = &var->as.checking.parsed;
 		VarMutability mut = VAR_MUT_LET;
 		if (inner->is_const) {
@@ -373,9 +401,8 @@ static bool var_cycle_check(SemaCtx * ctx, Var * var) {
 		if (!type_sig_cycle_check(ctx, &inner->type))
 			goto error;
 		// Expressions don't get cycle checked, rather they get interpreted.
+		visitor_structural_restore(&ctx->visitor, checkpoint);
 		var_set_checked(var);
-		--ctx->visitor.visit_id;
-		ctx->visitor.last_opaque_id = last_opaque;
 		return true;
 	}
 	case VAR_PASS_CHECKING:

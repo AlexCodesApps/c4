@@ -170,6 +170,8 @@ Param * param_list_at(ParamList * list, usize index);
 typedef enum {
 	FN_PASS_ERROR,
 	FN_PASS_PARSED,
+	FN_PASS_PROTO_CHECKING,
+	FN_PASS_PROTO_CHECKED,
 	FN_PASS_PROTO,
 	FN_PASS_EVAL,
 } FnPass;
@@ -178,21 +180,25 @@ typedef struct {
 	bool is_const : 1;
 	TypeSig return_ty;
 	ParamList params;
-	TypeHandle proto;
 } ParsedFnProto;
 
 typedef struct {
 	SrcSpan span;
 	FnPass pass;
 	ParsedFnProto proto;
-	struct {
-		TypeHandle type;
-	} unwrap;
+	union {
+		VisitIndex checking;
+		TypeHandle proto;
+	} as;
 	StmtBlock block;
 } Fn;
 
 Fn fn_from_ast(SrcSpan span, bool is_const, ParamList params, TypeSig return_ty,
 			   StmtBlock block);
+bool fn_is_const(const Fn * fn);
+void fn_set_pass_proto_checking(Fn * fn, VisitIndex idx);
+void fn_set_pass_proto_checked(Fn * fn);
+void fn_set_pass_proto(Fn * fn, TypeHandle type);
 Fn fn_error(void);
 void fn_set_error(Fn * fn);
 bool fn_is_error(const Fn * fn);

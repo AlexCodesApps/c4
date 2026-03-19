@@ -16,6 +16,8 @@ bool type_handle_is_valid(TypeHandle handle);
 TypeHandle type_handle_null(void);
 TypeHandle type_handle_new(Type * type, bool is_mut, bool is_lvalue);
 TypeHandle type_handle_from_ptr(Type * type);
+// Test for structural equality
+bool type_handle_struct_eq(TypeHandle a, TypeHandle b);
 bool type_handle_eq(TypeHandle a, TypeHandle b);
 
 typedef struct {

@@ -17,6 +17,8 @@ void va_debug(DebugLevel level, const char * filename, const char * function,
 		[DEBUG_LOG] = {"\x1b[33m", "LOG"},
 		[DEBUG_ERROR] = {"\x1b[31m", "ERROR"},
 	};
+	if (level == DEBUG_LOG && getenv("DISABLE_LOG"))
+		return;
 #ifdef PLATFORM_UNIX
 	if (isatty(STDERR_FILENO)) {
 		c4printf(stderr, "[%cs%cs\x1b[0m]: ", prefix[level].color,

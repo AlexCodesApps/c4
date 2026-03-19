@@ -23,6 +23,36 @@ TypeHandle type_handle_from_ptr(Type * type) {
 	return type_handle_new(type, false, false);
 }
 
+bool type_handle_struct_eq(TypeHandle a, TypeHandle b) {
+	ASSERT(a.type->pass >= TYPE_PASS_CHECKED);
+	ASSERT(b.type->pass >= TYPE_PASS_CHECKED);
+	if (a.is_mut != b.is_mut)
+		return false;
+	if (a.type == b.type)
+		return true;
+	if (a.type->kind != b.type->kind)
+		return false;
+	switch (a.type->kind) {
+	case TYPE_BUILTIN_VOID:
+	case TYPE_BUILTIN_I32:
+		return true;
+	case TYPE_PTR:
+		return type_handle_struct_eq(a.type->as.ptr, b.type->as.ptr);
+	case TYPE_REF:
+		return type_handle_struct_eq(a.type->as.ref, b.type->as.ref);
+	case TYPE_FN:
+		if (!type_handle_struct_eq(a.type->as.fn.return_ty,
+								   b.type->as.fn.return_ty))
+			return false;
+		for (usize i = 0; i < a.type->as.fn.params.size; ++i) {
+			if (!type_handle_struct_eq(a.type->as.fn.params.data[i],
+									   b.type->as.fn.params.data[i]))
+				return false;
+		}
+		return true;
+	}
+}
+
 bool type_handle_eq(TypeHandle a, TypeHandle b) {
 	if (a.is_mut != b.is_mut)
 		return false;
@@ -106,6 +136,7 @@ Type * type_intern_table_ptr_to(VMemArena * arena, TypeInternTable * table,
 	};
 	return type_intern_table_add(arena, table, ntype);
 }
+
 Type * type_intern_table_ref_to(VMemArena * arena, TypeInternTable * table,
 								TypeHandle type) {
 	for (usize i = 0; i < table->types.size; ++i) {
