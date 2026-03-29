@@ -16,7 +16,7 @@ static NORETURN void oom(void) {
 
 static bool read_file(VMemArena * arena, const char * path, Str * out) {
 	bool status = false;
-	FILE * file = fopen(path, "r");
+	FILE * file = fopen(path, "rb");
 	if (!file) {
 		return false;
 	}
