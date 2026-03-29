@@ -1,5 +1,8 @@
 #pragma once
 
+#define ALIGNOF _Alignof
+#define STATIC_ASSERT _Static_assert
+
 #ifdef __GNUC__
 #define NORETURN __attribute__((noreturn))
 #define STD_PRINTF_FN(fmt_idx, varargs_idx)                                    \

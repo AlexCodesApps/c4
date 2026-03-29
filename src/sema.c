@@ -15,11 +15,31 @@ NODISCARD static TypeHandle type_handle_from_sig(SemaCtx * ctx, TypeSig * sig);
 NODISCARD static bool type_handle_eval(SemaCtx * ctx, TypeHandle type);
 NODISCARD static usize type_evalled_size(Type * type);
 NODISCARD static usize type_evalled_align(Type * type);
-NODISCARD static bool var_cycle_check(SemaCtx * ctx, Var * var);
 NODISCARD static bool var_eval(SemaCtx * ctx, Var * var);
 NODISCARD static bool fn_proto_cycle_check(SemaCtx * ctx, Fn * fn);
 NODISCARD static Decl * lookup_decl(SemaCtx * ctx, Iden iden,
 									ReportError report);
+
+static void * sema_alloc_bytes(SemaCtx * ctx, usize size, usize align) {
+	void * ptr = vmem_arena_alloc_bytes(ctx->arena, size, align);
+	if (UNLIKELY(!ptr)) {
+		sema_oom(ctx);
+	}
+	return ptr;
+}
+
+static void * sema_alloc_bytes_n(SemaCtx * ctx, usize size, usize n,
+								 usize align) {
+	void * ptr = vmem_arena_alloc_bytes_n(ctx->arena, size, n, align);
+	if (UNLIKELY(!ptr)) {
+		sema_oom(ctx);
+	}
+	return ptr;
+}
+
+#define sema_alloc(ctx, T) (T *)sema_alloc_bytes((ctx), sizeof(T), ALIGNOF(T))
+#define sema_alloc_n(ctx, T, n)                                                \
+	(T *)sema_alloc_bytes_n((ctx), sizeof(T), (n), ALIGNOF(T))
 
 static void print_error(SemaCtx * ctx, SrcSpan span, const char * msg, ...) {
 	Str src = ctx->src;
@@ -300,10 +320,8 @@ static TypeHandle type_handle_from_sig(SemaCtx * ctx, TypeSig * sig) {
 				type_handle_from_sig(ctx, sig->as.fn.return_ty);
 			if (!type_handle_is_valid(return_ty))
 				goto error;
-			TypeHandle * params_mem = vmem_arena_alloc_n(
-				ctx->arena, TypeHandle, sig->as.fn.params.size);
-			if (!params_mem)
-				sema_oom(ctx);
+			TypeHandle * params_mem =
+				sema_alloc_n(ctx, TypeHandle, sig->as.fn.params.size);
 			for (usize i = 0; i < sig->as.fn.params.size; ++i) {
 				TypeSig * param_sig = type_sig_list_at(&sig->as.fn.params, i);
 				TypeHandle param = type_handle_from_sig(ctx, param_sig);
@@ -378,68 +396,17 @@ error:
 	return false;
 }
 
-static bool var_cycle_check(SemaCtx * ctx, Var * var) {
-	switch (var->pass) {
-	case VAR_PASS_ERROR:
-		return false;
-	case VAR_PASS_PARSED: {
-		VisitStructural checkpoint = visitor_structural(&ctx->visitor);
-		var_set_checking(var, checkpoint.visit_id);
-		ParsedVar * inner = &var->as.checking.parsed;
-		VarMutability mut = VAR_MUT_LET;
-		if (inner->is_const) {
-			mut = VAR_MUT_CONST;
-		}
-		if (inner->is_mut) {
-			if (mut == VAR_MUT_CONST) {
-				print_error(ctx, var->span,
-							"variable cannot be both const and mut");
-				goto error;
-			}
-			mut = VAR_MUT_MUT;
-		}
-		if (!type_sig_cycle_check(ctx, &inner->type))
-			goto error;
-		// Expressions don't get cycle checked, rather they get interpreted.
-		visitor_structural_restore(&ctx->visitor, checkpoint);
-		var_set_checked(var);
-		return true;
-	}
-	case VAR_PASS_CHECKING:
-		// FRAGILE:
-		// only mutual recursion in variables and types are detected here,
-		// which is a complete no-go
-		print_error(ctx, var->span, "detected cycle in var");
-		goto error;
-	case VAR_PASS_CHECKED:
-	case VAR_PASS_EVALUATED:
-		return true;
-	}
-error:
-	var_set_error(var);
-	return false;
-}
-
 static bool var_eval(SemaCtx * ctx, Var * var) {
 	switch (var->pass) {
 	case VAR_PASS_ERROR:
 		return false;
 	case VAR_PASS_PARSED:
-	case VAR_PASS_CHECKING:
-		if (!var_cycle_check(ctx, var))
-			return false;
-		ASSERT(var->pass == VAR_PASS_CHECKED);
-		FALLTHROUGH();
-	case VAR_PASS_CHECKED:
 	case VAR_PASS_EVALUATED:
 		return true;
 	}
 }
 
-void eval_env_init(EvalEnv * env) {
-	env->kind = EVAL_ENV_GLOBAL;
-	env->prev = NULL;
-}
+void eval_env_init(EvalEnv * env) { env->kind = EVAL_ENV_GLOBAL; }
 
 void sema_ctx_init(SemaCtx * ctx, Ast * ast, VMemArena * arena,
 				   TypeInternTable * table, Str src, Str path) {

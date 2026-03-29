@@ -16,7 +16,7 @@ void vmem_arena_reset(VMemArena * arena);
 void vmem_arena_free(VMemArena * arena);
 
 #define vmem_arena_alloc(arena_addr, type)                                     \
-	((type *)vmem_arena_alloc_bytes((arena_addr), sizeof(type), _Alignof(type)))
+	((type *)vmem_arena_alloc_bytes((arena_addr), sizeof(type), ALIGNOF(type)))
 #define vmem_arena_alloc_n(arena_addr, type, n)                                \
 	((type *)vmem_arena_alloc_bytes_n(arena_addr, sizeof(type), n,             \
-									  _Alignof(type)))
+									  ALIGNOF(type)))

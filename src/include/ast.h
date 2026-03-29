@@ -212,8 +212,6 @@ typedef enum {
 typedef enum {
 	VAR_PASS_ERROR,
 	VAR_PASS_PARSED,
-	VAR_PASS_CHECKED,
-	VAR_PASS_CHECKING,
 	VAR_PASS_EVALUATED,
 } VarPass;
 
@@ -232,10 +230,6 @@ struct Var {
 	VarPass pass;
 	union {
 		ParsedVar parsed;
-		struct {
-			ParsedVar parsed;
-			VisitIndex visit_index;
-		} checking;
 		ParsedVar checked;
 		struct {
 			VarMutability mutability;
@@ -248,8 +242,6 @@ struct Var {
 Var var_from_ast(SrcSpan span, TypeSig type, bool is_const, bool is_mut,
 				 const Expr * opt_expr);
 Var var_error(void);
-void var_set_checking(Var * var, VisitIndex index);
-void var_set_checked(Var * var);
 void var_set_evalled(Var * var, VarMutability mut, TypeHandle type);
 void var_set_error(Var * var);
 bool var_is_error(const Var * var);

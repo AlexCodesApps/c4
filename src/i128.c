@@ -74,7 +74,7 @@ bool i128_shift_left(I128 i, word shift, I128 * out) {
 	word mask_offset = sizeof(mask) * 8 - shift;
 	mask <<= mask_offset;
 	i.high |= (i.low & mask) >> mask_offset;
-	i.low <<= mask;
+	i.low <<= shift;
 	*out = i;
 	return true;
 }
@@ -117,7 +117,7 @@ u64 i128_div_by_10(I128 * inout) {
 	I128 remainder = *inout;
 	I128 quot = i128_new(0, 0);
 	word bitw = bit_width_i128(remainder);
-	for (iword i = (iword)bitw - 1; i >= 0; --i) {
+	for (iword i = (iword)bitw - 4; i >= 0; --i) {
 		I128 mult;
 		if (UNLIKELY(!i128_shift_left(_10, (word)i, &mult))) {
 			continue;

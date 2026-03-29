@@ -4,12 +4,16 @@
 #include "type.h"
 #include <setjmp.h>
 
+typedef struct Frame Frame;
+struct Frame {
+	Decl * decl;
+	usize index;
+};
+
 typedef enum {
 	EVAL_ENV_GLOBAL,
-	EVAL_ENV_GLOBAL_EXPR,
-	EVAL_ENV_CONST_GLOBAL_EXPR,
+	EVAL_ENV_CONST_EVAL,
 	EVAL_ENV_FN,
-	EVAL_ENV_CONST_FN,
 } EvalEnvKind;
 
 typedef struct EvalEnv EvalEnv;
@@ -17,9 +21,12 @@ struct EvalEnv {
 	EvalEnv * prev;
 	EvalEnvKind kind;
 	union {
-		Ast * global_expr;
+		Ast * global;
+		Frame frame;
 	} as;
 };
+
+void eval_env_init(EvalEnv * env);
 
 typedef struct {
 	EvalEnv env;

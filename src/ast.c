@@ -218,17 +218,6 @@ Var var_from_ast(SrcSpan span, TypeSig type, bool is_const, bool is_mut,
 	return var;
 }
 
-void var_set_checking(Var * var, VisitIndex index) {
-	ASSERT(var->pass == VAR_PASS_PARSED);
-	var->pass = VAR_PASS_CHECKING;
-	var->as.checking.visit_index = index;
-}
-
-void var_set_checked(Var * var) {
-	ASSERT(var->pass = VAR_PASS_CHECKING);
-	var->pass = VAR_PASS_CHECKED;
-}
-
 TypeAlias type_alias_from_ast(SrcSpan span, TypeSig type) {
 	return (TypeAlias){
 		.span = span,
