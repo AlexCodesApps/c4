@@ -1,6 +1,7 @@
 #pragma once
 
 #include "arena.h"
+#include "debug.h"
 #include "ints.h"
 
 typedef struct Type Type;
@@ -57,6 +58,37 @@ struct Type {
 		usize align;
 	} evaluated;
 };
+
+static bool type_is_pointer_like(Type * type) {
+	ASSERT(type->pass != TYPE_PASS_ERROR);
+	switch (type->kind) {
+	case TYPE_BUILTIN_VOID:
+	case TYPE_BUILTIN_I32:
+	case TYPE_FN:
+		return false;
+	case TYPE_PTR:
+	case TYPE_REF:
+		return true;
+	}
+}
+
+static bool type_is_sized(Type * type) {
+	ASSERT(type->pass != TYPE_PASS_ERROR);
+	switch (type->kind) {
+	case TYPE_BUILTIN_VOID:
+	case TYPE_FN:
+		return false;
+	case TYPE_BUILTIN_I32:
+	case TYPE_PTR:
+	case TYPE_REF:
+		return true;
+	}
+}
+
+static TypeHandle type_pointer_like_next(Type * type) {
+	ASSERT(type_is_pointer_like(type));
+	return type->kind == TYPE_PTR ? type->as.ptr : type->as.ref;
+}
 
 typedef struct {
 	Type ** data;

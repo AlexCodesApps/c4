@@ -1,6 +1,6 @@
 #include "include/type.h"
+#include "include/segment_list.h"
 #include "include/utility.h"
-#include <assert.h>
 #include <stddef.h>
 
 bool type_handle_is_valid(TypeHandle handle) { return handle.type != NULL; }
@@ -57,14 +57,6 @@ bool type_handle_eq(TypeHandle a, TypeHandle b) {
 	if (a.is_mut != b.is_mut)
 		return false;
 	return a.type == b.type;
-}
-
-static word get_segmented_slot(usize size) {
-	return bit_width_usize(size + 1) - 1;
-}
-
-static usize get_segmented_slot_index(usize size, word slot) {
-	return size - ((usize)1 << slot) + 1;
 }
 
 Type * type_list_at(TypeList * list, usize index) {

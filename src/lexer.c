@@ -1,6 +1,5 @@
 #include "include/lexer.h"
 #include "include/debug.h"
-#include <assert.h>
 
 Lexer lexer_new(Str src) {
 	Lexer lexer;
@@ -178,6 +177,13 @@ Token lexer_next(Lexer * lexer) {
 	case '*':
 		advance(lexer);
 		return make_token(lexer, start, TOKEN_STAR);
+	case '.':
+		if (peek1(lexer) == '*') {
+			advance2(lexer);
+			return make_token(lexer, start, TOKEN_DOT_STAR);
+		}
+		advance(lexer);
+		return make_token(lexer, start, TOKEN_DOT);
 	case '&':
 		advance(lexer);
 		return make_token(lexer, start, TOKEN_AMPERSAND);

@@ -1,5 +1,4 @@
 MAIN BRANCH
-
 - [ ] Support const fns
     - [ ] Design and implement fn ir
     - [ ] Make sure assignment in const ctx errors against global variable assignment / not against address grabbing
@@ -31,7 +30,6 @@ MAIN BRANCH
 - [ ] Implement addition with ptr offset support
 - [ ] Implement overflow checking and handling
 - [ ] Make sure variable shadowing works correctly
-
 NOTES:
 - Functions don't need scope checking, at least until lambdas...
 

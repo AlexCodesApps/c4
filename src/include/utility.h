@@ -33,7 +33,8 @@ typedef enum {
 	DO_REPORT_ERROR = 1,
 } ReportError;
 
-static inline bool align_usize(usize integer, usize alignment, usize * out) {
+NODISCARD static inline bool align_usize(usize integer, usize alignment,
+										 usize * out) {
 	usize mask = alignment - 1;
 	usize result;
 	if (UNLIKELY(!ckd_add_usize(integer, mask, &result))) {
@@ -43,7 +44,8 @@ static inline bool align_usize(usize integer, usize alignment, usize * out) {
 	return true;
 }
 
-static inline bool align_ptr(void * ptr, usize alignment, void ** out) {
+NODISCARD static inline bool align_ptr(void * ptr, usize alignment,
+									   void ** out) {
 	usize mask = alignment - 1;
 	usize result;
 	if (UNLIKELY(!ckd_add_usize((usize)ptr, mask, &result))) {
@@ -53,7 +55,7 @@ static inline bool align_ptr(void * ptr, usize alignment, void ** out) {
 	return true;
 }
 
-static inline word bit_width_usize(usize u) {
+NODISCARD static inline word bit_width_usize(usize u) {
 #ifdef __GNUC__
 	if (u == 0)
 		return 0;
@@ -68,7 +70,7 @@ static inline word bit_width_usize(usize u) {
 #endif
 }
 
-static inline word leading_zeros_usize(usize u) {
+NODISCARD static inline word leading_zeros_usize(usize u) {
 #ifdef __GNUC__
 	if (u == 0)
 		return USIZE_MAX_BITWIDTH;
@@ -84,12 +86,22 @@ static inline word leading_zeros_usize(usize u) {
 #endif
 }
 
+NODISCARD static inline bool is_0_or_pow2_usize(usize u) {
+	return !(u & (u - 1));
+}
+
+NODISCARD static inline usize next_pow2_usize(usize u) {
+	if (is_0_or_pow2_usize(u))
+		return u;
+	return (usize)1 << bit_width_usize(u);
+}
+
 STD_PRINTF_FN(3, 4)
 // temporary stop gap bc the uscases are hacky
 // and probably better suited for custom
 // temporary arena backed formatting
-static inline bool snprintf_bool(char * buf, size_t bufsz, const char * fmt,
-								 ...) {
+NODISCARD static inline bool snprintf_bool(char * buf, size_t bufsz,
+										   const char * fmt, ...) {
 	va_list va;
 	va_start(va, fmt);
 	int result = vsnprintf(buf, bufsz, fmt, va);
@@ -99,4 +111,4 @@ static inline bool snprintf_bool(char * buf, size_t bufsz, const char * fmt,
 
 #define KB(n) ((n) * 1024)
 #define MB(n) ((n) * 1024 * 1024)
-#define GB(n) ((n) * 1024 * 1024 * 1024)
+#define GB(n) ((u64)(n) * 1024 * 1024 * 1024)

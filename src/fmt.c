@@ -21,6 +21,40 @@ static char next(const char ** iter) {
 	return c;
 }
 
+void c4print_decimal(FILE * file, bool minus, I128 i) {
+	char buffer[40]; // enough to fit largest I128 + sign
+	char * cursor = buffer;
+	if (minus) {
+		*cursor++ = '-';
+	}
+	if (!i.high) {
+		u64 exp = 1;
+		for (u64 accum = i.low / 10; accum; accum /= 10) {
+			exp *= 10;
+		}
+		do {
+			word digit = (i.low / exp) % 10;
+			*cursor++ = '0' + (u8)digit;
+			exp /= 10;
+		} while (exp);
+	} else {
+		I128 exp = i128_new(0, 1);
+		for (I128 accum = i128_div_by_10(i); !i128_iszero(accum);
+			 accum = i128_div_by_10(accum)) {
+			ASSERT(i128_mul_by_10(&exp));
+		}
+		do {
+			I128 tmp = i;
+			i = i128_div_rem(&tmp, exp);
+			ASSERT(tmp.high == 0);
+			ASSERT(tmp.low / 10 == 0);
+			*cursor++ = '0' + (u8)tmp.low;
+			exp = i128_div_by_10(exp);
+		} while (!i128_iszero(exp));
+	}
+	fwrite(buffer, 1, (usize)(cursor - buffer), file);
+}
+
 void c4vaprintf(FILE * file, const char * path, va_list va) {
 	while (*path != '\0') {
 		char c = next(&path);
@@ -54,21 +88,30 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 			}
 		case 't':
 			ASSERT(next(&path) == 'i');
-			TokenIndex ti = va_arg(va, TokenIndex);
-			STATIC_ASSERT(sizeof(ti) == sizeof(u32),
+			STATIC_ASSERT(sizeof(TokenIndex) == sizeof(u32),
 						  "TokenIndex format needs to be updated");
-			fprintf(file, "%" PRIu32, ti);
-			continue;
+			goto case_uw;
 		case 'i':
 			switch (next(&path)) {
 			case 'w': {
-				int i = va_arg(va, int);
-				fprintf(file, "%d", i);
+				i64 i = va_arg(va, int);
+				bool minus = false;
+				if (i < 0) {
+					i = -i;
+					minus = true;
+				}
+				c4print_decimal(file, minus, i128_new(0, (u64)i));
 				continue;
 			}
 			case 'q': {
 				i64 i = va_arg(va, i64);
-				fprintf(file, "%" PRIi64, i);
+				u64 u = (u64)i;
+				bool minus = false;
+				if (i < 0) {
+					u = -(u64)i; // to avoid invoking UB
+					minus = true;
+				}
+				c4print_decimal(file, minus, i128_new(0, u));
 				continue;
 			}
 			default:
@@ -76,14 +119,21 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 			}
 		case 'u':
 			switch (next(&path)) {
+			case_uw:
 			case 'w': {
 				unsigned int i = va_arg(va, unsigned int);
-				fprintf(file, "%u", i);
+				c4print_decimal(file, false, i128_new(0, i));
 				continue;
 			}
 			case 'q': {
 				u64 i = va_arg(va, u64);
-				fprintf(file, "%" PRIu64, i);
+				c4print_decimal(file, false, i128_new(0, i));
+				continue;
+			}
+			case 'd': {
+				ASSERT(next(&path) == 'q');
+				I128 i = va_arg(va, I128);
+				c4print_decimal(file, false, i);
 				continue;
 			}
 			default:

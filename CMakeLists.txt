@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD_REQUIRED TRUE)
 add_executable(c4 main.c
 	src/debug.c src/lexer.c src/str.c src/arena.c src/parser.c
 	src/ast.c src/dir_walker.c src/i128.c src/fmt.c src/type.c
-	src/sema.c src/common.c)
+	src/sema.c src/common.c src/vm.c)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_BUILD_TYPE STREQUAL "Debug")
 	target_compile_options(c4 PRIVATE -D_GLIBCXX_DEBUG)

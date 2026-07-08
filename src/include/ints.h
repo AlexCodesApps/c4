@@ -17,5 +17,6 @@ typedef i32 iword;
 typedef u32 word;
 
 #define USIZE_MAX ((usize) - 1)
+#define ISIZE_MAX ((isize)(USIZE_MAX >> 1))
 #define USIZE_MAX_BITWIDTH (sizeof(usize) * 8)
 #define U64_MAX ((u64) - 1)

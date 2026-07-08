@@ -1,6 +1,6 @@
 #include "include/parser.h"
 #include "include/fmt.h"
-#include "include/utility.h"
+#include "include/segment_list.h"
 #include <setjmp.h>
 #include <stdarg.h>
 
@@ -107,6 +107,10 @@ static bool expect(Parser * parser, TokenKind type, const char * msg) {
 
 static TokenIndex src_span_begin(Parser * parser) {
 	if (UNLIKELY(parser->lexer.index > TOKEN_INDEX_MAX)) {
+		// TODO: Lowkey hacky
+		print_error(parser,
+					"source file is longer than TOKEN_INDEX_MAX(%ti) bytes",
+					TOKEN_INDEX_MAX);
 		longjmp(parser->overflow_handler, 1);
 	}
 	return (TokenIndex)parser->lexer.index;
@@ -141,23 +145,15 @@ static void * parser_alloc_bytes_n(Parser * parser, usize size, usize n,
 #define parser_alloc_n(parser, T, n)                                           \
 	((T *)parser_alloc_bytes_n((parser), sizeof(T), (n), ALIGNOF(T)))
 
-static usize get_segmented_slot(usize size) {
-	return bit_width_usize(size + 1) - 1;
-}
-
-static usize get_segmented_slot_index(usize size, usize slot) {
-	return size - ((usize)1 << slot) + 1;
-}
-
 TypeSig * type_sig_list_at(TypeSigList * list, usize index) {
-	usize slot = get_segmented_slot(index);
+	word slot = get_segmented_slot(index);
 	usize slot_index = get_segmented_slot_index(index, slot);
 	return &list->data[slot][slot_index];
 }
 
 static TypeSig * type_sig_list_add(Parser * parser, TypeSigList * list,
 								   TypeSig sig) {
-	usize slot = get_segmented_slot(list->size);
+	word slot = get_segmented_slot(list->size);
 	usize index = get_segmented_slot_index(list->size, slot);
 	if (index == 0) {
 		usize size = slot + 1;
@@ -175,7 +171,7 @@ static TypeSig * type_sig_list_add(Parser * parser, TypeSigList * list,
 }
 
 static Stmt * stmt_list_add(Parser * parser, StmtList * list, Stmt stmt) {
-	usize slot = get_segmented_slot(list->size);
+	word slot = get_segmented_slot(list->size);
 	usize index = get_segmented_slot_index(list->size, slot);
 	if (index == 0) {
 		usize size = slot + 1;
@@ -193,7 +189,7 @@ static Stmt * stmt_list_add(Parser * parser, StmtList * list, Stmt stmt) {
 }
 
 static Expr * expr_list_add(Parser * parser, ExprList * list, Expr expr) {
-	usize slot = get_segmented_slot(list->size);
+	word slot = get_segmented_slot(list->size);
 	usize index = get_segmented_slot_index(list->size, slot);
 	if (index == 0) {
 		usize size = slot + 1;
@@ -211,19 +207,19 @@ static Expr * expr_list_add(Parser * parser, ExprList * list, Expr expr) {
 }
 
 Expr * expr_list_at(ExprList * list, usize index) {
-	usize slot = get_segmented_slot(index);
+	word slot = get_segmented_slot(index);
 	usize slot_index = get_segmented_slot_index(index, slot);
 	return &list->data[slot][slot_index];
 }
 
 Stmt * stmt_list_at(StmtList * list, usize index) {
-	usize slot = get_segmented_slot(index);
+	word slot = get_segmented_slot(index);
 	usize slot_index = get_segmented_slot_index(index, slot);
 	return &list->data[slot][slot_index];
 }
 
 static Param * param_list_add(Parser * parser, ParamList * list, Param param) {
-	usize slot = get_segmented_slot(list->size);
+	word slot = get_segmented_slot(list->size);
 	usize index = get_segmented_slot_index(list->size, slot);
 	if (index == 0) {
 		usize size = slot + 1;
@@ -240,10 +236,14 @@ static Param * param_list_add(Parser * parser, ParamList * list, Param param) {
 	return loc;
 }
 
-Param * param_list_at(ParamList * list, usize index);
+Param * param_list_at(ParamList * list, usize index) {
+	word slot = get_segmented_slot(index);
+	usize slot_index = get_segmented_slot_index(index, slot);
+	return &list->data[slot][slot_index];
+}
 
 static Decl * ast_add_decl(Parser * parser, Ast * ast, Decl decl) {
-	usize slot = get_segmented_slot(ast->size);
+	word slot = get_segmented_slot(ast->size);
 	usize index = get_segmented_slot_index(ast->size, slot);
 	if (index == 0) {
 		usize size = slot + 1;
@@ -261,7 +261,7 @@ static Decl * ast_add_decl(Parser * parser, Ast * ast, Decl decl) {
 }
 
 Decl * ast_at(Ast * ast, usize index) {
-	usize slot = get_segmented_slot(index);
+	word slot = get_segmented_slot(index);
 	usize slot_index = get_segmented_slot_index(index, slot);
 	return &ast->data[slot][slot_index];
 }
@@ -537,6 +537,16 @@ static bool expr_addr(Parser * parser, Expr * out) {
 	return true;
 }
 
+static bool expr_deref(Parser * parser, Expr prefix, Expr * out) {
+	TokenIndex index = src_span_begin(parser);
+	advance(parser); // .*
+	SrcSpan span = src_span_end(parser, index);
+	Expr * ptr = parser_alloc(parser, Expr);
+	*ptr = prefix;
+	*out = expr_deref_from_ast(span, ptr);
+	return true;
+}
+
 static bool _expr_void(Parser * parser, Expr * out) {
 	TokenIndex index = src_span_begin(parser);
 	advance(parser); // 'void'
@@ -607,6 +617,7 @@ ExprRule expr_rule_table[TOKEN_COUNT] = {
 	[TOKEN_LPAREN] = {expr_parens, expr_funcall, EXPR_PREC_POSTFIX},
 	[TOKEN_PLUS] = {NULL, expr_plus, EXPR_PREC_TERM},
 	[TOKEN_AMPERSAND] = {expr_addr, NULL, EXPR_PREC_NONE},
+	[TOKEN_DOT_STAR] = {NULL, expr_deref, EXPR_PREC_POSTFIX},
 	[TOKEN_VOID] = {_expr_void, NULL, EXPR_PREC_NONE},
 	[TOKEN_INT] = {expr_int, NULL, EXPR_PREC_NONE},
 	[TOKEN_NULLPTR] = {_expr_nullptr, NULL, EXPR_PREC_NONE},

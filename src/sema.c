@@ -17,8 +17,9 @@ NODISCARD static usize type_evalled_size(Type * type);
 NODISCARD static usize type_evalled_align(Type * type);
 NODISCARD static bool var_eval(SemaCtx * ctx, Var * var);
 NODISCARD static bool fn_proto_cycle_check(SemaCtx * ctx, Fn * fn);
-NODISCARD static Decl * lookup_decl(SemaCtx * ctx, Iden iden,
-									ReportError report);
+NODISCARD static bool fn_proto_eval(SemaCtx * ctx, Fn * fn);
+NODISCARD static Decl * sema_lookup_decl(SemaCtx * ctx, Iden iden,
+										 ReportError report);
 
 static void * sema_alloc_bytes(SemaCtx * ctx, usize size, usize align) {
 	void * ptr = vmem_arena_alloc_bytes(ctx->arena, size, align);
@@ -92,6 +93,18 @@ static usize type_evalled_align(Type * type) {
 	}
 }
 
+static TypeHandle void_type_handle(SemaCtx * ctx) {
+	return type_handle_from_ptr(&ctx->table->void_type);
+}
+
+static TypeHandle nullptr_type_handle(SemaCtx * ctx) {
+	Type * ptr =
+		type_intern_table_ptr_to(ctx->arena, ctx->table, void_type_handle(ctx));
+	if (!ptr)
+		sema_oom(ctx);
+	return type_handle_from_ptr(ptr);
+}
+
 static bool type_handle_eval(SemaCtx * ctx, TypeHandle handle) {
 	switch (handle.type->pass) {
 	case TYPE_PASS_ERROR:
@@ -161,10 +174,13 @@ error:
 	return false;
 }
 
-NODISCARD static Decl * lookup_decl(SemaCtx * ctx, Iden iden,
-									ReportError report) {
+NODISCARD static Decl * sema_lookup_decl(SemaCtx * ctx, Iden iden,
+										 ReportError report) {
+	Decl * decl = var_env_lookup_decl(ctx->env, iden);
+	if (decl)
+		return decl;
 	for (usize i = 0; i < ctx->base->size; ++i) {
-		Decl * decl = ast_at(ctx->base, i);
+		decl = ast_at(ctx->base, i);
 		if (str_equal(iden, decl->iden))
 			return decl;
 	}
@@ -221,7 +237,7 @@ static bool type_sig_cycle_check(SemaCtx * ctx, TypeSig * sig) {
 				sig->as.type_stub = &ctx->table->void_type;
 				break;
 			}
-			Decl * decl = lookup_decl(ctx, sig->as.iden, DO_REPORT_ERROR);
+			Decl * decl = sema_lookup_decl(ctx, sig->as.iden, DO_REPORT_ERROR);
 			if (!decl)
 				goto error;
 			switch (decl->kind) {
@@ -396,22 +412,204 @@ error:
 	return false;
 }
 
+NODISCARD static bool fn_proto_eval(SemaCtx * ctx, Fn * fn) {
+	switch (fn->pass) {
+	case FN_PASS_ERROR:
+		return false;
+	case FN_PASS_PARSED:
+	case FN_PASS_PROTO_CHECKING:
+		if (!fn_proto_cycle_check(ctx, fn))
+			return false;
+		FALLTHROUGH();
+	case FN_PASS_PROTO_CHECKED: {
+		TypeHandle ret = type_handle_from_sig(ctx, &fn->proto.return_ty);
+		if (!type_handle_eval(ctx, ret))
+			goto error;
+		size_t size = fn->proto.params.size;
+		TypeHandleSpan span = {.data = sema_alloc_n(ctx, TypeHandle, size),
+							   .size = size};
+		for (usize i = 0; i < size; ++i) {
+			span.data[i] = type_handle_from_sig(
+				ctx, &param_list_at(&fn->proto.params, i)->type);
+			if (!type_handle_eval(ctx, span.data[i]))
+				goto error;
+		}
+		Type * fnty =
+			type_intern_table_fn_of(ctx->arena, ctx->table, ret, span);
+		if (!fnty)
+			sema_oom(ctx);
+		fn_set_pass_proto(fn, type_handle_from_ptr(fnty));
+		FALLTHROUGH();
+	}
+	case FN_PASS_PROTO:
+	case FN_PASS_EVAL:
+		return true;
+	}
+error:
+	fn_set_error(fn);
+	return false;
+}
+
+bool decl_ptr_list_init(VMemArena * arena, DeclPtrList * list, usize capacity) {
+	Decl ** decls = vmem_arena_alloc_n(arena, Decl *, capacity);
+	if (!decls)
+		return false;
+	list->decls = decls;
+	list->count = 0;
+	list->capacity = capacity;
+	return true;
+}
+
+Decl ** decl_ptr_list_push(DeclPtrList * list) {
+	if (list->count == list->capacity) {
+		FAIL("Capacity should be deterministic");
+		return false;
+	}
+	return &list->decls[list->count++];
+}
+
 static bool var_eval(SemaCtx * ctx, Var * var) {
 	switch (var->pass) {
 	case VAR_PASS_ERROR:
 		return false;
 	case VAR_PASS_PARSED:
+		TODO();
 	case VAR_PASS_EVALUATED:
 		return true;
 	}
 }
 
-void eval_env_init(EvalEnv * env) { env->kind = EVAL_ENV_GLOBAL; }
+bool var_env_push_scope(VMemArena * arena, VarEnv * env, VarEnv * parent,
+						usize capacity, bool is_const) {
+	if (!decl_ptr_list_init(arena, &env->frame.list, capacity))
+		return false;
+	env->frame.parent = parent;
+	env->is_const = is_const;
+	return true;
+}
+
+bool var_env_push_decl(VarEnv * env, Decl * decl) {
+	Decl ** ptr = decl_ptr_list_push(&env->frame.list);
+	if (!ptr)
+		return false;
+	*ptr = decl;
+	return true;
+}
+
+bool var_const_env(VarEnv * env) { return env ? env->is_const : true; }
+
+Decl * var_env_lookup_decl(VarEnv * env, Iden iden) {
+	while (env) {
+		DeclPtrList * list = &env->frame.list;
+		for (usize i = 0; i < list->count; ++i) {
+			Decl * decl = list->decls[i];
+			if (str_equal(decl->iden, iden))
+				return decl;
+		}
+		env = env->frame.parent;
+	}
+	return NULL;
+}
+
+bool expr_coerce(SemaCtx * ctx, TypeHandle to, TypeHandle from, Expr * expr) {
+	ASSERT(to.type->pass == TYPE_PASS_EVALUATED);
+	ASSERT(from.type->pass == TYPE_PASS_EVALUATED);
+	if (type_handle_eq(to, from))
+		return true;
+	if (to.is_lvalue)
+		return false;
+	if (type_is_pointer_like(to.type) && type_is_pointer_like(from.type)) {
+		TypeHandle ti = type_pointer_like_next(to.type);
+		TypeHandle fi = type_pointer_like_next(from.type);
+		do {
+			if (ti.is_mut && !fi.is_mut) {
+				return false;
+			}
+			if (ti.type->kind == TYPE_REF && fi.type->kind == TYPE_PTR) {
+				return false;
+			}
+			ti = type_pointer_like_next(ti.type);
+			fi = type_pointer_like_next(fi.type);
+		} while (type_is_pointer_like(ti.type) &&
+				 type_is_pointer_like(fi.type));
+		if (type_handle_eq(ti, fi)) {
+			// TODO: let it implicitly just, kind fit?
+			return true;
+		}
+	}
+	return false;
+}
+
+bool expr_coerce_binary(SemaCtx * ctx, TypeHandle type_a, Expr * a,
+						TypeHandle type_b, Expr * b, TypeHandle * out) {
+	ASSERT(type_a.type->pass == TYPE_PASS_EVALUATED);
+	ASSERT(type_b.type->pass == TYPE_PASS_EVALUATED);
+	TODO("coerce binary expr");
+}
+
+bool expr_eval_inner(SemaCtx * ctx, Expr * expr, TypeHandle * out, bool addr) {
+	switch (expr->pass) {
+	case EXPR_PASS_ERROR:
+		return false;
+	case EXPR_PASS_PARSED:
+		switch (expr->kind) {
+		case EXPR_INTEGER:
+			expr->sema_kind = EXPR_SEMA_INTEGER;
+			*out = type_handle_from_ptr(&ctx->table->i32_type);
+			break;
+		case EXPR_PLUS: {
+			expr->sema_kind = EXPR_SEMA_PLUS;
+			TypeHandle a;
+			TypeHandle b;
+			if (!expr_eval_inner(ctx, expr->as.plus.a, &a, false))
+				goto error;
+			if (!expr_eval_inner(ctx, expr->as.plus.b, &b, false))
+				goto error;
+			if (!expr_coerce_binary(ctx, a, expr->as.plus.a, b, expr->as.plus.b,
+									out))
+				goto error;
+			break;
+		}
+		case EXPR_IDEN: {
+			Decl * decl =
+				sema_lookup_decl(ctx, expr->as.parsed.iden, DO_REPORT_ERROR);
+			if (!decl)
+				goto error;
+			switch (decl->kind) {
+			case DECL_ERROR:
+				goto error;
+			case DECL_FN:
+			case DECL_VAR:
+				break;
+			case DECL_TYPE_ALIAS:
+				TODO("report error");
+				goto error;
+			}
+			expr->sema_kind = EXPR_SEMA_LOAD_PTR;
+			expr->as.sema.load_ptr = decl;
+			break;
+		}
+		case EXPR_ADDR:
+		case EXPR_DEREF:
+		case EXPR_FUNCALL:
+		case EXPR_NULLPTR:
+		case EXPR_VOID:
+			TODO();
+		}
+		expr->pass = EXPR_PASS_EVALLED;
+		FALLTHROUGH();
+	case EXPR_PASS_EVALLED:
+		return true;
+	}
+error:
+	expr_set_error(expr);
+	return false;
+}
 
 void sema_ctx_init(SemaCtx * ctx, Ast * ast, VMemArena * arena,
 				   TypeInternTable * table, Str src, Str path) {
 	ZERO(ctx);
-	eval_env_init(&ctx->env);
+	ctx->env = NULL;
 	ctx->base = ast;
 	ctx->arena = arena;
 	ctx->table = table;
@@ -436,6 +634,8 @@ bool sema_ctx_run(SemaCtx * ctx) {
 		case DECL_ERROR:
 			continue;
 		case DECL_FN:
+			LOG("evaluating fn %s[%p]", decl->iden, &decl->as.alias);
+			ok = ok && fn_proto_eval(ctx, &decl->as.fn);
 			continue;
 		case DECL_TYPE_ALIAS:
 			LOG("evaluating alias %s[%p]", decl->iden, &decl->as.alias);

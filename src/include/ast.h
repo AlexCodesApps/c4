@@ -65,18 +65,36 @@ bool type_sig_is_error(const TypeSig * type);
 typedef enum {
 	EXPR_PASS_ERROR,
 	EXPR_PASS_PARSED,
-	EXPR_PASS_CYCLE_CHECKED,
+	EXPR_PASS_EVALLED,
 } ExprPass;
+
+typedef struct {
+	union {
+		I128 integer;
+		u8 * aggregate;
+	} as;
+} ConstValue;
 
 typedef enum {
 	EXPR_INTEGER,
 	EXPR_PLUS,
-	EXPR_IDEN, // reused for EXPR_VAR
+	EXPR_IDEN,
 	EXPR_ADDR,
+	EXPR_DEREF,
 	EXPR_FUNCALL,
 	EXPR_NULLPTR,
 	EXPR_VOID,
 } ExprKind;
+
+typedef enum {
+	EXPR_SEMA_INTEGER,
+	EXPR_SEMA_PLUS,
+	EXPR_SEMA_LOAD_PTR,
+	EXPR_SEMA_DEREF,
+	EXPR_SEMA_FUNCALL,
+	EXPR_SEMA_NULLPTR,
+	EXPR_SEMA_VOID,
+} ExprSemaKind;
 
 typedef struct Expr Expr;
 
@@ -89,7 +107,10 @@ Expr * expr_list_at(ExprList * list, usize index);
 
 struct Expr {
 	ExprPass pass;
-	ExprKind kind;
+	union {
+		ExprKind kind;
+		ExprSemaKind sema_kind;
+	};
 	SrcSpan span;
 	union {
 		I128 integer;
@@ -97,13 +118,19 @@ struct Expr {
 			Expr * a;
 			Expr * b;
 		} plus;
-		Iden iden;
-		Expr * addr;
 		struct {
 			Expr * fun;
 			ExprList args;
 		} funcall;
-		Var * var; /* cycle checked */
+		struct {
+			Iden iden;
+			Expr * addr;
+			Expr * deref;
+		} parsed;
+		struct {
+			Decl * load_ptr;
+			Expr * deref;
+		} sema;
 	} as;
 };
 
@@ -111,12 +138,14 @@ Expr expr_int_from_ast(SrcSpan span, I128 i);
 Expr expr_plus_from_ast(SrcSpan span, Expr * a, Expr * b);
 Expr expr_iden_from_ast(SrcSpan span, Iden iden);
 Expr expr_addr_from_ast(SrcSpan span, Expr * next);
+Expr expr_deref_from_ast(SrcSpan span, Expr * next);
 Expr expr_funcall_from_ast(SrcSpan span, Expr * fun, ExprList args);
 Expr expr_nullptr(SrcSpan span);
 Expr expr_void(SrcSpan span);
 Expr expr_error(void);
 void expr_set_error(Expr * expr);
 bool expr_is_error(const Expr * expr);
+TypeHandle expr_evalled_type(const Expr * expr);
 
 typedef struct Stmt Stmt;
 

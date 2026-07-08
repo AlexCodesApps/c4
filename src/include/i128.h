@@ -14,4 +14,11 @@ NODISCARD I128 i128_add_wrapping(I128 a, I128 b);
 NODISCARD bool i128_sub(I128 a, I128 b, I128 * out);
 NODISCARD I128 i128_sub_wrapping(I128 a, I128 b);
 NODISCARD bool i128_mul_by_10(I128 * inout);
-u64 i128_div_by_10(I128 * inout);
+/* parameter holds quotient */
+I128 i128_div_rem(I128 * inout, I128 divisor);
+u64 i128_div_rem_by_10(I128 * inout);
+
+NODISCARD I128 i128_div_by_10(I128 i);
+
+NODISCARD bool i128_gte(I128 a, I128 b);
+NODISCARD bool i128_iszero(I128 i);

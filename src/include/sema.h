@@ -4,32 +4,42 @@
 #include "type.h"
 #include <setjmp.h>
 
+typedef struct VarEnv VarEnv;
 typedef struct Frame Frame;
+
+typedef struct {
+	Decl ** decls;
+	usize count;
+	usize capacity;
+} DeclPtrList;
+
+bool decl_ptr_list_init(VMemArena * arena, DeclPtrList * list, usize capacity);
+Decl ** decl_ptr_list_push(DeclPtrList * list);
+
 struct Frame {
-	Decl * decl;
-	usize index;
+	VarEnv * parent;
+	DeclPtrList list;
 };
 
 typedef enum {
-	EVAL_ENV_GLOBAL,
-	EVAL_ENV_CONST_EVAL,
-	EVAL_ENV_FN,
-} EvalEnvKind;
+	VAR_ENV_FN,
+} VarEnvKind;
 
-typedef struct EvalEnv EvalEnv;
-struct EvalEnv {
-	EvalEnv * prev;
-	EvalEnvKind kind;
-	union {
-		Ast * global;
-		Frame frame;
-	} as;
+struct VarEnv {
+	bool is_const;
+	Frame frame;
 };
 
-void eval_env_init(EvalEnv * env);
+bool var_env_init_scope(VMemArena * arena, VarEnv * env, VarEnv * parent,
+						usize capacity, bool is_const);
+bool var_env_push_decl(VarEnv * env, Decl * decl);
+/* env can be null */
+bool var_const_env(VarEnv * env);
+/* env can be null */
+Decl * var_env_lookup_decl(VarEnv * env, Iden iden);
 
 typedef struct {
-	EvalEnv env;
+	VarEnv * env;
 	Ast * base;
 	TypeInternTable * table;
 	VMemArena * arena;
@@ -42,4 +52,4 @@ typedef struct {
 void sema_ctx_init(SemaCtx * ctx, Ast * ast, VMemArena * arena,
 				   TypeInternTable * table, Str src, Str path);
 NORETURN void sema_oom(SemaCtx * ctx);
-bool sema_ctx_run(SemaCtx * ctx);
+NODISCARD bool sema_ctx_run(SemaCtx * ctx);

@@ -1,6 +1,6 @@
 #include "include/ast.h"
 #include "include/debug.h"
-#include <assert.h>
+#include "include/utility.h"
 
 TypeSig type_sig_ptr_from_ast(TypeSig * next) {
 	return (TypeSig){
@@ -80,7 +80,7 @@ Expr expr_iden_from_ast(SrcSpan span, Iden iden) {
 		.pass = EXPR_PASS_PARSED,
 		.kind = EXPR_IDEN,
 		.span = span,
-		.as.iden = iden,
+		.as.parsed.iden = iden,
 	};
 }
 
@@ -89,7 +89,16 @@ Expr expr_addr_from_ast(SrcSpan span, Expr * next) {
 		.pass = EXPR_PASS_PARSED,
 		.kind = EXPR_ADDR,
 		.span = span,
-		.as.addr = next,
+		.as.parsed.addr = next,
+	};
+}
+
+Expr expr_deref_from_ast(SrcSpan span, Expr * next) {
+	return (Expr){
+		.pass = EXPR_PASS_PARSED,
+		.kind = EXPR_DEREF,
+		.span = span,
+		.as.parsed.deref = next,
 	};
 }
 
@@ -127,6 +136,11 @@ Expr expr_error(void) {
 void expr_set_error(Expr * expr) { expr->pass = EXPR_PASS_ERROR; }
 
 bool expr_is_error(const Expr * expr) { return expr->pass == EXPR_PASS_ERROR; }
+
+TypeHandle expr_evalled_type(const Expr * expr) {
+	ASSERT(expr->pass >= EXPR_PASS_EVALLED);
+	TODO();
+}
 
 Stmt stmt_semicolon(void) { return (Stmt){.kind = STMT_SEMICOLON}; }
 
@@ -187,6 +201,7 @@ void fn_set_pass_proto_checked(Fn * fn) {
 
 void fn_set_pass_proto(Fn * fn, TypeHandle type) {
 	ASSERT(fn->pass == FN_PASS_PROTO_CHECKED);
+	ASSERT(type.type->kind == TYPE_FN);
 	fn->pass = FN_PASS_PROTO;
 	fn->as.proto = type;
 }

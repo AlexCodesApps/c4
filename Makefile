@@ -1,8 +1,6 @@
 .PHONY: clean, make, all, fmt, release
 
-CC=clang
-RM=rm -rf
-CP=cp
+RM=cmake -E rm -rf
 
 FMT=find src '(' -name '*.c' -o -name '*.h' ')' -exec clang-format -i {} +
 
@@ -12,11 +10,11 @@ make: build
 	cmake --build build
 
 release: clean
-	cmake -S . -B build -DCMAKE_C_COMPILER=$(CC) -DCMAKE_BUILD_TYPE=Release
-	cmake --build build
+	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+	cmake --build build --clean-first
 
 build: CMakeLists.txt Makefile
-	cmake -S . -B build -DCMAKE_C_COMPILER=$(CC) -DCMAKE_BUILD_TYPE=Debug
+	cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 
 fmt:
 	$(FMT)

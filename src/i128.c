@@ -104,6 +104,49 @@ word bit_width_i128(I128 value) {
 	return bit_width_usize(value.high) + USIZE_MAX_BITWIDTH;
 }
 
+I128 i128_div_rem(I128 * inout, I128 divisor) {
+	ASSERT(!i128_iszero(divisor));
+	I128 remainder = *inout;
+	I128 quot = i128_new(0, 0);
+	word bitw = bit_width_i128(remainder);
+	word dbitw = bit_width_i128(divisor);
+	for (iword i = (iword)bitw - (iword)dbitw; i >= 0; --i) {
+		I128 mult;
+		ASSERT(i128_shift_left(divisor, (word)i, &mult));
+		if (i128_sub(remainder, mult, &remainder)) {
+			I128 part = i128_new(0, 1);
+			ASSERT(i128_shift_left(part, (word)i, &part));
+			quot = i128_add_wrapping(quot, part);
+		}
+	}
+	*inout = quot;
+	return remainder;
+}
+
+u64 i128_div_rem_by_10(I128 * inout) {
+	const I128 _10 = i128_new(0, 10);
+	I128 remainder = *inout;
+	I128 quot = i128_new(0, 0);
+	word bitw = bit_width_i128(remainder);
+	for (iword i = (iword)bitw - 4; i >= 0; --i) {
+		I128 mult;
+		ASSERT(i128_shift_left(_10, (word)i, &mult));
+		if (i128_sub(remainder, mult, &remainder)) {
+			I128 part = i128_new(0, 1);
+			ASSERT(i128_shift_left(part, (word)i, &part));
+			quot = i128_add_wrapping(quot, part);
+		}
+	}
+	*inout = quot;
+	ASSERT(remainder.high == 0);
+	return remainder.low;
+}
+
+I128 i128_div_by_10(I128 i) {
+	i128_div_rem_by_10(&i);
+	return i;
+}
+
 bool i128_gte(I128 a, I128 b) {
 	if (a.high > b.high)
 		return true;
@@ -112,22 +155,4 @@ bool i128_gte(I128 a, I128 b) {
 	return a.low >= b.low;
 }
 
-u64 i128_div_by_10(I128 * inout) {
-	const I128 _10 = i128_new(0, 10);
-	I128 remainder = *inout;
-	I128 quot = i128_new(0, 0);
-	word bitw = bit_width_i128(remainder);
-	for (iword i = (iword)bitw - 4; i >= 0; --i) {
-		I128 mult;
-		if (UNLIKELY(!i128_shift_left(_10, (word)i, &mult))) {
-			continue;
-		}
-		if (i128_sub(remainder, mult, &remainder)) {
-			I128 part = i128_new(0, 1);
-			ASSERT(i128_shift_left(part, (word)i, &part));
-			quot = i128_add_wrapping(quot, part);
-		}
-	}
-	ASSERT(remainder.high == 0);
-	return remainder.low;
-}
+bool i128_iszero(I128 i) { return i.high == 0 && i.low == 0; }

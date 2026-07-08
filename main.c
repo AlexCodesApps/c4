@@ -37,8 +37,10 @@ static bool read_file(VMemArena * arena, const char * path, Str * out) {
 	if (!buf) {
 		goto cleanup;
 	}
-	rewind(file);
-	if (fread(buf, 1, size, file) == 0) {
+	if (fseek(file, 0, SEEK_SET) != 0) {
+		goto cleanup;
+	}
+	if (fread(buf, 1, size, file) != size) {
 		goto cleanup;
 	}
 	*out = str_new(buf, size);
@@ -75,7 +77,7 @@ static bool process_src(VMemArena * arena, const char * path, Str src) {
 static int process_path(VMemArena * arena, const char * path) {
 	Str src;
 	if (!read_file(arena, path, &src)) {
-		c4printf(stderr, "error: unable to open file '%cs'\n", path);
+		c4printf(stderr, "error: unable to read file '%cs'\n", path);
 		return 2;
 	}
 	return process_src(arena, path, src) ? 0 : 1;

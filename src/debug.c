@@ -95,6 +95,12 @@ void dump_tokens(Str src) {
 		case TOKEN_STAR:
 			dump_token(&lexer, &token, s("*"));
 			break;
+		case TOKEN_DOT:
+			dump_token(&lexer, &token, s("DOT"));
+			break;
+		case TOKEN_DOT_STAR:
+			dump_token(&lexer, &token, s("STAR"));
+			break;
 		case TOKEN_AMPERSAND:
 			dump_token(&lexer, &token, s("&"));
 			break;
