@@ -5,7 +5,6 @@
 #include "fmt.h"   // IWYU pragma: keep
 #include "ints.h"
 #include "platform.h"
-#include <memory.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>

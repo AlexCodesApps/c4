@@ -39,12 +39,12 @@ typedef enum {
 } TypeSigKind;
 
 struct TypeSig {
+	SrcSpan span;
 	TypeSigPass pass;
 	TypeSigKind kind;
 	bool is_mut : 1;
 	union {
-		TypeSig * ptr;
-		TypeSig * ref;
+		TypeSig * ptr_like;
 		FnTypeSig fn;
 		Iden iden;
 		TypeAlias * alias_stub;
@@ -52,12 +52,13 @@ struct TypeSig {
 	} as;
 };
 
-TypeSig type_sig_ptr_from_ast(TypeSig * next);
-TypeSig type_sig_ref_from_ast(TypeSig * next);
-TypeSig type_sig_fn_from_ast(TypeSig * return_ty, TypeSigList params);
-TypeSig type_sig_iden_from_ast(Iden iden);
+TypeSig type_sig_ptr_from_ast(SrcSpan span, TypeSig * next);
+TypeSig type_sig_ref_from_ast(SrcSpan span, TypeSig * next);
+TypeSig type_sig_fn_from_ast(SrcSpan span, TypeSig * return_ty,
+							 TypeSigList params);
+TypeSig type_sig_iden_from_ast(SrcSpan span, Iden iden);
 void type_sig_set_mut(TypeSig * type);
-TypeSig type_sig_void(void);
+TypeSig type_sig_void(SrcSpan span);
 TypeSig type_sig_error(void);
 void type_sig_set_error(TypeSig * type);
 bool type_sig_is_error(const TypeSig * type);
@@ -113,6 +114,11 @@ struct Expr {
 	};
 	SrcSpan span;
 	union {
+		union {
+			Iden iden;
+			Expr * addr;
+			Expr * deref;
+		} parsed;
 		I128 integer;
 		struct {
 			Expr * a;
@@ -122,11 +128,6 @@ struct Expr {
 			Expr * fun;
 			ExprList args;
 		} funcall;
-		struct {
-			Iden iden;
-			Expr * addr;
-			Expr * deref;
-		} parsed;
 		struct {
 			Decl * load_ptr;
 			Expr * deref;
@@ -241,7 +242,11 @@ typedef enum {
 typedef enum {
 	VAR_PASS_ERROR,
 	VAR_PASS_PARSED,
-	VAR_PASS_EVALUATED,
+	VAR_PASS_DECL_CYCLE_CHECKING,
+	VAR_PASS_DECL_CYCLE_CHECKED,
+	VAR_PASS_DECL_EVALUATED,
+	VAR_PASS_EXPR_CYCLE_CHECKING,
+	VAR_PASS_EXPR_EVALUATED,
 } VarPass;
 
 typedef struct {
@@ -254,24 +259,42 @@ typedef struct {
 	} unwrap;
 } ParsedVar;
 
+typedef struct {
+	VarMutability mutability;
+	bool has_expr;
+	TypeHandle type;
+	struct {
+		Expr expr;
+	} unwrap;
+} DeclEvalVar;
+
 struct Var {
 	SrcSpan span;
 	VarPass pass;
 	union {
 		ParsedVar parsed;
-		ParsedVar checked;
 		struct {
-			VarMutability mutability;
-			TypeHandle type;
-			Expr expr;
-		} evalled;
+			ParsedVar parsed;
+			VisitIndex id;
+		} checking_decl;
+		ParsedVar checked_decl;
+		DeclEvalVar decl_evalled;
+		struct {
+			DeclEvalVar decl_evalled;
+			VisitIndex id;
+		} checking_expr;
+		DeclEvalVar evalled;
 	} as;
 };
 
 Var var_from_ast(SrcSpan span, TypeSig type, bool is_const, bool is_mut,
 				 const Expr * opt_expr);
 Var var_error(void);
-void var_set_evalled(Var * var, VarMutability mut, TypeHandle type);
+void var_set_decl_checking(Var * var, VisitIndex id);
+void var_set_decl_checked(Var * var);
+void var_set_decl_evalled(Var * var, VarMutability mut, TypeHandle type);
+void var_set_expr_checking(Var * var, VisitIndex id);
+void var_set_expr_evalled(Var * var);
 void var_set_error(Var * var);
 bool var_is_error(const Var * var);
 

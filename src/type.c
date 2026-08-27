@@ -37,9 +37,9 @@ bool type_handle_struct_eq(TypeHandle a, TypeHandle b) {
 	case TYPE_BUILTIN_I32:
 		return true;
 	case TYPE_PTR:
-		return type_handle_struct_eq(a.type->as.ptr, b.type->as.ptr);
+		return type_handle_struct_eq(a.type->as.ptr_like, b.type->as.ptr_like);
 	case TYPE_REF:
-		return type_handle_struct_eq(a.type->as.ref, b.type->as.ref);
+		return type_handle_struct_eq(a.type->as.ptr_like, b.type->as.ptr_like);
 	case TYPE_FN:
 		if (!type_handle_struct_eq(a.type->as.fn.return_ty,
 								   b.type->as.fn.return_ty))
@@ -111,45 +111,47 @@ void type_intern_table_init(TypeInternTable * table) {
 }
 
 Type * type_intern_table_ptr_to(VMemArena * arena, TypeInternTable * table,
-								TypeHandle type) {
+								TypeHandle type, TypePass pass) {
+	type.is_lvalue = true;
 	for (usize i = 0; i < table->types.size; ++i) {
 		Type * otype = type_intern_table_at(table, i);
 		if (otype->kind != TYPE_PTR) {
 			continue;
 		}
-		if (type_handle_eq(otype->as.ptr, type)) {
+		if (type_handle_eq(otype->as.ptr_like, type)) {
 			return otype;
 		}
 	}
 	Type ntype = {
-		.pass = TYPE_PASS_CHECKED,
+		.pass = pass,
 		.kind = TYPE_PTR,
-		.as.ptr = type,
+		.as.ptr_like = type,
 	};
 	return type_intern_table_add(arena, table, ntype);
 }
 
 Type * type_intern_table_ref_to(VMemArena * arena, TypeInternTable * table,
-								TypeHandle type) {
+								TypeHandle type, TypePass pass) {
 	for (usize i = 0; i < table->types.size; ++i) {
 		Type * otype = type_intern_table_at(table, i);
 		if (otype->kind != TYPE_REF) {
 			continue;
 		}
-		if (type_handle_eq(otype->as.ref, type)) {
+		if (type_handle_eq(otype->as.ptr_like, type)) {
 			return otype;
 		}
 	}
 	Type ntype = {
-		.pass = TYPE_PASS_CHECKED,
-		.kind = TYPE_PTR,
-		.as.ref = type,
+		.pass = pass,
+		.kind = TYPE_REF,
+		.as.ptr_like = type,
 	};
 	return type_intern_table_add(arena, table, ntype);
 }
 
 Type * type_intern_table_fn_of(VMemArena * arena, TypeInternTable * table,
-							   TypeHandle return_ty, TypeHandleSpan params) {
+							   TypeHandle return_ty, TypeHandleSpan params,
+							   TypePass pass) {
 	for (usize i = 0; i < table->types.size; ++i) {
 		Type * otype = type_intern_table_at(table, i);
 		if (otype->kind != TYPE_FN)
@@ -164,7 +166,7 @@ Type * type_intern_table_fn_of(VMemArena * arena, TypeInternTable * table,
 		}
 		return otype;
 	}
-	Type ntype = {.pass = TYPE_PASS_CHECKED,
+	Type ntype = {.pass = pass,
 				  .kind = TYPE_FN,
 				  .as.fn = {.return_ty = return_ty, .params = params}};
 	return type_intern_table_add(arena, table, ntype);

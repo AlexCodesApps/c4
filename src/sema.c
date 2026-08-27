@@ -15,11 +15,21 @@ NODISCARD static TypeHandle type_handle_from_sig(SemaCtx * ctx, TypeSig * sig);
 NODISCARD static bool type_handle_eval(SemaCtx * ctx, TypeHandle type);
 NODISCARD static usize type_evalled_size(Type * type);
 NODISCARD static usize type_evalled_align(Type * type);
+NODISCARD static bool var_decl_cycle_check(SemaCtx * ctx, Var * var);
+NODISCARD static bool var_decl_eval(SemaCtx * ctx, Var * var);
 NODISCARD static bool var_eval(SemaCtx * ctx, Var * var);
 NODISCARD static bool fn_proto_cycle_check(SemaCtx * ctx, Fn * fn);
 NODISCARD static bool fn_proto_eval(SemaCtx * ctx, Fn * fn);
+NODISCARD static bool fn_eval(SemaCtx * ctx, Fn * fn);
 NODISCARD static Decl * sema_lookup_decl(SemaCtx * ctx, Iden iden,
 										 ReportError report);
+NODISCARD static bool check_type_covariance(SemaCtx * ctx, TypeHandle super,
+											TypeHandle sub);
+NODISCARD static bool check_type_contravariance(SemaCtx * ctx, TypeHandle super,
+												TypeHandle sub);
+NODISCARD static bool expr_coerce_assignment(SemaCtx * ctx, TypeHandle to,
+											 TypeHandle from, Expr * expr);
+NODISCARD static bool expr_eval(SemaCtx * ctx, Expr * expr, TypeHandle * out);
 
 static void * sema_alloc_bytes(SemaCtx * ctx, usize size, usize align) {
 	void * ptr = vmem_arena_alloc_bytes(ctx->arena, size, align);
@@ -42,27 +52,140 @@ static void * sema_alloc_bytes_n(SemaCtx * ctx, usize size, usize n,
 #define sema_alloc_n(ctx, T, n)                                                \
 	(T *)sema_alloc_bytes_n((ctx), sizeof(T), (n), ALIGNOF(T))
 
+#define TABWIDTH 4
+
+static usize cell_width(Str line) {
+	usize count = 0;
+	for (usize i = 0; i < line.size; ++i) {
+		count += line.data[i] == '\t' ? TABWIDTH : 1;
+	}
+	return count;
+}
+
+static void print_errline(usize count) {
+	c4print(stderr, "\x1b[31m");
+	for (usize i = 0; i < count; ++i)
+		fputc('~', stderr);
+	c4print(stderr, "\x1b[0m");
+}
+
+static void print_space(usize count) {
+	for (usize i = 0; i < count; ++i)
+		fputc(' ', stderr);
+}
+
+static void print_line(Str line) {
+	for (usize i = 0; i < line.size; ++i) {
+		char ch = line.data[i];
+		if (ch == '\t')
+			print_space(TABWIDTH);
+		else
+			fputc(ch, stderr);
+	}
+}
+
+static void print_grid(Str src, SrcSpan span, usize brow, usize bcol,
+					   usize erow, usize ecol) {
+	if (brow == erow) {
+		Str line = str_get_line_at_idx(src, span.begin);
+		Str before_line, middle, after_line;
+		str_split_at_idx(line, bcol, &before_line, &middle);
+		str_split_at_idx(middle, ecol - bcol, &middle, &after_line);
+		print_line(line);
+		fputc('\n', stderr);
+		print_space(cell_width(before_line));
+		print_errline(cell_width(middle));
+		print_space(cell_width(after_line));
+		fputc('\n', stderr);
+		return;
+	}
+	StrLineIter begin, middle, end;
+	str_line_iter_new(&begin, src, span.begin);
+	middle = begin;
+	str_line_iter_new(&end, src, span.end);
+	Str begin_line = str_line_iter_current_line(&begin);
+	Str end_line = str_line_iter_current_line(&end);
+	{
+		Str ctx;
+		if (str_line_iter_last_line(&begin, &ctx)) {
+			print_line(ctx);
+			fputc('\n', stderr);
+		}
+		Str before_line, err_line;
+		str_split_at_idx(begin_line, bcol, &before_line, &err_line);
+		print_line(begin_line);
+		fputc('\n', stderr);
+		print_space(cell_width(before_line));
+		print_errline(cell_width(err_line));
+		fputc('\n', stderr);
+	}
+	Str line;
+	while (str_line_iter_next_line(&middle, &line)) {
+		if (line.data == end_line.data)
+			break;
+		print_line(line);
+		fputc('\n', stderr);
+		print_errline(cell_width(line));
+		fputc('\n', stderr);
+	}
+	if (end_line.size > 0 && ecol > 0) {
+		Str err_line, after_line;
+		str_split_at_idx(end_line, ecol, &err_line, &after_line);
+		print_line(end_line);
+		fputc('\n', stderr);
+		print_errline(cell_width(err_line));
+		print_space(cell_width(after_line));
+		fputc('\n', stderr);
+		Str ctx;
+		if (str_line_iter_next_line(&end, &ctx)) {
+			print_line(ctx);
+			fputc('\n', stderr);
+		}
+	} else {
+		print_line(end_line);
+		fputc('\n', stderr);
+	}
+}
+
 static void print_error(SemaCtx * ctx, SrcSpan span, const char * msg, ...) {
 	Str src = ctx->src;
-	if (span.begin > span.end) {
+	if (!src_span_is_text(&span)) {
 		c4printf(stderr, "in %s[?]: ", ctx->path);
 	} else {
+		usize i;
 		usize row = 1;
 		usize col = 1;
-		for (usize i = 0; i < span.begin; ++i) {
+		usize brow, bcol;
+		for (i = 0; i < span.begin; ++i) {
 			if (src.data[i] == '\n') {
 				col = 0;
 				++row;
 			}
 			++col;
 		}
-		c4printf(stderr, "in %s[%uq, %uq]: ", ctx->path, row, col);
+		brow = row;
+		bcol = col;
+		for (; i < span.end; ++i) {
+			if (src.data[i] == '\n') {
+				col = 0;
+				++row;
+			}
+			++col;
+		}
+		c4printf(stderr, "in %s[%uq, %uq]:\n", ctx->path, brow, bcol);
+		print_grid(src, span, brow - 1, bcol - 1, row - 1, col - 1);
 	}
+	c4print(stderr, "\x1b[31merror: ");
 	va_list va;
 	va_start(va, msg);
 	c4vaprintf(stderr, msg, va);
 	va_end(va);
-	putc('\n', stderr);
+	c4print(stderr, "\x1b[0m\n");
+}
+
+static void expected_type(SemaCtx * ctx, SrcSpan span, TypeHandle expected,
+						  TypeHandle found) {
+	print_error(ctx, span, "expected %th, found %th", expected, found);
 }
 
 static usize type_evalled_size(Type * type) {
@@ -98,8 +221,9 @@ static TypeHandle void_type_handle(SemaCtx * ctx) {
 }
 
 static TypeHandle nullptr_type_handle(SemaCtx * ctx) {
-	Type * ptr =
-		type_intern_table_ptr_to(ctx->arena, ctx->table, void_type_handle(ctx));
+	TypeHandle voidh = type_handle_new(&ctx->table->void_type, true, false);
+	Type * ptr = type_intern_table_ptr_to(ctx->arena, ctx->table, voidh,
+										  TYPE_PASS_EVALUATED);
 	if (!ptr)
 		sema_oom(ctx);
 	return type_handle_from_ptr(ptr);
@@ -116,11 +240,11 @@ static bool type_handle_eval(SemaCtx * ctx, TypeHandle handle) {
 		case TYPE_BUILTIN_I32:
 			break;
 		case TYPE_PTR:
-			if (!type_handle_eval(ctx, handle.type->as.ptr))
+		case TYPE_REF:
+			if (!type_handle_eval(ctx, handle.type->as.ptr_like))
 				goto error;
 			break;
-		case TYPE_REF:
-			if (!type_handle_eval(ctx, handle.type->as.ref))
+			if (!type_handle_eval(ctx, handle.type->as.ptr_like))
 				goto error;
 			break;
 		case TYPE_FN:
@@ -131,7 +255,8 @@ static bool type_handle_eval(SemaCtx * ctx, TypeHandle handle) {
 					goto error;
 			if (handle.is_mut) {
 				print_error(ctx, INVALID_SRC_SPAN,
-							"functions cannot be directly mutable");
+							"functions cannot be directly mutable [%th]",
+							handle);
 				c4println(stderr, "hint: add indirection with '*' or '&'?");
 				goto error;
 			}
@@ -207,7 +332,7 @@ static bool type_alias_cycle_check(SemaCtx * ctx, TypeAlias * alias) {
 		LOG("detected potential cycle in type alias %p", alias);
 		if (!visitor_check_structural(&ctx->visitor,
 									  alias->as.checking.visit_index)) {
-			print_error(ctx, alias->span, "detected cycle in alias");
+			print_error(ctx, alias->span, "detected cycle in type alias");
 			goto error;
 		}
 		FALLTHROUGH();
@@ -261,13 +386,13 @@ static bool type_sig_cycle_check(SemaCtx * ctx, TypeSig * sig) {
 		}
 		case TYPE_SIG_PTR:
 			idx = visitor_push_indirection(&ctx->visitor);
-			if (!type_sig_cycle_check(ctx, sig->as.ptr))
+			if (!type_sig_cycle_check(ctx, sig->as.ptr_like))
 				goto error;
 			visitor_pop_indirection(&ctx->visitor, idx);
 			break;
 		case TYPE_SIG_REF:
 			idx = visitor_push_indirection(&ctx->visitor);
-			if (!type_sig_cycle_check(ctx, sig->as.ref))
+			if (!type_sig_cycle_check(ctx, sig->as.ptr_like))
 				goto error;
 			visitor_pop_indirection(&ctx->visitor, idx);
 			break;
@@ -310,22 +435,22 @@ static TypeHandle type_handle_from_sig(SemaCtx * ctx, TypeSig * sig) {
 	case TYPE_SIG_PASS_CYCLE_CHECKED:
 		switch (sig->kind) {
 		case TYPE_SIG_PTR: {
-			handle = type_handle_from_sig(ctx, sig->as.ptr);
+			handle = type_handle_from_sig(ctx, sig->as.ptr_like);
 			if (!type_handle_is_valid(handle))
 				goto error;
-			Type * ty =
-				type_intern_table_ptr_to(ctx->arena, ctx->table, handle);
+			Type * ty = type_intern_table_ptr_to(ctx->arena, ctx->table, handle,
+												 TYPE_PASS_CHECKED);
 			if (!ty)
 				sema_oom(ctx);
 			handle = type_handle_from_ptr(ty);
 			break;
 		}
 		case TYPE_SIG_REF: {
-			handle = type_handle_from_sig(ctx, sig->as.ptr);
+			handle = type_handle_from_sig(ctx, sig->as.ptr_like);
 			if (!type_handle_is_valid(handle))
 				goto error;
-			Type * ty =
-				type_intern_table_ptr_to(ctx->arena, ctx->table, handle);
+			Type * ty = type_intern_table_ptr_to(ctx->arena, ctx->table, handle,
+												 TYPE_PASS_CHECKED);
 			if (!ty)
 				sema_oom(ctx);
 			handle = type_handle_from_ptr(ty);
@@ -347,8 +472,8 @@ static TypeHandle type_handle_from_sig(SemaCtx * ctx, TypeSig * sig) {
 			}
 			TypeHandleSpan params = {.data = params_mem,
 									 .size = sig->as.fn.params.size};
-			Type * ty = type_intern_table_fn_of(ctx->arena, ctx->table,
-												return_ty, params);
+			Type * ty = type_intern_table_fn_of(
+				ctx->arena, ctx->table, return_ty, params, TYPE_PASS_CHECKED);
 			if (!ty)
 				sema_oom(ctx);
 			handle = type_handle_from_ptr(ty);
@@ -434,15 +559,38 @@ NODISCARD static bool fn_proto_eval(SemaCtx * ctx, Fn * fn) {
 			if (!type_handle_eval(ctx, span.data[i]))
 				goto error;
 		}
-		Type * fnty =
-			type_intern_table_fn_of(ctx->arena, ctx->table, ret, span);
+		Type * fnty = type_intern_table_fn_of(ctx->arena, ctx->table, ret, span,
+											  TYPE_PASS_EVALUATED);
 		if (!fnty)
 			sema_oom(ctx);
-		fn_set_pass_proto(fn, type_handle_from_ptr(fnty));
+		TypeHandle handle = type_handle_new(fnty, false, true);
+		if (!type_handle_eval(ctx, handle))
+			goto error;
+		fn_set_pass_proto(fn, handle);
 		FALLTHROUGH();
 	}
 	case FN_PASS_PROTO:
 	case FN_PASS_EVAL:
+		return true;
+	}
+error:
+	fn_set_error(fn);
+	return false;
+}
+
+NODISCARD static bool fn_eval(SemaCtx * ctx, Fn * fn) {
+	switch (fn->pass) {
+	case FN_PASS_ERROR:
+		return false;
+	case FN_PASS_PARSED:
+	case FN_PASS_PROTO_CHECKING:
+	case FN_PASS_PROTO_CHECKED:
+	case FN_PASS_PROTO:
+		if (!fn_proto_eval(ctx, fn))
+			return false;
+		FALLTHROUGH();
+	case FN_PASS_EVAL:
+		// TODO("implement functions :)");
 		return true;
 	}
 error:
@@ -463,20 +611,116 @@ bool decl_ptr_list_init(VMemArena * arena, DeclPtrList * list, usize capacity) {
 Decl ** decl_ptr_list_push(DeclPtrList * list) {
 	if (list->count == list->capacity) {
 		FAIL("Capacity should be deterministic");
-		return false;
+		return NULL;
 	}
 	return &list->decls[list->count++];
 }
 
-static bool var_eval(SemaCtx * ctx, Var * var) {
+NODISCARD static bool var_decl_cycle_check(SemaCtx * ctx, Var * var) {
+	switch (var->pass) {
+	case VAR_PASS_ERROR:
+		return false;
+	case VAR_PASS_PARSED: {
+		VisitStructural visit = visitor_structural(&ctx->visitor);
+		var_set_decl_checking(var, visit.visit_id);
+		if (!type_sig_cycle_check(ctx, &var->as.checking_decl.parsed.type))
+			return false;
+		visitor_structural_restore(&ctx->visitor, visit);
+		var_set_decl_checked(var);
+		return true;
+	}
+	case VAR_PASS_DECL_CYCLE_CHECKING:
+		print_error(ctx, var->span, "detected cycle in variable type");
+		goto error;
+	case VAR_PASS_DECL_CYCLE_CHECKED:
+	case VAR_PASS_DECL_EVALUATED:
+	case VAR_PASS_EXPR_CYCLE_CHECKING:
+	case VAR_PASS_EXPR_EVALUATED:
+		return true;
+	}
+error:
+	var_set_error(var);
+	return false;
+}
+
+static bool var_decl_eval(SemaCtx * ctx, Var * var) {
 	switch (var->pass) {
 	case VAR_PASS_ERROR:
 		return false;
 	case VAR_PASS_PARSED:
-		TODO();
-	case VAR_PASS_EVALUATED:
+	case VAR_PASS_DECL_CYCLE_CHECKING:
+		if (!var_decl_cycle_check(ctx, var))
+			goto error;
+		FALLTHROUGH();
+	case VAR_PASS_DECL_CYCLE_CHECKED: {
+		TypeHandle handle = type_handle_from_sig(ctx, &var->as.parsed.type);
+		if (!type_handle_eval(ctx, handle))
+			goto error;
+		bool is_mut = var->as.parsed.is_mut;
+		bool is_const = var->as.parsed.is_const;
+		VarMutability mut = VAR_MUT_LET;
+		if (is_const) {
+			if (is_mut) {
+				print_error(ctx, var->span,
+							"const variables cannot be declared mutable");
+				goto error;
+			}
+			mut = VAR_MUT_CONST;
+		} else if (is_mut) {
+			mut = VAR_MUT_MUT;
+		}
+		var_set_decl_evalled(var, mut, handle);
+		FALLTHROUGH();
+	}
+	case VAR_PASS_EXPR_CYCLE_CHECKING:
+	case VAR_PASS_DECL_EVALUATED:
+	case VAR_PASS_EXPR_EVALUATED:
 		return true;
 	}
+error:
+	var_set_error(var);
+	return false;
+}
+
+NODISCARD static bool var_eval(SemaCtx * ctx, Var * var) {
+	switch (var->pass) {
+	case VAR_PASS_ERROR:
+		return false;
+	case VAR_PASS_PARSED:
+	case VAR_PASS_DECL_CYCLE_CHECKING:
+	case VAR_PASS_DECL_CYCLE_CHECKED:
+		if (!var_decl_eval(ctx, var))
+			return false;
+		FALLTHROUGH();
+	case VAR_PASS_DECL_EVALUATED: {
+		VisitStructural checkpoint = visitor_structural(&ctx->visitor);
+		var_set_expr_checking(var, checkpoint.visit_id);
+		if (var->as.checking_expr.decl_evalled.has_expr) {
+			TypeHandle handle;
+			if (!expr_eval(ctx, &var->as.checking_expr.decl_evalled.unwrap.expr,
+						   &handle))
+				goto error;
+			if (!expr_coerce_assignment(ctx, var->as.decl_evalled.type, handle,
+										&var->as.decl_evalled.unwrap.expr))
+				goto error;
+		}
+		var_set_expr_evalled(var);
+		return true;
+	}
+	case VAR_PASS_EXPR_CYCLE_CHECKING:
+		if (!visitor_check_structural(&ctx->visitor,
+									  var->as.checking_expr.id)) {
+			print_error(ctx, var->span,
+						"circular dependency found in variable initialization");
+			goto error;
+		}
+		FALLTHROUGH();
+	case VAR_PASS_EXPR_EVALUATED:
+		return true;
+	}
+error:
+	var_set_error(var);
+	return false;
 }
 
 bool var_env_push_scope(VMemArena * arena, VarEnv * env, VarEnv * parent,
@@ -489,6 +733,7 @@ bool var_env_push_scope(VMemArena * arena, VarEnv * env, VarEnv * parent,
 }
 
 bool var_env_push_decl(VarEnv * env, Decl * decl) {
+	ASSERT(env);
 	Decl ** ptr = decl_ptr_list_push(&env->frame.list);
 	if (!ptr)
 		return false;
@@ -511,32 +756,95 @@ Decl * var_env_lookup_decl(VarEnv * env, Iden iden) {
 	return NULL;
 }
 
-bool expr_coerce(SemaCtx * ctx, TypeHandle to, TypeHandle from, Expr * expr) {
-	ASSERT(to.type->pass == TYPE_PASS_EVALUATED);
-	ASSERT(from.type->pass == TYPE_PASS_EVALUATED);
-	if (type_handle_eq(to, from))
+typedef enum {
+	TYPE_COVARIANT,
+	TYPE_CONTRAVARIANT,
+	TYPE_INVARIANT
+} TypeVariance;
+
+bool check_type_covariance(SemaCtx * ctx, TypeHandle super, TypeHandle sub) {
+	ASSERT(super.type->pass == TYPE_PASS_EVALUATED);
+	ASSERT(sub.type->pass == TYPE_PASS_EVALUATED);
+	if (type_handle_eq(super, sub))
 		return true;
-	if (to.is_lvalue)
+	if (super.is_mut && !sub.is_mut)
 		return false;
-	if (type_is_pointer_like(to.type) && type_is_pointer_like(from.type)) {
-		TypeHandle ti = type_pointer_like_next(to.type);
-		TypeHandle fi = type_pointer_like_next(from.type);
-		do {
-			if (ti.is_mut && !fi.is_mut) {
+	if (super.type == sub.type)
+		return true;
+	switch (super.type->kind) {
+	case TYPE_BUILTIN_VOID:
+	case TYPE_BUILTIN_I32:
+	case TYPE_REF:
+		return false;
+	case TYPE_PTR:
+		if (sub.type->kind == TYPE_PTR || sub.type->kind == TYPE_REF)
+			return check_type_covariance(ctx, super.type->as.ptr_like,
+										 sub.type->as.ptr_like);
+		break;
+	case TYPE_FN:
+		if (sub.type->kind == TYPE_FN) {
+			FnType * super_fn = &super.type->as.fn;
+			FnType * sub_fn = &sub.type->as.fn;
+			if (super_fn->params.size != sub_fn->params.size)
 				return false;
-			}
-			if (ti.type->kind == TYPE_REF && fi.type->kind == TYPE_PTR) {
+			if (!check_type_covariance(ctx, super_fn->return_ty,
+									   sub_fn->return_ty))
 				return false;
+			for (usize i = 0; i < super_fn->params.size; ++i) {
+				TypeHandle super_param = super_fn->params.data[i];
+				TypeHandle sub_param = sub_fn->params.data[i];
+				if (!check_type_contravariance(ctx, super_param, sub_param))
+					return false;
 			}
-			ti = type_pointer_like_next(ti.type);
-			fi = type_pointer_like_next(fi.type);
-		} while (type_is_pointer_like(ti.type) &&
-				 type_is_pointer_like(fi.type));
-		if (type_handle_eq(ti, fi)) {
-			// TODO: let it implicitly just, kind fit?
 			return true;
 		}
 	}
+	return false;
+}
+
+NODISCARD static bool check_type_contravariance(SemaCtx * ctx, TypeHandle super,
+												TypeHandle sub) {
+	return check_type_covariance(ctx, sub, super);
+}
+
+bool expr_coerce_assignment(SemaCtx * ctx, TypeHandle to, TypeHandle from,
+							Expr * expr) {
+	ASSERT(to.type->pass == TYPE_PASS_EVALUATED);
+	ASSERT(from.type->pass == TYPE_PASS_EVALUATED);
+	if (to.type == from.type)
+		return true;
+	if (!to.is_lvalue) {
+		print_error(ctx, expr->span, "expected expression to be lvalue", to);
+		return false;
+	}
+	switch (to.type->kind) {
+	case TYPE_BUILTIN_VOID:
+	case TYPE_BUILTIN_I32:
+		break;
+	case TYPE_FN:
+		TODO("functions don't do 'assignment', make a good err msg");
+		break;
+	case TYPE_PTR:
+		if (from.type->kind == TYPE_PTR || from.type->kind == TYPE_REF) {
+			if (!check_type_covariance(ctx, to.type->as.ptr_like,
+									   from.type->as.ptr_like)) {
+				goto mismatch;
+			}
+			return true;
+		}
+		break;
+	case TYPE_REF:
+		if (from.type->kind == TYPE_REF) {
+			if (!check_type_covariance(ctx, to.type->as.ptr_like,
+									   from.type->as.ptr_like)) {
+				goto mismatch;
+			}
+			return true;
+		}
+		break;
+	}
+mismatch:
+	expected_type(ctx, expr->span, to, from);
 	return false;
 }
 
@@ -544,7 +852,49 @@ bool expr_coerce_binary(SemaCtx * ctx, TypeHandle type_a, Expr * a,
 						TypeHandle type_b, Expr * b, TypeHandle * out) {
 	ASSERT(type_a.type->pass == TYPE_PASS_EVALUATED);
 	ASSERT(type_b.type->pass == TYPE_PASS_EVALUATED);
+	if (type_a.type == type_b.type) {
+		*out = type_handle_new(type_a.type, false, false);
+		return true;
+	}
 	TODO("coerce binary expr");
+}
+
+bool expr_type_coerce_addr(SemaCtx * ctx, TypeHandle in, TypeHandle * out) {
+	ASSERT(in.type->pass == TYPE_PASS_EVALUATED);
+	// TODO: error handling
+	if (!in.is_lvalue) {
+		print_error(ctx, INVALID_SRC_SPAN, "expected lvalue");
+		return false;
+	}
+	Type * ty = type_intern_table_ref_to(ctx->arena, ctx->table, in,
+										 TYPE_PASS_EVALUATED);
+	if (!ty) {
+		sema_oom(ctx);
+	}
+	*out = type_handle_from_ptr(ty);
+	return true;
+}
+
+bool expr_type_coerce_deref(SemaCtx * ctx, TypeHandle in, TypeHandle * out) {
+	ASSERT(in.type->pass == TYPE_PASS_EVALUATED);
+	// TODO: error handling
+	if (!type_is_pointer_like(in.type)) {
+		print_error(ctx, INVALID_SRC_SPAN, "expected reference or pointer");
+		return false;
+	}
+	*out = in.type->as.ptr_like;
+	return true;
+}
+
+bool expr_type_coerce_function(SemaCtx * ctx, TypeHandle in, FnType ** out) {
+	ASSERT(in.type->pass == TYPE_PASS_EVALUATED);
+	// TODO: error handling
+	if (in.type->kind != TYPE_FN) {
+		print_error(ctx, INVALID_SRC_SPAN, "expected function, found %th", in);
+		return false;
+	}
+	*out = &in.type->as.fn;
+	return true;
 }
 
 bool expr_eval_inner(SemaCtx * ctx, Expr * expr, TypeHandle * out, bool addr) {
@@ -579,22 +929,80 @@ bool expr_eval_inner(SemaCtx * ctx, Expr * expr, TypeHandle * out, bool addr) {
 			case DECL_ERROR:
 				goto error;
 			case DECL_FN:
+				if (!fn_proto_eval(ctx, &decl->as.fn))
+					goto error;
+				*out = decl->as.fn.as.proto;
+				break;
 			case DECL_VAR:
+				if (addr) {
+					if (!var_decl_eval(ctx, &decl->as.var))
+						goto error;
+				} else {
+					if (!var_eval(ctx, &decl->as.var))
+						goto error;
+				}
+				*out = decl->as.var.as.decl_evalled.type;
 				break;
 			case DECL_TYPE_ALIAS:
 				TODO("report error");
 				goto error;
 			}
-			expr->sema_kind = EXPR_SEMA_LOAD_PTR;
+			if (addr) {
+				expr->sema_kind = EXPR_SEMA_LOAD_PTR;
+			} else {
+				expr->sema_kind = EXPR_SEMA_DEREF;
+			}
 			expr->as.sema.load_ptr = decl;
 			break;
 		}
-		case EXPR_ADDR:
-		case EXPR_DEREF:
-		case EXPR_FUNCALL:
+		case EXPR_ADDR: {
+			TypeHandle in;
+			if (!expr_eval_inner(ctx, expr->as.parsed.addr, &in, true))
+				goto error;
+			*expr = *expr->as.parsed.addr;
+			if (!expr_type_coerce_addr(ctx, in, out)) {
+				goto error;
+			}
+			break;
+		}
+		case EXPR_DEREF: {
+			TypeHandle in;
+			if (!expr_eval_inner(ctx, expr->as.parsed.deref, &in, false))
+				goto error;
+			if (!expr_type_coerce_deref(ctx, in, out))
+				goto error;
+			expr->sema_kind = EXPR_SEMA_DEREF;
+			expr->as.sema.deref = expr->as.parsed.deref;
+			break;
+		}
 		case EXPR_NULLPTR:
+			expr->sema_kind = EXPR_SEMA_NULLPTR;
+			*out = nullptr_type_handle(ctx);
+			break;
 		case EXPR_VOID:
-			TODO();
+			expr->sema_kind = EXPR_SEMA_VOID;
+			*out = void_type_handle(ctx);
+			break;
+		case EXPR_FUNCALL: {
+			expr->sema_kind = EXPR_SEMA_FUNCALL;
+			TypeHandle in;
+			FnType * fn;
+			if (!expr_eval_inner(ctx, expr->as.funcall.fun, &in, false))
+				goto error;
+			if (!expr_type_coerce_function(ctx, in, &fn))
+				goto error;
+			for (usize i = 0; i < expr->as.funcall.args.size; ++i) {
+				Expr * arg = expr->as.funcall.args.data[i];
+				TypeHandle expected = fn->params.data[i];
+				TypeHandle actual;
+				if (!expr_eval_inner(ctx, arg, &actual, false))
+					goto error;
+				if (!expr_coerce_assignment(ctx, expected, actual, arg))
+					goto error;
+			}
+			*out = fn->return_ty;
+			break;
+		}
 		}
 		expr->pass = EXPR_PASS_EVALLED;
 		FALLTHROUGH();
@@ -604,6 +1012,10 @@ bool expr_eval_inner(SemaCtx * ctx, Expr * expr, TypeHandle * out, bool addr) {
 error:
 	expr_set_error(expr);
 	return false;
+}
+
+bool expr_eval(SemaCtx * ctx, Expr * expr, TypeHandle * out) {
+	return expr_eval_inner(ctx, expr, out, false);
 }
 
 void sema_ctx_init(SemaCtx * ctx, Ast * ast, VMemArena * arena,
@@ -635,7 +1047,7 @@ bool sema_ctx_run(SemaCtx * ctx) {
 			continue;
 		case DECL_FN:
 			LOG("evaluating fn %s[%p]", decl->iden, &decl->as.alias);
-			ok = ok && fn_proto_eval(ctx, &decl->as.fn);
+			ok = ok && fn_eval(ctx, &decl->as.fn);
 			continue;
 		case DECL_TYPE_ALIAS:
 			LOG("evaluating alias %s[%p]", decl->iden, &decl->as.alias);

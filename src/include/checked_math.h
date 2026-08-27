@@ -17,8 +17,12 @@ static inline bool ckd_sub_usize(usize a, usize b, usize * c) {
 	return true;
 }
 
+#if USIZE_MAX == U64_MAX
 #define ckd_add_u64 ckd_add_usize
 #define ckd_sub_u64 ckd_sub_usize
+#else
+#error unsupported word size
+#endif
 
 static inline bool ckd_add_ptr(void * a, usize b, void ** c) {
 	return ckd_add_usize((usize)a, b, (usize *)c);

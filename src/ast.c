@@ -2,33 +2,38 @@
 #include "include/debug.h"
 #include "include/utility.h"
 
-TypeSig type_sig_ptr_from_ast(TypeSig * next) {
+TypeSig type_sig_ptr_from_ast(SrcSpan span, TypeSig * next) {
 	return (TypeSig){
+		.span = span,
 		.pass = TYPE_SIG_PASS_PARSED,
 		.is_mut = false,
 		.kind = TYPE_SIG_PTR,
-		.as.ptr = next,
+		.as.ptr_like = next,
 	};
 }
 
-TypeSig type_sig_ref_from_ast(TypeSig * next) {
+TypeSig type_sig_ref_from_ast(SrcSpan span, TypeSig * next) {
 	return (TypeSig){
+		.span = span,
 		.pass = TYPE_SIG_PASS_PARSED,
 		.is_mut = false,
 		.kind = TYPE_SIG_REF,
-		.as.ref = next,
+		.as.ptr_like = next,
 	};
 }
 
-TypeSig type_sig_fn_from_ast(TypeSig * return_ty, TypeSigList params) {
-	return (TypeSig){.pass = TYPE_SIG_PASS_PARSED,
+TypeSig type_sig_fn_from_ast(SrcSpan span, TypeSig * return_ty,
+							 TypeSigList params) {
+	return (TypeSig){.span = span,
+					 .pass = TYPE_SIG_PASS_PARSED,
 					 .is_mut = false,
 					 .kind = TYPE_SIG_FN,
 					 .as.fn = {.return_ty = return_ty, .params = params}};
 }
 
-TypeSig type_sig_iden_from_ast(Iden iden) {
+TypeSig type_sig_iden_from_ast(SrcSpan span, Iden iden) {
 	return (TypeSig){
+		.span = span,
 		.pass = TYPE_SIG_PASS_PARSED,
 		.is_mut = false,
 		.kind = TYPE_SIG_IDEN,
@@ -38,8 +43,9 @@ TypeSig type_sig_iden_from_ast(Iden iden) {
 
 void type_sig_set_mut(TypeSig * type) { type->is_mut = true; }
 
-TypeSig type_sig_void(void) {
+TypeSig type_sig_void(SrcSpan span) {
 	return (TypeSig){
+		.span = span,
 		.pass = TYPE_SIG_PASS_PARSED,
 		.kind = TYPE_SIG_VOID,
 	};
@@ -267,6 +273,42 @@ void type_alias_set_evalled(TypeAlias * alias, TypeHandle handle) {
 
 bool type_alias_is_error(const TypeAlias * alias) {
 	return alias->pass == TYPE_ALIAS_PASS_ERROR;
+}
+
+void var_set_decl_checking(Var * var, VisitIndex id) {
+	ASSERT(var->pass == VAR_PASS_PARSED);
+	var->pass = VAR_PASS_DECL_CYCLE_CHECKING;
+	var->as.checking_decl.id = id;
+}
+
+void var_set_decl_checked(Var * var) {
+	ASSERT(var->pass == VAR_PASS_DECL_CYCLE_CHECKING);
+	var->pass = VAR_PASS_DECL_CYCLE_CHECKED;
+}
+
+void var_set_decl_evalled(Var * var, VarMutability mut, TypeHandle type) {
+	ASSERT(var->pass == VAR_PASS_DECL_CYCLE_CHECKED);
+	bool has_expr = var->as.parsed.has_expr;
+	if (has_expr) {
+		Expr inter = var->as.parsed.unwrap.expr;
+		var->as.decl_evalled.unwrap.expr = inter;
+	}
+	var->as.decl_evalled.has_expr = has_expr;
+	var->as.decl_evalled.mutability = mut;
+	type.is_lvalue = true;
+	var->as.decl_evalled.type = type;
+	var->pass = VAR_PASS_DECL_EVALUATED;
+}
+
+void var_set_expr_checking(Var * var, VisitIndex id) {
+	ASSERT(var->pass == VAR_PASS_DECL_EVALUATED);
+	var->pass = VAR_PASS_EXPR_CYCLE_CHECKING;
+	var->as.checking_expr.id = id;
+}
+
+void var_set_expr_evalled(Var * var) {
+	ASSERT(var->pass == VAR_PASS_EXPR_CYCLE_CHECKING);
+	var->pass = VAR_PASS_EXPR_EVALUATED;
 }
 
 Var var_error(void) {

@@ -1,4 +1,5 @@
 #include "include/fmt.h"
+#include "include/ast.h"
 #include "include/debug.h"
 #include "include/lexer.h"
 #include "include/utility.h"
@@ -55,6 +56,93 @@ void c4print_decimal(FILE * file, bool minus, I128 i) {
 	fwrite(buffer, 1, (usize)(cursor - buffer), file);
 }
 
+void c4print_type_sig(FILE * file, TypeSig * sig) {
+	if (sig->is_mut) {
+		c4print(file, "mut ");
+	}
+	switch (sig->pass) {
+	case TYPE_SIG_PASS_ERROR:
+		FAIL("<error>");
+	case TYPE_SIG_PASS_PARSED:
+	case TYPE_SIG_PASS_CYCLE_CHECKED:
+		switch (sig->kind) {
+		case TYPE_SIG_PTR:
+			c4print(file, "*");
+			c4print_type_sig(file, sig->as.ptr_like);
+			break;
+		case TYPE_SIG_REF:
+			c4print(file, "&");
+			c4print_type_sig(file, sig->as.ptr_like);
+			break;
+		case TYPE_SIG_IDEN:
+			c4printf(file, "%s", sig->as.iden);
+			break;
+		case TYPE_SIG_VOID:
+			c4print(file, "void");
+			break;
+		case TYPE_SIG_FN:
+			c4print(file, "fn(");
+			// on overflow the loop is skipped
+			usize last_idx = sig->as.fn.params.size - 1;
+			for (usize i = 0; i < sig->as.fn.params.size; ++i) {
+				TypeSig * ty = type_sig_list_at(&sig->as.fn.params, i);
+				c4print_type_sig(file, ty);
+				if (i != last_idx)
+					c4print(file, ", ");
+			}
+			c4print(file, "): ");
+			c4print_type_sig(file, sig->as.fn.return_ty);
+			break;
+		case TYPE_SIG_ALIAS_STUB:
+		case TYPE_SIG_TYPE_STUB:
+			break;
+		}
+		break;
+	}
+}
+
+void c4print_type_handle(FILE * file, TypeHandle handle) {
+	if (handle.is_mut) {
+		c4print(file, "mut ");
+	}
+	switch (handle.type->pass) {
+	case TYPE_PASS_ERROR:
+		c4print(file, "<error>");
+		break;
+	case TYPE_PASS_CHECKED:
+	case TYPE_PASS_EVALUATED:
+		switch (handle.type->kind) {
+		case TYPE_BUILTIN_VOID:
+			c4print(file, "void");
+			break;
+		case TYPE_BUILTIN_I32:
+			c4print(file, "i32");
+			break;
+		case TYPE_PTR:
+			c4print(file, "*");
+			c4print_type_handle(file, handle.type->as.ptr_like);
+			break;
+		case TYPE_REF:
+			c4print(file, "&");
+			c4print_type_handle(file, handle.type->as.ptr_like);
+			break;
+		case TYPE_FN:
+			c4print(file, "fn(");
+			// on overflow the loop is skipped
+			usize last_idx = handle.type->as.fn.params.size - 1;
+			for (usize i = 0; i < handle.type->as.fn.params.size; ++i) {
+				TypeHandle ty = handle.type->as.fn.params.data[i];
+				c4print_type_handle(file, ty);
+				if (i != last_idx)
+					c4print(file, ", ");
+			}
+			c4print(file, "): ");
+			c4print_type_handle(file, handle.type->as.fn.return_ty);
+			break;
+		}
+	}
+}
+
 void c4vaprintf(FILE * file, const char * path, va_list va) {
 	while (*path != '\0') {
 		char c = next(&path);
@@ -87,10 +175,27 @@ void c4vaprintf(FILE * file, const char * path, va_list va) {
 				UNREACHABLE();
 			}
 		case 't':
-			ASSERT(next(&path) == 'i');
-			STATIC_ASSERT(sizeof(TokenIndex) == sizeof(u32),
-						  "TokenIndex format needs to be updated");
-			goto case_uw;
+			switch (next(&path)) {
+			case 'i': {
+				STATIC_ASSERT(sizeof(TokenIndex) == sizeof(u32),
+							  "TokenIndex format needs to be updated");
+				goto case_uw;
+				break;
+			}
+			case 's': {
+				TypeSig * sig = va_arg(va, TypeSig *);
+				c4print_type_sig(file, sig);
+				break;
+			}
+			case 'h': {
+				TypeHandle handle = va_arg(va, TypeHandle);
+				c4print_type_handle(file, handle);
+				break;
+			}
+			default:
+				UNREACHABLE();
+			}
+			break;
 		case 'i':
 			switch (next(&path)) {
 			case 'w': {

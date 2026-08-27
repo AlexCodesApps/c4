@@ -106,14 +106,15 @@ static bool expect(Parser * parser, TokenKind type, const char * msg) {
 }
 
 static TokenIndex src_span_begin(Parser * parser) {
-	if (UNLIKELY(parser->lexer.index > TOKEN_INDEX_MAX)) {
+	TokenIndex start = peek(parser)->start;
+	if (UNLIKELY(start > TOKEN_INDEX_MAX)) {
 		// TODO: Lowkey hacky
 		print_error(parser,
 					"source file is longer than TOKEN_INDEX_MAX(%ti) bytes",
 					TOKEN_INDEX_MAX);
 		longjmp(parser->overflow_handler, 1);
 	}
-	return (TokenIndex)parser->lexer.index;
+	return (TokenIndex)start;
 }
 
 static SrcSpan src_span_end(Parser * parser, TokenIndex index) {
@@ -271,6 +272,8 @@ static void recover_param_list_error(Parser * parser);
 static bool parse_type(Parser * parser, TypeSig * out) {
 	TypeSig type;
 	TypeSig * next;
+	TokenIndex begin = src_span_begin(parser);
+	SrcSpan span;
 	switch (peek_kind(parser)) {
 	case TOKEN_MUT:
 		advance(parser);
@@ -284,27 +287,31 @@ static bool parse_type(Parser * parser, TypeSig * out) {
 		if (!parse_type(parser, &type)) {
 			return false;
 		}
+		span = src_span_end(parser, begin);
 		next = parser_alloc(parser, TypeSig);
 		*next = type;
-		*out = type_sig_ptr_from_ast(next);
+		*out = type_sig_ptr_from_ast(span, next);
 		return true;
 	case TOKEN_AMPERSAND:
 		advance(parser);
 		if (!parse_type(parser, &type)) {
 			return false;
 		}
+		span = src_span_end(parser, begin);
 		next = parser_alloc(parser, TypeSig);
 		*next = type;
-		*out = type_sig_ref_from_ast(next);
+		*out = type_sig_ref_from_ast(span, next);
 		return true;
 	case TOKEN_IDEN: {
 		Iden iden = peek_str(parser);
-		*out = type_sig_iden_from_ast(iden);
 		advance(parser);
+		span = src_span_end(parser, begin);
+		*out = type_sig_iden_from_ast(span, iden);
 		return true;
 	case TOKEN_VOID:
 		advance(parser);
-		*out = type_sig_void();
+		span = src_span_end(parser, begin);
+		*out = type_sig_void(span);
 		return true;
 	case TOKEN_FN: {
 		advance(parser);
@@ -332,9 +339,10 @@ static bool parse_type(Parser * parser, TypeSig * out) {
 			if (!parse_type(parser, return_ty))
 				return false;
 		} else {
-			*return_ty = type_sig_void();
+			*return_ty = type_sig_void(SRC_SPAN_VOID);
 		}
-		*out = type_sig_fn_from_ast(return_ty, params);
+		span = src_span_end(parser, begin);
+		*out = type_sig_fn_from_ast(span, return_ty, params);
 		return true;
 	}
 	}
@@ -345,7 +353,8 @@ static bool parse_type(Parser * parser, TypeSig * out) {
 }
 
 typedef bool (*ExprPrefixFn)(Parser * parser, Expr * out);
-typedef bool (*ExprPostfixFn)(Parser * parser, Expr prefix, Expr * out);
+typedef bool (*ExprPostfixFn)(Parser * parser, Expr prefix, Expr * out,
+							  TokenIndex begin);
 
 typedef enum {
 	EXPR_PREC_NONE,
@@ -488,6 +497,7 @@ static void recover_parse_expr_error_in_parens(Parser * parser) {
 }
 
 static bool expr_parens(Parser * parser, Expr * out) {
+	TokenIndex begin = src_span_begin(parser);
 	advance(parser); // '('
 	if (!parse_expr(parser, out)) {
 		*out = expr_error();
@@ -496,11 +506,12 @@ static bool expr_parens(Parser * parser, Expr * out) {
 	if (!expect(parser, TOKEN_RPAREN, "expected ')'")) {
 		return false;
 	}
+	out->span = src_span_end(parser, begin);
 	return true;
 }
 
-static bool expr_funcall(Parser * parser, Expr prefix, Expr * out) {
-	TokenIndex index = src_span_begin(parser);
+static bool expr_funcall(Parser * parser, Expr prefix, Expr * out,
+						 TokenIndex begin) {
 	advance(parser); // '('
 	ExprList list = {0};
 	if (!match(parser, TOKEN_RPAREN)) {
@@ -516,7 +527,7 @@ static bool expr_funcall(Parser * parser, Expr prefix, Expr * out) {
 			return false;
 		}
 	}
-	SrcSpan span = src_span_end(parser, index);
+	SrcSpan span = src_span_end(parser, begin);
 	Expr * fun = parser_alloc(parser, Expr);
 	*fun = prefix;
 	*out = expr_funcall_from_ast(span, fun, list);
@@ -537,10 +548,10 @@ static bool expr_addr(Parser * parser, Expr * out) {
 	return true;
 }
 
-static bool expr_deref(Parser * parser, Expr prefix, Expr * out) {
-	TokenIndex index = src_span_begin(parser);
+static bool expr_deref(Parser * parser, Expr prefix, Expr * out,
+					   TokenIndex begin) {
 	advance(parser); // .*
-	SrcSpan span = src_span_end(parser, index);
+	SrcSpan span = src_span_end(parser, begin);
 	Expr * ptr = parser_alloc(parser, Expr);
 	*ptr = prefix;
 	*out = expr_deref_from_ast(span, ptr);
@@ -597,8 +608,8 @@ static bool _expr_nullptr(Parser * parser, Expr * out) {
 	return true;
 }
 
-static bool expr_plus(Parser * parser, Expr prefix, Expr * out) {
-	TokenIndex index = src_span_begin(parser);
+static bool expr_plus(Parser * parser, Expr prefix, Expr * out,
+					  TokenIndex begin) {
 	advance(parser); // '+'
 	Expr expr2;
 	if (!parse_expr_prec(parser, EXPR_PREC_TERM, &expr2)) {
@@ -608,7 +619,7 @@ static bool expr_plus(Parser * parser, Expr prefix, Expr * out) {
 	Expr * b = parser_alloc(parser, Expr);
 	*a = prefix;
 	*b = expr2;
-	SrcSpan span = src_span_end(parser, index);
+	SrcSpan span = src_span_end(parser, begin);
 	*out = expr_plus_from_ast(span, a, b);
 	return true;
 }
@@ -631,6 +642,7 @@ static bool parse_expr_prec(Parser * parser, ExprPrec prec, Expr * out) {
 		return false;
 	}
 	Expr expr;
+	TokenIndex begin = src_span_begin(parser);
 	if (!rule->prefix(parser, &expr)) {
 		return false;
 	}
@@ -639,7 +651,7 @@ static bool parse_expr_prec(Parser * parser, ExprPrec prec, Expr * out) {
 		if (rule->prec < prec) {
 			break;
 		}
-		if (!rule->postfix(parser, expr, &expr)) {
+		if (!rule->postfix(parser, expr, &expr, begin)) {
 			return false;
 		}
 	}
@@ -707,7 +719,7 @@ static Fn parse_fn(Parser * parser, bool is_const, TokenIndex begin,
 			goto error;
 		}
 	} else {
-		return_ty = type_sig_void();
+		return_ty = type_sig_void(SRC_SPAN_VOID);
 	}
 	StmtBlock block;
 	if (!parse_block(parser, &block)) {

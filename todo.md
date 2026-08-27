@@ -30,6 +30,7 @@ MAIN BRANCH
 - [ ] Implement addition with ptr offset support
 - [ ] Implement overflow checking and handling
 - [ ] Make sure variable shadowing works correctly
+
 NOTES:
 - Functions don't need scope checking, at least until lambdas...
 

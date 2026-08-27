@@ -26,9 +26,14 @@ typedef struct {
 	TokenIndex end;
 } SrcSpan;
 
-bool src_span_is_valid(const SrcSpan * span);
+bool src_span_is_text(const SrcSpan * span);
 
-#define INVALID_SRC_SPAN ((SrcSpan){TOKEN_INDEX_MAX, 0})
+#define CUSTOM_SRC_SPAN(code) ((SrcSpan){code, 0})
+#define INVALID_SRC_SPAN_BEGIN TOKEN_INDEX_MAX
+#define SRC_SPAN_VOID_BEGIN (TOKEN_INDEX_MAX + 1)
+
+#define INVALID_SRC_SPAN CUSTOM_SRC_SPAN(INVALID_SRC_SPAN_BEGIN)
+#define SRC_SPAN_VOID CUSTOM_SRC_SPAN(SRC_SPAN_VOID_BEGIN)
 
 VisitorState visitor_state_new(void);
 

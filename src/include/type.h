@@ -49,8 +49,7 @@ struct Type {
 	TypePass pass : 4 * 8;
 	TypeKind kind : 4 * 8;
 	union {
-		TypeHandle ptr;
-		TypeHandle ref;
+		TypeHandle ptr_like;
 		FnType fn;
 	} as;
 	struct {
@@ -87,7 +86,7 @@ static bool type_is_sized(Type * type) {
 
 static TypeHandle type_pointer_like_next(Type * type) {
 	ASSERT(type_is_pointer_like(type));
-	return type->kind == TYPE_PTR ? type->as.ptr : type->as.ref;
+	return type->as.ptr_like;
 }
 
 typedef struct {
@@ -106,8 +105,9 @@ typedef struct {
 
 void type_intern_table_init(TypeInternTable * table);
 Type * type_intern_table_ptr_to(VMemArena * arena, TypeInternTable * table,
-								TypeHandle type);
+								TypeHandle type, TypePass pass);
 Type * type_intern_table_ref_to(VMemArena * arena, TypeInternTable * table,
-								TypeHandle type);
+								TypeHandle type, TypePass pass);
 Type * type_intern_table_fn_of(VMemArena * arena, TypeInternTable * table,
-							   TypeHandle return_ty, TypeHandleSpan params);
+							   TypeHandle return_ty, TypeHandleSpan params,
+							   TypePass pass);
