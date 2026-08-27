@@ -273,3 +273,45 @@ void c4printf(FILE * file, const char * path, ...) {
 	c4vaprintf(file, path, va);
 	va_end(va);
 }
+
+usize c4cellwidth(Str line) {
+	usize count = 0;
+	for (usize i = 0; i < line.size; ++i) {
+		count += line.data[i] == '\t' ? TABWIDTH : 1;
+	}
+	return count;
+}
+
+void c4usr_print(FILE * file, Str line) {
+	for (usize i = 0; i < line.size; ++i) {
+		char ch = line.data[i];
+		if (ch == '\t')
+			c4print_space(file, TABWIDTH);
+		else
+			fputc(ch, file);
+	}
+}
+
+void c4print_errline(FILE * file, usize count) {
+	c4print(file, "\x1b[31m");
+	for (usize i = 0; i < count; ++i)
+		fputc('~', file);
+	c4print(file, "\x1b[0m");
+}
+
+void c4print_space(FILE * file, usize count) {
+	for (usize i = 0; i < count; ++i)
+		fputc(' ', file);
+}
+
+void c4setcolor(FILE * file, C4FmtColor color) {
+	const char * code;
+	switch (color) {
+	case C4FMT_COLOR_RED:
+		code = "\x1b[31m";
+		break;
+	}
+	c4print(file, code);
+}
+
+void c4resetcolor(FILE * file) { c4print(file, "\x1b[0m"); }

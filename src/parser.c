@@ -14,8 +14,6 @@ typedef struct {
 	Token token1;
 	Token token2;
 	Lexer lexer;
-	usize row1, col1;
-	usize row2, col2;
 	VMemArena * arena;
 	jmp_buf oom_handler;
 	jmp_buf overflow_handler;
@@ -24,40 +22,76 @@ typedef struct {
 	bool panic_mode;
 } Parser;
 
-static void _print_error(Str path, usize row, usize col, const char * msg,
+static void _print_error_va(Str src, Str path, TokenIndex off, const char * msg,
+							va_list va) {
+	usize row, col;
+	token_index_row_col(src, off, &row, &col);
+	c4printf(stderr, "in %s[%uq, %uq]:\n", path, row, col);
+	StrLineIter iter;
+	str_line_iter_new(&iter, src, off);
+	Str line = str_line_iter_current_line(&iter);
+	{
+		StrLineIter pre_iter = iter;
+		Str pre;
+		if (str_line_iter_last_line(&pre_iter, &pre)) {
+			c4usr_print(stderr, pre);
+			fputc('\n', stderr);
+		}
+	}
+	c4usr_print(stderr, line);
+	fputc('\n', stderr);
+	Str pre, mid, post;
+	str_split_at_idx(line, col - 1, &pre, &mid);
+	str_split_at_idx(mid, 1, &mid, &post);
+	c4print_space(stderr, c4cellwidth(pre));
+	c4setcolor(stderr, C4FMT_COLOR_RED);
+	fputc('^', stderr);
+	c4resetcolor(stderr);
+	if (mid.size && mid.data[0] == '\t') {
+		c4print_space(stderr, TABWIDTH - 1);
+	}
+	c4print_space(stderr, c4cellwidth(post));
+	fputc('\n', stderr);
+	if (str_line_iter_next_line(&iter, &line)) {
+		c4usr_print(stderr, line);
+		fputc('\n', stderr);
+	}
+	c4setcolor(stderr, C4FMT_COLOR_RED);
+	c4print(stderr, "error: ");
+	c4vaprintf(stderr, msg, va);
+	fputc('\n', stderr);
+	c4resetcolor(stderr);
+}
+
+static void _print_error(Str src, Str path, TokenIndex off, const char * msg,
 						 ...) {
-	c4printf(stderr, "in %s[%uq, %uq]: ", path, row, col);
 	va_list va;
 	va_start(va, msg);
-	c4vaprintf(stderr, msg, va);
+	_print_error_va(src, path, off, msg, va);
 	va_end(va);
-	putc('\n', stderr);
 }
 
 static void print_error(Parser * parser, const char * msg, ...) {
-	c4printf(stderr, "in %s[%uq, %uq]: ", parser->path, parser->row1,
-			 parser->col1);
 	va_list va;
 	va_start(va, msg);
-	c4vaprintf(stderr, msg, va);
+	_print_error_va(parser->lexer.src, parser->path, parser->token1.start, msg,
+					va);
 	va_end(va);
-	putc('\n', stderr);
 	parser->had_error = true;
 }
 
-static Token next_valid_token(Parser * parser, usize * row, usize * col) {
+static Token next_valid_token(Parser * parser) {
 	for (;;) {
-		usize _row = lexer_row(&parser->lexer);
-		usize _col = lexer_col(&parser->lexer);
+		// TODO: the row and col here are stale after lexing whitespace
+		// next, recomputing row and col is lowkey wasteful, but hurts fastpath?
 		Token token = lexer_next(&parser->lexer);
 		if (token.kind == TOKEN_ERR) {
 			parser->had_error = true;
-			_print_error(parser->path, _row, _col, "unexpected character '%ch'",
+			_print_error(parser->lexer.src, parser->path, token.start,
+						 "unexpected character '%ch'",
 						 *lexer_token_str(&parser->lexer, &token).data);
 			continue;
 		}
-		*row = _row;
-		*col = _col;
 		return token;
 	}
 }
@@ -76,9 +110,7 @@ static TokenKind peek_kind2(Parser * parser) { return parser->token2.kind; }
 
 static void advance(Parser * parser) {
 	parser->token1 = parser->token2;
-	parser->row1 = parser->row2;
-	parser->col1 = parser->col2;
-	parser->token2 = next_valid_token(parser, &parser->row2, &parser->col2);
+	parser->token2 = next_valid_token(parser);
 }
 
 static bool match(Parser * parser, TokenKind kind) {
@@ -867,8 +899,8 @@ ParseResult parse_src(VMemArena * arena, Str path, Str src, Ast * out) {
 	parser.had_error = false;
 	parser.panic_mode = false;
 	parser.path = path;
-	parser.token1 = next_valid_token(&parser, &parser.row1, &parser.col1);
-	parser.token2 = next_valid_token(&parser, &parser.row2, &parser.col2);
+	parser.token1 = next_valid_token(&parser);
+	parser.token2 = next_valid_token(&parser);
 	if (setjmp(parser.oom_handler)) {
 		return PARSE_RESULT_OOM;
 	}

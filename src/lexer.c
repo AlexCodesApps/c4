@@ -198,3 +198,18 @@ Token lexer_next(Lexer * lexer) {
 	advance(lexer);
 	return make_token(lexer, start, TOKEN_ERR);
 }
+
+void token_index_row_col(Str src, TokenIndex idx, usize * out_row,
+						 usize * out_col) {
+	usize row = 1;
+	usize col = 1;
+	for (usize i = 0; i < idx; ++i) {
+		if (src.data[i] == '\n') {
+			col = 0;
+			++row;
+		}
+		++col;
+	}
+	*out_row = row;
+	*out_col = col;
+}

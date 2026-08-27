@@ -68,4 +68,7 @@ bool vm_init(VM * vm, VMVarEnv * base);
 VMPtr vm_load_ptr(VM * vm, void ** address);
 void vm_store_ptr(VM * vm, VMPtr address, VMPtr value);
 bool vm_load_u8(VM * vm, VMPtr address, u8 * out);
+bool vm_load_u16(VM * vm, VMPtr address, u16 * out);
+bool vm_load_u32(VM * vm, VMPtr address, u32 * out);
+bool vm_load_u64(VM * vm, VMPtr address, u64 * out);
 void vm_free(VM * vm);

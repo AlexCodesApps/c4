@@ -1,6 +1,9 @@
 #pragma once
 #include "i128.h"
+#include "str.h"
 #include <stdio.h>
+
+#define TABWIDTH 4
 
 void c4print(FILE * file, const char * msg);
 void c4println(FILE * file, const char * msg);
@@ -21,3 +24,15 @@ void c4print_decimal(FILE * file, bool sign, I128 i);
 // | %th    | print TypeHandle                   |
 void c4printf(FILE * file, const char * path, ...);
 void c4vaprintf(FILE * file, const char * path, va_list va);
+
+usize c4cellwidth(Str str);
+void c4usr_print(FILE * file, Str str);
+void c4print_errline(FILE * file, usize count);
+void c4print_space(FILE * file, usize count);
+
+typedef enum {
+	C4FMT_COLOR_RED,
+} C4FmtColor;
+
+void c4setcolor(FILE * file, C4FmtColor color);
+void c4resetcolor(FILE * file);

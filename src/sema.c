@@ -52,38 +52,6 @@ static void * sema_alloc_bytes_n(SemaCtx * ctx, usize size, usize n,
 #define sema_alloc_n(ctx, T, n)                                                \
 	(T *)sema_alloc_bytes_n((ctx), sizeof(T), (n), ALIGNOF(T))
 
-#define TABWIDTH 4
-
-static usize cell_width(Str line) {
-	usize count = 0;
-	for (usize i = 0; i < line.size; ++i) {
-		count += line.data[i] == '\t' ? TABWIDTH : 1;
-	}
-	return count;
-}
-
-static void print_errline(usize count) {
-	c4print(stderr, "\x1b[31m");
-	for (usize i = 0; i < count; ++i)
-		fputc('~', stderr);
-	c4print(stderr, "\x1b[0m");
-}
-
-static void print_space(usize count) {
-	for (usize i = 0; i < count; ++i)
-		fputc(' ', stderr);
-}
-
-static void print_line(Str line) {
-	for (usize i = 0; i < line.size; ++i) {
-		char ch = line.data[i];
-		if (ch == '\t')
-			print_space(TABWIDTH);
-		else
-			fputc(ch, stderr);
-	}
-}
-
 static void print_grid(Str src, SrcSpan span, usize brow, usize bcol,
 					   usize erow, usize ecol) {
 	if (brow == erow) {
@@ -91,11 +59,11 @@ static void print_grid(Str src, SrcSpan span, usize brow, usize bcol,
 		Str before_line, middle, after_line;
 		str_split_at_idx(line, bcol, &before_line, &middle);
 		str_split_at_idx(middle, ecol - bcol, &middle, &after_line);
-		print_line(line);
+		c4usr_print(stderr, line);
 		fputc('\n', stderr);
-		print_space(cell_width(before_line));
-		print_errline(cell_width(middle));
-		print_space(cell_width(after_line));
+		c4print_space(stderr, c4cellwidth(before_line));
+		c4print_errline(stderr, c4cellwidth(middle));
+		c4print_space(stderr, c4cellwidth(after_line));
 		fputc('\n', stderr);
 		return;
 	}
@@ -108,41 +76,41 @@ static void print_grid(Str src, SrcSpan span, usize brow, usize bcol,
 	{
 		Str ctx;
 		if (str_line_iter_last_line(&begin, &ctx)) {
-			print_line(ctx);
+			c4usr_print(stderr, ctx);
 			fputc('\n', stderr);
 		}
 		Str before_line, err_line;
 		str_split_at_idx(begin_line, bcol, &before_line, &err_line);
-		print_line(begin_line);
+		c4usr_print(stderr, begin_line);
 		fputc('\n', stderr);
-		print_space(cell_width(before_line));
-		print_errline(cell_width(err_line));
+		c4print_space(stderr, c4cellwidth(before_line));
+		c4print_errline(stderr, c4cellwidth(err_line));
 		fputc('\n', stderr);
 	}
 	Str line;
 	while (str_line_iter_next_line(&middle, &line)) {
 		if (line.data == end_line.data)
 			break;
-		print_line(line);
+		c4usr_print(stderr, line);
 		fputc('\n', stderr);
-		print_errline(cell_width(line));
+		c4print_errline(stderr, c4cellwidth(line));
 		fputc('\n', stderr);
 	}
 	if (end_line.size > 0 && ecol > 0) {
 		Str err_line, after_line;
 		str_split_at_idx(end_line, ecol, &err_line, &after_line);
-		print_line(end_line);
+		c4usr_print(stderr, end_line);
 		fputc('\n', stderr);
-		print_errline(cell_width(err_line));
-		print_space(cell_width(after_line));
+		c4print_errline(stderr, c4cellwidth(err_line));
+		c4print_space(stderr, c4cellwidth(after_line));
 		fputc('\n', stderr);
 		Str ctx;
 		if (str_line_iter_next_line(&end, &ctx)) {
-			print_line(ctx);
+			c4usr_print(stderr, ctx);
 			fputc('\n', stderr);
 		}
 	} else {
-		print_line(end_line);
+		c4usr_print(stderr, end_line);
 		fputc('\n', stderr);
 	}
 }
@@ -175,12 +143,14 @@ static void print_error(SemaCtx * ctx, SrcSpan span, const char * msg, ...) {
 		c4printf(stderr, "in %s[%uq, %uq]:\n", ctx->path, brow, bcol);
 		print_grid(src, span, brow - 1, bcol - 1, row - 1, col - 1);
 	}
-	c4print(stderr, "\x1b[31merror: ");
+	c4setcolor(stderr, C4FMT_COLOR_RED);
+	c4print(stderr, "error: ");
 	va_list va;
 	va_start(va, msg);
 	c4vaprintf(stderr, msg, va);
 	va_end(va);
-	c4print(stderr, "\x1b[0m\n");
+	c4resetcolor(stderr);
+	fputc('\n', stderr);
 }
 
 static void expected_type(SemaCtx * ctx, SrcSpan span, TypeHandle expected,

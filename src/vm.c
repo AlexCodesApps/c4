@@ -130,9 +130,28 @@ void vm_store_ptr(VM * vm, VMPtr address, VMPtr value) {
 
 void vm_free(VM * vm) { vmem_arena_free(&vm->stack); }
 
+#define VM_LOAD_PTR(vm, address, out, type)                                    \
+	do {                                                                       \
+		(void)vm;                                                              \
+		ASSERT(vm_ptr_is_valid(address));                                      \
+		if ((type *)address.info->end - (type *)address.ptr < 1)               \
+			return false;                                                      \
+		*out = *(type *)address.ptr;                                           \
+		return true;                                                           \
+	} while (0)
+
 bool vm_load_u8(VM * vm, VMPtr address, u8 * out) {
-	ASSERT(vm_ptr_is_valid(address));
-	if ((u8 *)address.info->end - (u8 *)address.info->start < 1)
-		return false;
-	return *(u8 *)address.ptr;
+	VM_LOAD_PTR(vm, address, out, u8);
+}
+
+bool vm_load_u16(VM * vm, VMPtr address, u16 * out) {
+	VM_LOAD_PTR(vm, address, out, u16);
+}
+
+bool vm_load_u32(VM * vm, VMPtr address, u32 * out) {
+	VM_LOAD_PTR(vm, address, out, u32);
+}
+
+bool vm_load_u64(VM * vm, VMPtr address, u64 * out) {
+	VM_LOAD_PTR(vm, address, out, u64);
 }
