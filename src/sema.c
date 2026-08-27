@@ -120,28 +120,12 @@ static void print_error(SemaCtx * ctx, SrcSpan span, const char * msg, ...) {
 	if (!src_span_is_text(&span)) {
 		c4printf(stderr, "in %s[?]: ", ctx->path);
 	} else {
-		usize i;
-		usize row = 1;
-		usize col = 1;
-		usize brow, bcol;
-		for (i = 0; i < span.begin; ++i) {
-			if (src.data[i] == '\n') {
-				col = 0;
-				++row;
-			}
-			++col;
-		}
-		brow = row;
-		bcol = col;
-		for (; i < span.end; ++i) {
-			if (src.data[i] == '\n') {
-				col = 0;
-				++row;
-			}
-			++col;
-		}
+		usize brow, bcol, erow, ecol;
+		token_index_row_col(src, span.begin, &brow, &bcol);
+		token_index_row_col_ext(src, span.begin, brow,
+								bcol, span.end, &erow, &ecol);
 		c4printf(stderr, "in %s[%uq, %uq]:\n", ctx->path, brow, bcol);
-		print_grid(src, span, brow - 1, bcol - 1, row - 1, col - 1);
+		print_grid(src, span, brow - 1, bcol - 1, erow - 1, ecol - 1);
 	}
 	c4setcolor(stderr, C4FMT_COLOR_RED);
 	c4print(stderr, "error: ");

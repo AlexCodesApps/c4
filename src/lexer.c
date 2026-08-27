@@ -199,11 +199,12 @@ Token lexer_next(Lexer * lexer) {
 	return make_token(lexer, start, TOKEN_ERR);
 }
 
-void token_index_row_col(Str src, TokenIndex idx, usize * out_row,
-						 usize * out_col) {
-	usize row = 1;
-	usize col = 1;
-	for (usize i = 0; i < idx; ++i) {
+void token_index_row_col_ext(Str src, usize start, usize start_row,
+							 usize start_col, usize idx, usize * out_row,
+							 usize * out_col) {
+	usize row = start_row;
+	usize col = start_col;
+	for (usize i = start; i < idx; ++i) {
 		if (src.data[i] == '\n') {
 			col = 0;
 			++row;
@@ -212,4 +213,8 @@ void token_index_row_col(Str src, TokenIndex idx, usize * out_row,
 	}
 	*out_row = row;
 	*out_col = col;
+}
+
+void token_index_row_col(Str src, usize idx, usize * out_row, usize * out_col) {
+	token_index_row_col_ext(src, 0, 1, 1, idx, out_row, out_col);
 }

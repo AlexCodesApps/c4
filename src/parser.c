@@ -82,8 +82,6 @@ static void print_error(Parser * parser, const char * msg, ...) {
 
 static Token next_valid_token(Parser * parser) {
 	for (;;) {
-		// TODO: the row and col here are stale after lexing whitespace
-		// next, recomputing row and col is lowkey wasteful, but hurts fastpath?
 		Token token = lexer_next(&parser->lexer);
 		if (token.kind == TOKEN_ERR) {
 			parser->had_error = true;

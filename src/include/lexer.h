@@ -57,5 +57,7 @@ usize lexer_row(const Lexer * lexer);
 usize lexer_col(const Lexer * lexer);
 bool lexer_eof(const Lexer * lexer);
 
-void token_index_row_col(Str src, TokenIndex idx, usize * out_row,
-						 usize * out_col);
+void token_index_row_col_ext(Str src, usize start, usize start_row,
+							 usize start_col, usize idx, usize * out_row,
+							 usize * out_col);
+void token_index_row_col(Str src, usize idx, usize * out_row, usize * out_col);
