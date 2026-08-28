@@ -1,5 +1,10 @@
 #include "include/str.h"
 #include <string.h>
+// SAFETY: scary amounts of usize <=> isize casts,
+// but on platforms being targeted, strings large enough to
+// overflow / underflow are likely
+// impossible to allocate.
+// Still, may want more principled design
 
 bool str_equal(Str a, Str b) {
 	if (a.size != b.size) {

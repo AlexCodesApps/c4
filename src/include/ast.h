@@ -183,6 +183,7 @@ Stmt stmt_return_from_ast(Expr expr);
 Stmt stmt_block_from_ast(StmtBlock block);
 
 typedef struct {
+	SrcSpan span;
 	TypeSig type;
 	bool has_name;
 	struct {
@@ -289,6 +290,8 @@ struct Var {
 
 Var var_from_ast(SrcSpan span, TypeSig type, bool is_const, bool is_mut,
 				 const Expr * opt_expr);
+Var var_from_eval(SrcSpan span, TypeHandle ty, VarMutability mut,
+				  const Expr * opt_expr);
 Var var_error(void);
 void var_set_decl_checking(Var * var, VisitIndex id);
 void var_set_decl_checked(Var * var);
@@ -297,6 +300,7 @@ void var_set_expr_checking(Var * var, VisitIndex id);
 void var_set_expr_evalled(Var * var);
 void var_set_error(Var * var);
 bool var_is_error(const Var * var);
+bool var_is_const(const Var * var);
 
 typedef enum {
 	TYPE_ALIAS_PASS_ERROR,
@@ -351,6 +355,7 @@ Decl decl_fn_from_ast(Iden iden, Fn fn);
 Decl decl_error(void);
 void decl_set_error(Decl * decl);
 bool decl_is_error(const Decl * decl);
+bool decl_is_const(const Decl * decl);
 
 typedef struct {
 	Decl ** data;

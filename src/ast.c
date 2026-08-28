@@ -239,6 +239,24 @@ Var var_from_ast(SrcSpan span, TypeSig type, bool is_const, bool is_mut,
 	return var;
 }
 
+Var var_from_eval(SrcSpan span, TypeHandle ty, VarMutability mut,
+				  const Expr * opt_expr) {
+	ASSERT(ty.type->pass == TYPE_PASS_EVALUATED);
+	Var var;
+	var.pass = VAR_PASS_EXPR_EVALUATED;
+	var.span = span;
+	var.as.evalled.type = ty;
+	var.as.evalled.mutability = mut;
+	if (opt_expr) {
+		ASSERT(opt_expr->pass == EXPR_PASS_EVALLED);
+		var.as.evalled.has_expr = true;
+		var.as.evalled.unwrap.expr = *opt_expr;
+	} else {
+		var.as.evalled.has_expr = false;
+	}
+	return var;
+}
+
 TypeAlias type_alias_from_ast(SrcSpan span, TypeSig type) {
 	return (TypeAlias){
 		.span = span,
@@ -329,6 +347,26 @@ Decl decl_var_from_ast(Iden iden, Var var) {
 	};
 }
 
+bool var_is_const(const Var * var) {
+	switch (var->pass) {
+	case VAR_PASS_ERROR:
+		return false;
+	case VAR_PASS_PARSED:
+		return var->as.parsed.is_const;
+	case VAR_PASS_DECL_CYCLE_CHECKING:
+		return var->as.checking_decl.parsed.is_const;
+	case VAR_PASS_DECL_CYCLE_CHECKED:
+		return var->as.checked_decl.is_const;
+	case VAR_PASS_DECL_EVALUATED:
+		return var->as.decl_evalled.mutability == VAR_MUT_CONST;
+	case VAR_PASS_EXPR_CYCLE_CHECKING:
+		return var->as.checking_expr.decl_evalled.mutability == VAR_MUT_CONST;
+	case VAR_PASS_EXPR_EVALUATED:
+		return var->as.evalled.mutability == VAR_MUT_CONST;
+		break;
+	}
+}
+
 Decl decl_alias_from_ast(Iden iden, TypeAlias alias) {
 	return (Decl){.kind = DECL_TYPE_ALIAS, .iden = iden, .as.alias = alias};
 }
@@ -345,3 +383,19 @@ Decl decl_error(void) {
 void decl_set_error(Decl * decl) { decl->kind = DECL_ERROR; }
 
 bool decl_is_error(const Decl * decl) { return decl->kind == DECL_ERROR; }
+
+bool decl_is_const(const Decl * decl) {
+	switch (decl->kind) {
+	case DECL_ERROR:
+		return false;
+	case DECL_FN:
+	case DECL_TYPE_ALIAS:
+		break;
+	case DECL_VAR:
+		if (!var_is_const(&decl->as.var)) {
+			return false;
+		}
+		break;
+	}
+	return true;
+}

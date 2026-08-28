@@ -292,16 +292,52 @@ void c4usr_print(FILE * file, Str line) {
 	}
 }
 
+typedef char BigBuf[64]; // maybe premature optimization
+
+static inline void write_buffer(FILE * file, const BigBuf * buf, usize count) {
+	if (count > sizeof(*buf)) {
+		size_t n = count / sizeof(*buf);
+		size_t written = fwrite(buf, sizeof(*buf), n, file);
+		if (!written)
+			return;
+		count -= written * sizeof(*buf);
+	}
+	if (count) {
+		fwrite(buf, 1, count, file);
+	}
+}
+
 void c4print_errline(FILE * file, usize count) {
+	// clang-format off
+	static const BigBuf big_errline = {
+		'~', '~', '~', '~', '~', '~', '~', '~',
+		'~', '~', '~', '~', '~', '~', '~', '~',
+		'~', '~', '~', '~', '~', '~', '~', '~',
+		'~', '~', '~', '~', '~', '~', '~', '~',
+		'~', '~', '~', '~', '~', '~', '~', '~',
+		'~', '~', '~', '~', '~', '~', '~', '~',
+		'~', '~', '~', '~', '~', '~', '~', '~',
+		'~', '~', '~', '~', '~', '~', '~', '~',
+	};
+	// clang-format on
 	c4print(file, "\x1b[31m");
-	for (usize i = 0; i < count; ++i)
-		fputc('~', file);
+	write_buffer(file, &big_errline, count);
 	c4print(file, "\x1b[0m");
 }
 
 void c4print_space(FILE * file, usize count) {
-	for (usize i = 0; i < count; ++i)
-		fputc(' ', file);
+	// clang-format off
+	static const BigBuf big_space = {
+		' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+		' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+		' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+		' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+		' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+		' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+		' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+		' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+	};
+	write_buffer(file, &big_space, count);
 }
 
 void c4setcolor(FILE * file, C4FmtColor color) {

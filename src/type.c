@@ -116,11 +116,12 @@ Type * type_intern_table_ptr_to(VMemArena * arena, TypeInternTable * table,
 	for (usize i = 0; i < table->types.size; ++i) {
 		Type * otype = type_intern_table_at(table, i);
 		if (otype->kind != TYPE_PTR) {
-			continue;
+			goto no_match;
 		}
 		if (type_handle_eq(otype->as.ptr_like, type)) {
 			return otype;
 		}
+no_match:;
 	}
 	Type ntype = {
 		.pass = pass,
@@ -135,11 +136,12 @@ Type * type_intern_table_ref_to(VMemArena * arena, TypeInternTable * table,
 	for (usize i = 0; i < table->types.size; ++i) {
 		Type * otype = type_intern_table_at(table, i);
 		if (otype->kind != TYPE_REF) {
-			continue;
+			goto no_match;
 		}
 		if (type_handle_eq(otype->as.ptr_like, type)) {
 			return otype;
 		}
+no_match:;
 	}
 	Type ntype = {
 		.pass = pass,
@@ -155,16 +157,17 @@ Type * type_intern_table_fn_of(VMemArena * arena, TypeInternTable * table,
 	for (usize i = 0; i < table->types.size; ++i) {
 		Type * otype = type_intern_table_at(table, i);
 		if (otype->kind != TYPE_FN)
-			continue;
+			goto no_match;
 		if (!type_handle_eq(otype->as.fn.return_ty, return_ty))
-			continue;
+			goto no_match;
 		if (otype->as.fn.params.size != params.size)
-			continue;
+			goto no_match;
 		for (usize j = 0; j < params.size; ++j) {
 			if (!type_handle_eq(params.data[j], otype->as.fn.params.data[j]))
-				continue;
+				goto no_match;
 		}
 		return otype;
+no_match:;
 	}
 	Type ntype = {.pass = pass,
 				  .kind = TYPE_FN,

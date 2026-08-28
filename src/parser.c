@@ -724,6 +724,7 @@ static Fn parse_fn(Parser * parser, bool is_const, TokenIndex begin,
 	if (!match(parser, TOKEN_RPAREN)) {
 		do {
 			Param param = {0};
+			TokenIndex begin = src_span_begin(parser);
 			if (peek_kind(parser) == TOKEN_IDEN &&
 				peek_kind2(parser) == TOKEN_COLON) {
 				param.has_name = true;
@@ -736,6 +737,7 @@ static Fn parse_fn(Parser * parser, bool is_const, TokenIndex begin,
 			if (!parse_type(parser, &param.type)) {
 				break;
 			}
+			param.span = src_span_end(parser, begin);
 			param_list_add(parser, &list, param);
 		} while (match(parser, TOKEN_COMMA));
 		recover_param_list_error(parser);
